@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#181b26" />
+      <stop offset="55%" stop-color="#221b3a" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#a78bfa" />
+      <stop offset="55%" stop-color="#e2e8f0" />
+      <stop offset="100%" stop-color="#22d3ee" />
+    </linearGradient>
+    <linearGradient id="star" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#c4b5fd" />
+    </linearGradient>
+  </defs>
+  <rect x="10" y="10" width="108" height="108" rx="28" fill="url(#bg)" stroke="url(#rim)" stroke-width="2.5" />
+  <!-- 猫耳思考气泡外框 -->
+  <path d="M38 43 L34 25 L50 35 C54 34 59 33 64 33 C69 33 74 34 78 35 L94 25 L90 43 C96 49 99 56 99 64 C99 81 83 94 64 94 C58 94 52 93 47 91 L33 98 L37 84 C32 78 29 71 29 64 C29 56 32 49 38 43 Z"
+        fill="none" stroke="url(#rim)" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" />
+  <!-- 四角星与流式双点 -->
+  <path d="M64 51 L67.2 60.8 L77 64 L67.2 67.2 L64 77 L60.8 67.2 L51 64 L60.8 60.8 Z" fill="url(#star)" />
+  <circle cx="44" cy="64" r="3.6" fill="#e2e8f0" opacity="0.88" />
+  <circle cx="84" cy="64" r="3.6" fill="#67e8f9" opacity="0.92" />
+</svg>

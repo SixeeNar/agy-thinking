@@ -1,0 +1,8 @@
+{
+  "name": "agy-thinking",
+  "displayName": "AGY 思考流",
+  "version": "1.3.0",
+  "description": "低功耗实时流式思考插件（会话内嵌 + 双 Tab 控制台）：展开去重清爽阅读、输入 Key 自动识别模型与性价比推荐评分、多风格去机翻实时中文翻译。",
+  "logo": "assets/logo.svg",
+  "author": "agy-thinking"
+}

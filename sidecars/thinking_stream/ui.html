@@ -1,0 +1,2614 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AGY 思考流</title>
+  <script src="/preload.js"></script>
+  <script src="/shared.js"></script>
+  <style>
+    /* ─── Gemini 娘星云蓝 · 幻光紫 · 霞樱粉 双子星美学主题 ─── */
+    :root {
+      --bg-base: var(--background, #090c14);
+      --bg-mesh: radial-gradient(circle at 12% -6%, rgba(77, 163, 255, 0.14), transparent 46%),
+                 radial-gradient(circle at 88% 4%, rgba(232, 121, 168, 0.12), transparent 44%),
+                 radial-gradient(circle at 52% 105%, rgba(155, 114, 203, 0.1), transparent 52%);
+      --bg-elev: rgba(138, 174, 242, 0.052);
+      --bg-card: rgba(15, 20, 35, 0.72);
+      --bg-card-hover: rgba(155, 114, 203, 0.095);
+      --fg-base: var(--foreground, #eef3ff);
+      --fg-muted: var(--muted-foreground, #9fb0d0);
+      --fg-dim: rgba(148, 168, 206, 0.64);
+      --border-soft: rgba(138, 174, 242, 0.15);
+      --border-strong: rgba(155, 114, 203, 0.44);
+      --guide-line: rgba(138, 174, 242, 0.24);
+      --gem-blue: #4da3ff;
+      --gem-purple: #9b72cb;
+      --gem-pink: #e879a8;
+      --gem-grad: linear-gradient(135deg, #4da3ff 0%, #9b72cb 52%, #e879a8 100%);
+      --gem-grad-soft: linear-gradient(135deg, rgba(77, 163, 255, 0.16) 0%, rgba(155, 114, 203, 0.16) 55%, rgba(232, 121, 168, 0.14) 100%);
+      --code-bg: rgba(5, 8, 18, 0.48);
+      --think-clr: #b392f0;
+      --cmd-clr: #34d399;
+      --file-clr: #60a5fa;
+      --search-clr: #38bdf8;
+      --tool-clr: #fbbf24;
+      --err-clr: #fb7185;
+      --ok-clr: #34d399;
+      --font-sans: var(--font-sans, "PingFang SC", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif);
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --shadow-card: 0 6px 22px -10px rgba(3, 7, 18, 0.65);
+    }
+
+    :root[data-theme="light"] {
+      --bg-base: var(--background, #f4f7ff);
+      --bg-mesh: radial-gradient(circle at 12% -6%, rgba(66, 133, 244, 0.11), transparent 46%),
+                 radial-gradient(circle at 88% 4%, rgba(217, 101, 112, 0.09), transparent 44%),
+                 radial-gradient(circle at 52% 105%, rgba(139, 92, 246, 0.08), transparent 52%);
+      --bg-elev: rgba(66, 133, 244, 0.055);
+      --bg-card: rgba(255, 255, 255, 0.88);
+      --bg-card-hover: rgba(139, 92, 246, 0.07);
+      --fg-base: var(--foreground, #141c2f);
+      --fg-muted: var(--muted-foreground, #526382);
+      --fg-dim: rgba(96, 114, 148, 0.76);
+      --border-soft: rgba(66, 133, 244, 0.15);
+      --border-strong: rgba(139, 92, 246, 0.38);
+      --guide-line: rgba(66, 133, 244, 0.22);
+      --gem-blue: #4285f4;
+      --gem-purple: #8b5cf6;
+      --gem-pink: #d96570;
+      --gem-grad: linear-gradient(135deg, #4285f4 0%, #8b5cf6 54%, #d96570 100%);
+      --gem-grad-soft: linear-gradient(135deg, rgba(66, 133, 244, 0.12) 0%, rgba(139, 92, 246, 0.12) 55%, rgba(217, 101, 112, 0.1) 100%);
+      --code-bg: rgba(66, 133, 244, 0.065);
+      --think-clr: #7c3aed;
+      --cmd-clr: #059669;
+      --file-clr: #2563eb;
+      --search-clr: #0284c7;
+      --tool-clr: #d97706;
+      --err-clr: #e11d48;
+      --ok-clr: #059669;
+      --shadow-card: 0 4px 16px -8px rgba(66, 133, 244, 0.16);
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        --bg-base: var(--background, #f4f7ff);
+        --bg-mesh: radial-gradient(circle at 12% -6%, rgba(66, 133, 244, 0.11), transparent 46%),
+                   radial-gradient(circle at 88% 4%, rgba(217, 101, 112, 0.09), transparent 44%),
+                   radial-gradient(circle at 52% 105%, rgba(139, 92, 246, 0.08), transparent 52%);
+        --bg-elev: rgba(66, 133, 244, 0.055);
+        --bg-card: rgba(255, 255, 255, 0.88);
+        --bg-card-hover: rgba(139, 92, 246, 0.07);
+        --fg-base: var(--foreground, #141c2f);
+        --fg-muted: var(--muted-foreground, #526382);
+        --fg-dim: rgba(96, 114, 148, 0.76);
+        --border-soft: rgba(66, 133, 244, 0.15);
+        --border-strong: rgba(139, 92, 246, 0.38);
+        --guide-line: rgba(66, 133, 244, 0.22);
+        --gem-blue: #4285f4;
+        --gem-purple: #8b5cf6;
+        --gem-pink: #d96570;
+        --gem-grad: linear-gradient(135deg, #4285f4 0%, #8b5cf6 54%, #d96570 100%);
+        --gem-grad-soft: linear-gradient(135deg, rgba(66, 133, 244, 0.12) 0%, rgba(139, 92, 246, 0.12) 55%, rgba(217, 101, 112, 0.1) 100%);
+        --code-bg: rgba(66, 133, 244, 0.065);
+        --think-clr: #7c3aed;
+        --cmd-clr: #059669;
+        --file-clr: #2563eb;
+        --search-clr: #0284c7;
+        --tool-clr: #d97706;
+        --err-clr: #e11d48;
+        --ok-clr: #059669;
+        --shadow-card: 0 4px 16px -8px rgba(66, 133, 244, 0.16);
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-base);
+      background-image: var(--bg-mesh);
+      color: var(--fg-base);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.56;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body[data-font="sm"] { font-size: 12px; }
+    body[data-font="lg"] { font-size: 14px; }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ─── 顶部星光导航栏 ─── */
+    .topbar {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 9px 11px;
+      border-bottom: 1px solid var(--border-soft);
+      background: linear-gradient(180deg, rgba(77, 163, 255, 0.06), rgba(155, 114, 203, 0.02));
+      backdrop-filter: blur(10px);
+      z-index: 10;
+    }
+
+    .brand-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .status-star {
+      width: 16px;
+      height: 16px;
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--gem-blue);
+      filter: drop-shadow(0 0 6px rgba(77, 163, 255, 0.45));
+      transition: color 0.2s ease, filter 0.2s ease;
+    }
+    .status-star.running {
+      color: var(--gem-pink);
+      filter: drop-shadow(0 0 8px rgba(232, 121, 168, 0.65));
+      animation: star-pulse 1.5s ease-in-out infinite;
+    }
+    .status-star.error { color: var(--err-clr); animation: none; filter: none; }
+    @keyframes star-pulse {
+      0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+      50% { transform: scale(0.84) rotate(45deg); opacity: 0.6; }
+    }
+
+    .brand-title {
+      font-size: 12.8px;
+      font-weight: 700;
+      letter-spacing: 0.015em;
+      background: var(--gem-grad);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      white-space: nowrap;
+    }
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-size: 10.3px;
+      font-weight: 500;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-elev);
+      color: var(--fg-muted);
+      white-space: nowrap;
+    }
+    .live-badge.ok { color: var(--ok-clr); border-color: rgba(52, 211, 153, 0.32); background: rgba(52, 211, 153, 0.09); }
+    .live-badge.live { color: var(--gem-pink); border-color: rgba(232, 121, 168, 0.42); background: rgba(232, 121, 168, 0.12); }
+
+    .nav-tabs {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      padding: 2px;
+      border-radius: 10px;
+      background: var(--bg-elev);
+      border: 1px solid var(--border-soft);
+      gap: 2px;
+    }
+    .nav-tab {
+      height: 25px;
+      padding: 0 11px;
+      border-radius: 7.5px;
+      border: none;
+      background: transparent;
+      color: var(--fg-muted);
+      font: inherit;
+      font-size: 11.6px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+    }
+    .nav-tab:hover { color: var(--fg-base); }
+    .nav-tab.active {
+      background: var(--gem-grad);
+      color: #fff;
+      box-shadow: 0 2px 10px -2px rgba(155, 114, 203, 0.55);
+    }
+
+    /* ─── 主视图容器 ─── */
+    .pane {
+      display: none;
+      flex: 1 1 auto;
+      min-height: 0;
+      flex-direction: column;
+    }
+    .pane.active { display: flex; }
+
+    .scroll-body {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 11px 12px 28px;
+      scroll-behavior: smooth;
+    }
+    .scroll-body::-webkit-scrollbar { width: 5px; }
+    .scroll-body::-webkit-scrollbar-thumb { background: rgba(138, 174, 242, 0.24); border-radius: 999px; }
+
+    /* ─── 状态仪表板卡片 ─── */
+    .health-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+      margin-bottom: 11px;
+    }
+    .health-card {
+      position: relative;
+      padding: 8px 10px;
+      border-radius: 11px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-card);
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      overflow: hidden;
+    }
+    .health-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 1.5px;
+      background: var(--gem-grad);
+      opacity: 0.35;
+    }
+    .health-k { font-size: 10.5px; color: var(--fg-dim); }
+    .health-v {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--fg-base);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .health-v.ok { color: var(--ok-clr); }
+    .health-v.live { color: var(--gem-pink); }
+    .health-v.warn { color: var(--tool-clr); }
+
+    .setting-card {
+      padding: 12px 12px;
+      border-radius: 13px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-card);
+      box-shadow: var(--shadow-card);
+      margin-bottom: 11px;
+      backdrop-filter: blur(8px);
+    }
+    .setting-card:last-child { margin-bottom: 0; }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 0 0 9px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(138, 174, 242, 0.12);
+    }
+    .section-title {
+      font-weight: 600;
+      font-size: 12.6px;
+      color: var(--fg-base);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .section-spark {
+      width: 12px;
+      height: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--gem-blue);
+    }
+    .section-badge {
+      font-size: 10.4px;
+      color: var(--fg-muted);
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--gem-grad-soft);
+      border: 1px solid var(--border-soft);
+    }
+
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 6.5px 0;
+    }
+    .setting-row + .setting-row { border-top: 1px solid rgba(138, 174, 242, 0.08); }
+    .setting-title { font-size: 12px; font-weight: 500; color: var(--fg-base); }
+    .setting-desc { color: var(--fg-muted); font-size: 11px; margin-top: 1px; line-height: 1.42; }
+
+    /* Gemini 极光 Toggle 开关 */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+      flex: 0 0 auto;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .slider {
+      position: absolute;
+      inset: 0;
+      border-radius: 999px;
+      background: rgba(138, 174, 242, 0.2);
+      border: 1px solid var(--border-soft);
+      cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .slider::before {
+      content: "";
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      left: 2px;
+      top: 2px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+      transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .switch input:checked + .slider {
+      background: var(--gem-grad);
+      border-color: transparent;
+      box-shadow: 0 0 10px -2px rgba(155, 114, 203, 0.55);
+    }
+    .switch input:checked + .slider::before { transform: translateX(16px); }
+
+    /* Segmented 分段控件 */
+    .seg-group {
+      display: inline-flex;
+      padding: 2.5px;
+      border-radius: 9px;
+      background: var(--bg-elev);
+      border: 1px solid var(--border-soft);
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .seg-group.full { display: grid; width: 100%; grid-auto-flow: column; grid-auto-columns: 1fr; }
+    .seg-btn {
+      padding: 4.5px 9px;
+      border-radius: 6.5px;
+      border: none;
+      background: transparent;
+      color: var(--fg-muted);
+      font: inherit;
+      font-size: 11.2px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .seg-btn:hover { color: var(--fg-base); }
+    .seg-btn.active {
+      background: var(--gem-grad-soft);
+      color: var(--fg-base);
+      box-shadow: inset 0 0 0 1px var(--border-strong);
+    }
+
+    .field-group {
+      margin-top: 9px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .field-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .field-label { font-size: 11.4px; color: var(--fg-muted); font-weight: 500; }
+
+    .field-input, .conv-select {
+      height: 31px;
+      padding: 0 10px;
+      border-radius: 9px;
+      border: 1px solid var(--border-soft);
+      background: rgba(9, 12, 22, 0.55);
+      color: var(--fg-base);
+      font: inherit;
+      font-size: 12px;
+      outline: none;
+      width: 100%;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+    :root[data-theme="light"] .field-input, :root[data-theme="light"] .conv-select { background: #ffffff; }
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) .field-input, :root:not([data-theme="dark"]) .conv-select { background: #ffffff; }
+    }
+    .field-input:focus, .conv-select:focus {
+      border-color: var(--gem-blue);
+      box-shadow: 0 0 0 2.5px rgba(77, 163, 255, 0.18);
+    }
+
+    .input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .input-wrap .field-input { padding-right: 44px; flex: 1 1 auto; }
+    .eye-btn {
+      position: absolute;
+      right: 5px;
+      height: 22px;
+      padding: 0 7px;
+      border-radius: 5px;
+      border: none;
+      background: transparent;
+      color: var(--fg-muted);
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .eye-btn:hover { background: var(--bg-card-hover); color: var(--fg-base); }
+
+    .preset-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin: 4px 0 2px;
+    }
+    .pill-btn {
+      padding: 4.5px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-elev);
+      color: var(--fg-base);
+      font: inherit;
+      font-size: 11.1px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.14s ease, border-color 0.14s ease, transform 0.1s ease, box-shadow 0.14s ease;
+    }
+    .pill-btn:hover { background: var(--bg-card-hover); border-color: var(--border-strong); }
+    .pill-btn:active { transform: scale(0.97); }
+    .pill-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .pill-btn.primary {
+      background: var(--gem-grad);
+      color: #fff;
+      border-color: transparent;
+      font-weight: 500;
+      box-shadow: 0 2px 10px -3px rgba(155, 114, 203, 0.55);
+    }
+    .pill-btn.primary:hover { filter: brightness(1.07); }
+    .pill-btn.recommend {
+      border-color: var(--border-strong);
+      background: var(--gem-grad-soft);
+    }
+    .pill-btn.active {
+      border-color: transparent;
+      background: var(--gem-grad);
+      color: #fff;
+      box-shadow: 0 2px 9px -3px rgba(77, 163, 255, 0.55);
+    }
+    .pill-btn.danger:hover { border-color: rgba(251, 113, 133, 0.52); color: var(--err-clr); }
+
+    /* ─── 三维推荐模型选择面板（零丑星星 · 极光分级徽章） ─── */
+    .model-picker-box {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 11px;
+      border: 1px solid var(--border-soft);
+      background: rgba(9, 13, 24, 0.45);
+    }
+    :root[data-theme="light"] .model-picker-box { background: rgba(244, 247, 255, 0.78); }
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) .model-picker-box { background: rgba(244, 247, 255, 0.78); }
+    }
+    .model-picker-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .model-picker-title {
+      font-size: 11.6px;
+      font-weight: 600;
+      color: var(--fg-base);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .model-picker-meta {
+      font-size: 10.4px;
+      color: var(--fg-dim);
+      font-weight: 400;
+    }
+    .dim-bar {
+      margin-bottom: 7px;
+    }
+    .model-filter-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 7px;
+    }
+    .model-filter-row .field-input { height: 27px; font-size: 11.4px; }
+    .model-list {
+      max-height: 262px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-right: 2px;
+    }
+    .model-list::-webkit-scrollbar { width: 4px; }
+    .model-list::-webkit-scrollbar-thumb { background: rgba(138, 174, 242, 0.28); border-radius: 999px; }
+
+    .model-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 9px;
+      border-radius: 9px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-card);
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+    }
+    .model-item:hover {
+      border-color: var(--border-strong);
+      background: var(--bg-card-hover);
+    }
+    .model-item:active { transform: scale(0.992); }
+    .model-item.selected {
+      border-color: rgba(155, 114, 203, 0.65);
+      background: var(--gem-grad-soft);
+      box-shadow: 0 2px 12px -6px rgba(155, 114, 203, 0.5);
+    }
+    .model-rank-badge {
+      flex: 0 0 auto;
+      width: 22px;
+      height: 22px;
+      margin-top: 1px;
+      border-radius: 7px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-elev);
+      color: var(--fg-dim);
+      font-size: 10.5px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .model-item.selected .model-rank-badge {
+      background: var(--gem-grad);
+      border-color: transparent;
+      color: #fff;
+    }
+    .model-info {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .model-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .model-id {
+      font-family: var(--font-mono);
+      font-size: 11.4px;
+      font-weight: 600;
+      color: var(--fg-base);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* 极光推荐度分级胶囊（替代星星） */
+    .score-pill {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 19px;
+      padding: 0 7px;
+      border-radius: 999px;
+      font-size: 10.4px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .score-pill.s-plus {
+      background: var(--gem-grad);
+      color: #fff;
+      box-shadow: 0 2px 8px -2px rgba(155, 114, 203, 0.55);
+    }
+    .score-pill.s-tier {
+      background: rgba(77, 163, 255, 0.16);
+      color: var(--gem-blue);
+      border: 1px solid rgba(77, 163, 255, 0.36);
+    }
+    .score-pill.a-tier {
+      background: rgba(155, 114, 203, 0.14);
+      color: var(--think-clr);
+      border: 1px solid rgba(155, 114, 203, 0.32);
+    }
+    .score-pill.b-tier {
+      background: var(--bg-elev);
+      color: var(--fg-muted);
+      border: 1px solid var(--border-soft);
+    }
+
+    .model-metrics {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 4px;
+    }
+    .metric-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      height: 16px;
+      padding: 0 6px;
+      border-radius: 5px;
+      font-size: 10px;
+      color: var(--fg-muted);
+      background: var(--bg-elev);
+      border: 1px solid var(--border-soft);
+      font-variant-numeric: tabular-nums;
+    }
+    .metric-chip.focus {
+      color: var(--fg-base);
+      font-weight: 600;
+      border-color: var(--border-strong);
+      background: var(--gem-grad-soft);
+    }
+
+    .cost-tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 0 6px;
+      height: 16px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      border: 1px solid transparent;
+    }
+    .cost-tag.free { color: var(--ok-clr); background: rgba(52, 211, 153, 0.13); border-color: rgba(52, 211, 153, 0.3); }
+    .cost-tag.cheap { color: var(--gem-blue); background: rgba(77, 163, 255, 0.13); border-color: rgba(77, 163, 255, 0.3); }
+    .cost-tag.mid { color: var(--tool-clr); background: rgba(251, 191, 36, 0.13); border-color: rgba(251, 191, 36, 0.3); }
+    .cost-tag.slow { color: var(--err-clr); background: rgba(251, 113, 133, 0.11); border-color: rgba(251, 113, 133, 0.28); }
+    .cost-tag.neutral { color: var(--fg-muted); background: var(--bg-elev); border-color: var(--border-soft); }
+
+    .model-reason {
+      margin-top: 3px;
+      font-size: 10.8px;
+      color: var(--fg-muted);
+      line-height: 1.38;
+    }
+    .model-empty {
+      padding: 16px 8px;
+      text-align: center;
+      color: var(--fg-dim);
+      font-size: 11.5px;
+    }
+
+    .test-status {
+      margin-top: 8px;
+      font-size: 11.4px;
+      color: var(--fg-muted);
+      word-break: break-word;
+      white-space: pre-wrap;
+      line-height: 1.5;
+    }
+    .test-status.ok { color: var(--ok-clr); }
+    .test-status.err { color: var(--err-clr); }
+
+    /* ─── 思考记录 Tab 工具栏 ─── */
+    .feed-toolbar {
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      padding: 8px 11px;
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--bg-elev);
+    }
+    .feed-toolbar-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .feed-toolbar-row .conv-select { flex: 1 1 auto; min-width: 0; height: 28px; }
+    .mini-btn {
+      flex: 0 0 auto;
+      height: 28px;
+      padding: 0 9px;
+      border-radius: 7px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-card);
+      color: var(--fg-muted);
+      font: inherit;
+      font-size: 11.5px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+    }
+    .mini-btn:hover { background: var(--bg-card-hover); color: var(--fg-base); }
+    .mini-btn.active { border-color: var(--border-strong); background: var(--gem-grad-soft); color: var(--fg-base); }
+
+    .feed-search-wrap { display: none; }
+    .feed-search-wrap.open { display: block; }
+    .feed-search-wrap .field-input { height: 28px; }
+
+    .empty-state {
+      margin: 56px auto;
+      max-width: 260px;
+      text-align: center;
+      color: var(--fg-muted);
+      font-size: 12.5px;
+      line-height: 1.6;
+    }
+
+    /* ─── 时间线与卡片 ─── */
+    .turn-block { margin-bottom: 14px; border-radius: 11px; }
+    .turn-prompt-tag {
+      font-size: 11.2px;
+      color: var(--fg-dim);
+      margin: 0 0 5px 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .turn-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      max-width: 100%;
+      padding: 4px 12px 4px 9px;
+      border-radius: 999px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-card);
+      color: var(--fg-base);
+      font: inherit;
+      font-size: 12.2px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .turn-bar:hover { background: var(--bg-card-hover); border-color: var(--border-strong); }
+    .turn-block[data-running="true"] .turn-bar { border-color: var(--border-strong); }
+
+    .turn-star {
+      width: 12px;
+      height: 12px;
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ok-clr);
+    }
+    .turn-block[data-running="true"] .turn-star {
+      color: var(--gem-pink);
+      animation: star-pulse 1.5s ease-in-out infinite;
+    }
+    .turn-label { font-weight: 500; white-space: nowrap; }
+    .turn-block[data-running="true"] .turn-label {
+      background: linear-gradient(90deg, var(--gem-blue) 0%, var(--gem-purple) 45%, var(--gem-pink) 75%, var(--gem-blue) 100%);
+      background-size: 220% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: shimmer 2.1s linear infinite;
+    }
+    @keyframes shimmer { to { background-position: 220% center; } }
+    .turn-counts { font-size: 11px; color: var(--fg-dim); white-space: nowrap; }
+    .turn-chev { width: 13px; height: 13px; transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1); opacity: 0.72; }
+    .turn-block[data-turn-open="true"] .turn-chev { transform: rotate(90deg); }
+
+    .turn-steps-shell {
+      display: grid;
+      grid-template-rows: 0fr;
+      opacity: 0;
+      transition: grid-template-rows 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
+    }
+    .turn-block[data-turn-open="true"] .turn-steps-shell { grid-template-rows: 1fr; opacity: 1; }
+    .turn-steps-inner { overflow: hidden; }
+    .turn-steps {
+      margin: 6px 0 2px 11px;
+      padding-left: 11px;
+      border-left: 1.5px solid var(--guide-line);
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    body[data-compact="true"] .turn-steps { gap: 1px; margin: 4px 0 2px 9px; padding-left: 9px; }
+
+    .step-card {
+      border-radius: 10px;
+      border: 1px solid transparent;
+      transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .step-card[data-open="true"] {
+      background: var(--bg-card);
+      border-color: var(--border-soft);
+      box-shadow: var(--shadow-card);
+      margin: 3px 0;
+    }
+    .step-card[data-open="true"][data-running="true"] { border-color: var(--border-strong); }
+
+    .step-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      min-height: 28px;
+      padding: 4px 9px;
+      border: none;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--fg-muted);
+      font: inherit;
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+    }
+    body[data-compact="true"] .step-head { min-height: 24px; padding: 2px 7px; }
+    .step-head:hover { background: var(--bg-card-hover); color: var(--fg-base); }
+
+    .step-card[data-kind="think"][data-open="true"][data-hide-sum="true"] .step-sep { display: none; }
+    .step-card[data-kind="think"][data-open="true"][data-hide-sum="true"] .step-sum {
+      height: 0;
+      overflow: hidden;
+      color: transparent;
+      user-select: none;
+      pointer-events: none;
+    }
+
+    .step-ico { width: 14px; height: 14px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; }
+    .step-card[data-kind="think"] .step-ico { color: var(--think-clr); }
+    .step-card[data-kind="cmd"] .step-ico { color: var(--cmd-clr); }
+    .step-card[data-kind="file"] .step-ico { color: var(--file-clr); }
+    .step-card[data-kind="search"] .step-ico { color: var(--search-clr); }
+    .step-card[data-kind="tool"] .step-ico { color: var(--tool-clr); }
+    .step-card[data-status="error"] .step-ico { color: var(--err-clr); }
+    .step-card[data-running="true"] .step-ico { animation: spin 2.2s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .step-kind { flex: 0 0 auto; font-weight: 500; color: var(--fg-base); white-space: nowrap; }
+    .step-sep { width: 2.5px; height: 2.5px; border-radius: 50%; background: var(--fg-dim); flex: 0 0 auto; }
+    .step-sum { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .step-card[data-running="true"] .step-sum {
+      text-overflow: clip;
+      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+      mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+    }
+    .step-time { flex: 0 0 auto; font-size: 11px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+    .step-chev { width: 12px; height: 12px; flex: 0 0 auto; color: var(--fg-dim); transition: transform 0.16s ease; }
+    .step-card[data-open="true"] .step-chev { transform: rotate(90deg); }
+
+    .step-body-shell {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .step-card[data-open="true"] .step-body-shell { grid-template-rows: 1fr; }
+    .step-body-inner { overflow: hidden; }
+    .step-body { padding: 3px 11px 10px 26px; }
+    body[data-compact="true"] .step-body { padding: 2px 9px 8px 22px; }
+
+    .think-md {
+      padding-left: 11px;
+      border-left: 2px solid var(--guide-line);
+      color: var(--fg-base);
+      opacity: 0.92;
+      font-size: 12.5px;
+      line-height: 1.64;
+      word-break: break-word;
+      user-select: text;
+    }
+    body[data-think-height="sm"] .step-card:not([data-full="true"]) .think-md {
+      max-height: 220px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-right: 6px;
+    }
+    body[data-think-height="md"] .step-card:not([data-full="true"]) .think-md {
+      max-height: 360px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-right: 6px;
+    }
+    .think-md::-webkit-scrollbar { width: 4px; }
+    .think-md::-webkit-scrollbar-thumb { background: rgba(138, 174, 242, 0.28); border-radius: 999px; }
+    .think-md::-webkit-scrollbar-track { background: transparent; }
+    body[data-font="sm"] .think-md { font-size: 11.8px; line-height: 1.56; }
+    body[data-font="lg"] .think-md { font-size: 13.5px; line-height: 1.68; }
+    .step-card[data-running="true"] .think-md {
+      border-left-color: transparent;
+      border-image: linear-gradient(180deg, var(--gem-blue), var(--gem-purple), var(--gem-pink)) 1;
+    }
+    .think-md p { margin: 0 0 9px; }
+    .think-md p:last-child { margin-bottom: 0; }
+    .expand-bar {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      margin-top: 6px;
+    }
+    body:not([data-think-height="full"]) .step-card[data-overflow="true"] .expand-bar,
+    body:not([data-think-height="full"]) .step-card[data-full="true"] .expand-bar {
+      display: flex;
+    }
+    .expand-full-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-elev);
+      color: var(--fg-muted);
+      font: inherit;
+      font-size: 11px;
+      cursor: pointer;
+      transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+    }
+    .expand-full-btn:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-strong);
+      color: var(--fg-base);
+    }
+    .think-md .md-h { margin: 8px 0 4px; font-size: 12.5px; font-weight: 600; color: var(--fg-base); }
+    .think-md .md-h:first-child { margin-top: 0; }
+    .think-md hr { border: none; border-top: 1px solid var(--border-soft); margin: 7px 0; }
+    .think-md strong { color: var(--fg-base); font-weight: 600; }
+    .think-md code { font-family: var(--font-mono); font-size: 11.4px; padding: 1px 5px; border-radius: 4px; background: var(--code-bg); color: var(--fg-base); }
+    .think-md pre, .detail-pre {
+      margin: 5px 0 0;
+      padding: 8px 10px;
+      border-radius: 7px;
+      background: var(--code-bg);
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 11.4px;
+      line-height: 1.5;
+      color: var(--fg-base);
+      white-space: pre-wrap;
+      word-break: break-word;
+      user-select: text;
+    }
+    .think-md ul, .think-md ol { margin: 4px 0 7px; padding-left: 18px; }
+    .think-md li { margin-bottom: 2px; }
+    .think-md blockquote { margin: 5px 0; padding-left: 9px; border-left: 2px solid var(--border-soft); }
+    .bilingual-raw { margin-top: 8px; padding-top: 7px; border-top: 1px dashed var(--border-soft); font-size: 11.5px; opacity: 0.72; }
+
+    .cursor {
+      display: inline-block;
+      width: 5px;
+      height: 13px;
+      margin-left: 3px;
+      vertical-align: -2px;
+      border-radius: 2px;
+      background: var(--gem-grad);
+      animation: blink 0.85s steps(2, start) infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.15; } }
+
+    .step-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--fg-dim);
+    }
+    .foot-meta { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: var(--bg-elev);
+      border: 1px solid var(--border-soft);
+      font-size: 10.5px;
+      color: var(--fg-muted);
+    }
+    .chip.live { color: var(--gem-pink); border-color: rgba(232, 121, 168, 0.36); background: rgba(232, 121, 168, 0.1); }
+    .chip.err { color: var(--err-clr); border-color: rgba(251, 113, 133, 0.35); }
+    .foot-actions { display: inline-flex; gap: 5px; }
+    .copy-btn {
+      padding: 1px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border-soft);
+      background: transparent;
+      color: var(--fg-muted);
+      font-size: 11px;
+      cursor: pointer;
+      transition: background 0.14s ease, color 0.14s ease;
+    }
+    .copy-btn:hover { background: var(--bg-card-hover); color: var(--fg-base); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand-status">
+        <span id="statusStar" class="status-star"></span>
+        <span class="brand-title">AGY 思考流</span>
+        <span id="topCdpBadge" class="live-badge">检测中</span>
+      </div>
+      <nav class="nav-tabs" aria-label="侧边栏视图">
+        <button type="button" class="nav-tab active" data-tab="settings">控制中心</button>
+        <button type="button" class="nav-tab" data-tab="feed">思考记录</button>
+      </nav>
+    </header>
+
+    <!-- ═══ Tab 1: 控制中心 ═══ -->
+    <section id="paneSettings" class="pane active">
+      <div class="scroll-body">
+        <div class="health-grid">
+          <div class="health-card">
+            <span class="health-k">运行功耗档位</span>
+            <span id="healthPoll" class="health-v ok">低功耗空闲</span>
+          </div>
+          <div class="health-card">
+            <span class="health-k">主窗口内嵌通道</span>
+            <span id="healthCdp" class="health-v">检测中</span>
+          </div>
+          <div class="health-card">
+            <span class="health-k">本地持久化缓存</span>
+            <span id="healthCache" class="health-v">0 条</span>
+          </div>
+          <div class="health-card">
+            <span class="health-k">最近命中译模</span>
+            <span id="healthModel" class="health-v">—</span>
+          </div>
+        </div>
+
+        <!-- 实时中文翻译与三维智能选模 -->
+        <div class="setting-card">
+          <div class="section-head">
+            <span class="section-title"><span class="section-spark" data-spark="1"></span>实时中文翻译 & 智能选模</span>
+            <span class="section-badge">零主模型消耗</span>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">自动翻译英文思考</div>
+              <div class="setting-desc">按段异步流式翻译并落盘缓存，重启后直接复用零请求</div>
+            </div>
+            <label class="switch"><input type="checkbox" id="optTranslate" /><span class="slider"></span></label>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">关闭译者思考链（极速模式）</div>
+              <div class="setting-desc">自动对本地网关与推理模型关闭内部思考，压低首字延迟</div>
+            </div>
+            <label class="switch"><input type="checkbox" id="optDisableThink" /><span class="slider"></span></label>
+          </div>
+
+          <div class="field-group">
+            <span class="field-label">思考正文展示方式</span>
+            <div class="seg-group full" id="segDisplayMode">
+              <button type="button" class="seg-btn" data-val="zh">直接中文</button>
+              <button type="button" class="seg-btn" data-val="bilingual">中英双语</button>
+              <button type="button" class="seg-btn" data-val="raw">仅原文</button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <span class="field-label">译文语感风格（去机翻味）</span>
+            <div class="seg-group full" id="segTranslateStyle">
+              <button type="button" class="seg-btn" data-val="natural">自然口语</button>
+              <button type="button" class="seg-btn" data-val="technical">精准技术</button>
+              <button type="button" class="seg-btn" data-val="concise">极简直白</button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <span class="field-label">服务商快捷预设</span>
+            <div class="preset-row">
+              <button type="button" class="pill-btn recommend" data-preset="siliconflow">硅基流动 · 免费</button>
+              <button type="button" class="pill-btn recommend" data-preset="deepseek">DeepSeek · 最自然</button>
+              <button type="button" class="pill-btn recommend" data-preset="zhipu">智谱 GLM · 免费</button>
+              <button type="button" class="pill-btn" data-preset="qwen">阿里云百炼</button>
+              <button type="button" class="pill-btn" data-preset="openrouter">OpenRouter</button>
+              <button type="button" class="pill-btn" data-preset="local">本地 Ollama</button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="optBaseUrl">API Base URL（OpenAI 兼容地址）</label>
+            <input id="optBaseUrl" class="field-input" type="text" placeholder="https://api.siliconflow.cn/v1" />
+          </div>
+
+          <div class="field-group">
+            <div class="field-label-row">
+              <label class="field-label" for="optApiKey">API Key（仅存本机，填完自动识别模型）</label>
+              <div style="display:inline-flex;gap:5px;">
+                <button type="button" id="clearKeyBtn" class="pill-btn danger" style="padding:2px 8px;font-size:10.5px;display:none;">清空 Key</button>
+                <button type="button" id="detectModelsBtn" class="pill-btn recommend" style="padding:2px 9px;font-size:10.8px;">自动识别模型</button>
+              </div>
+            </div>
+            <div class="input-wrap">
+              <input id="optApiKey" class="field-input" type="password" placeholder="粘贴你的 sk-... 密钥（本地免鉴权可留空）" />
+              <button type="button" id="toggleKeyEye" class="eye-btn">显示</button>
+            </div>
+          </div>
+
+          <!-- 三维推荐度模型选择列表 -->
+          <div class="model-picker-box">
+            <div class="model-picker-bar">
+              <span class="model-picker-title">
+                可选翻译模型
+                <span id="modelListMeta" class="model-picker-meta">精选参考</span>
+              </span>
+              <div style="display:inline-flex;gap:5px;">
+                <button type="button" id="filterRecBtn" class="pill-btn active" style="padding:2px 8px;font-size:10.5px;">只看高分</button>
+                <button type="button" id="pickTop3Btn" class="pill-btn" style="padding:2px 8px;font-size:10.5px;">选推荐 Top 3</button>
+              </div>
+            </div>
+
+            <div class="dim-bar">
+              <div class="seg-group full" id="segRecDim">
+                <button type="button" class="seg-btn active" data-val="overall">综合推荐</button>
+                <button type="button" class="seg-btn" data-val="value">性价比优先</button>
+                <button type="button" class="seg-btn" data-val="natural">自然感优先</button>
+              </div>
+            </div>
+
+            <div class="model-filter-row">
+              <input id="modelSearchInput" class="field-input" type="search" placeholder="搜索模型名或特点（点击勾选 / 再点取消）…" />
+            </div>
+            <div id="modelList" class="model-list"></div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="optModels">当前启用队列（按顺序主用 / 限流自动顺延，可手动微调）</label>
+            <input id="optModels" class="field-input" type="text" placeholder="Qwen/Qwen2.5-7B-Instruct, THUDM/glm-4-9b-chat" />
+          </div>
+
+          <div class="preset-row" style="margin-top:10px;">
+            <button type="button" id="saveTransBtn" class="pill-btn primary">保存配置</button>
+            <button type="button" id="testTransBtn" class="pill-btn">保存并测速</button>
+            <button type="button" id="retryFailedBtn" class="pill-btn">重试失败</button>
+            <button type="button" id="clearCacheBtn" class="pill-btn danger">清空缓存</button>
+          </div>
+          <div id="testStatus" class="test-status"></div>
+        </div>
+
+        <!-- 展示与交互设置 -->
+        <div class="setting-card">
+          <div class="section-head">
+            <span class="section-title"><span class="section-spark" data-spark="1"></span>展示与交互设置</span>
+            <span class="section-badge">实时同步主窗口</span>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">在主窗口会话中嵌入展示</div>
+              <div class="setting-desc">直接挂在每轮回复上方（关闭后彻底休眠 CDP 注入）</div>
+            </div>
+            <label class="switch"><input type="checkbox" id="optInline" /><span class="slider"></span></label>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">展开思考时隐藏标题重复首行</div>
+              <div class="setting-desc">折叠时显示首行摘要，展开后只保留正文不再重复占位</div>
+            </div>
+            <label class="switch"><input type="checkbox" id="optHideSum" /><span class="slider"></span></label>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">包含命令与工具调用步骤</div>
+              <div class="setting-desc">关闭后时间线只显示纯思考过程，界面更清爽</div>
+            </div>
+            <label class="switch"><input type="checkbox" id="optTools" /><span class="slider"></span></label>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">进行中自动展开当前轮次</div>
+              <div class="setting-desc">新一轮回答开始时自动展开步骤时间线</div>
+            </div>
+            <label class="switch"><input type="checkbox" id="optAutoExpandTurn" /><span class="slider"></span></label>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">实时思考卡片自动展开</div>
+              <div class="setting-desc">模型思考时自动打开卡片实时跟读</div>
+            </div>
+            <label class="switch"><input type="checkbox" id="optAutoExpandThink" /><span class="slider"></span></label>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">已完成历史轮次默认收起</div>
+              <div class="setting-desc">只展开最新一轮或正在执行的轮次，节省纵向空间</div>
+            </div>
+            <label class="switch"><input type="checkbox" id="optAutoCollapse" /><span class="slider"></span></label>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">逐字平滑流式吐字</div>
+              <div class="setting-desc">30fps 精准局部跟字动画，关闭则整段直出</div>
+            </div>
+            <label class="switch"><input type="checkbox" id="optSmooth" /><span class="slider"></span></label>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">紧凑卡片密度</div>
+              <div class="setting-desc">收紧行间距与留白，一屏展示更多步骤</div>
+            </div>
+            <label class="switch"><input type="checkbox" id="optCompact" /><span class="slider"></span></label>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">思考正文字号</div>
+              <div class="setting-desc">同时作用于主窗口内嵌卡片与侧边栏</div>
+            </div>
+            <div class="seg-group" id="segFontSize">
+              <button type="button" class="seg-btn" data-val="sm">小</button>
+              <button type="button" class="seg-btn" data-val="md">标准</button>
+              <button type="button" class="seg-btn" data-val="lg">大</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">超长思考展示高度</div>
+              <div class="setting-desc">限高时内部滚动跟读最新思路，随时点「展开全文」查看完整长文</div>
+            </div>
+            <div class="seg-group" id="segThinkHeight">
+              <button type="button" class="seg-btn" data-val="sm">紧凑</button>
+              <button type="button" class="seg-btn" data-val="md">适中</button>
+              <button type="button" class="seg-btn" data-val="full">不限高</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">侧边栏默认打开页</div>
+              <div class="setting-desc">已开主窗口内嵌时建议默认「控制中心」</div>
+            </div>
+            <div class="seg-group" id="segSidebarTab">
+              <button type="button" class="seg-btn" data-val="settings">控制中心</button>
+              <button type="button" class="seg-btn" data-val="feed">思考记录</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Tab 2: 思考记录 ═══ -->
+    <section id="paneFeed" class="pane">
+      <div class="feed-toolbar">
+        <div class="feed-toolbar-row">
+          <select id="convSelect" class="conv-select">
+            <option value="auto">自动跟随活跃对话</option>
+          </select>
+          <button id="toggleAllBtn" class="mini-btn" title="展开/收起全部">展开</button>
+          <button id="searchToggleBtn" class="mini-btn" title="搜索过滤">搜索</button>
+        </div>
+        <div class="feed-toolbar-row" style="justify-content:space-between;">
+          <div class="seg-group" id="segFeedKind">
+            <button type="button" class="seg-btn active" data-val="think">仅看思考</button>
+            <button type="button" class="seg-btn" data-val="all">全部步骤</button>
+            <button type="button" class="seg-btn" data-val="tools">仅看工具</button>
+          </div>
+          <span id="feedStatsHint" style="font-size:11px;color:var(--fg-dim);"></span>
+        </div>
+        <div id="searchWrap" class="feed-search-wrap">
+          <input id="searchInput" class="field-input" type="search" placeholder="搜索思考内容、命令或工具名…" />
+        </div>
+      </div>
+      <main id="feed" class="scroll-body">
+        <div class="empty-state">正在连接本地思考流…</div>
+      </main>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      const { escapeHtml, renderMarkdown, thinkSummary, shortModelName, ICONS } = window.__agyThinkingShared;
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token') || '';
+      const hostConvId = params.get('conversationId') || '';
+
+      const statusStar = document.getElementById('statusStar');
+      const topCdpBadge = document.getElementById('topCdpBadge');
+      const navTabs = Array.from(document.querySelectorAll('.nav-tab'));
+      const paneSettings = document.getElementById('paneSettings');
+      const paneFeed = document.getElementById('paneFeed');
+
+      const convSelect = document.getElementById('convSelect');
+      const toggleAllBtn = document.getElementById('toggleAllBtn');
+      const searchToggleBtn = document.getElementById('searchToggleBtn');
+      const searchWrap = document.getElementById('searchWrap');
+      const searchInput = document.getElementById('searchInput');
+      const feedStatsHint = document.getElementById('feedStatsHint');
+      const feed = document.getElementById('feed');
+
+      const optInline = document.getElementById('optInline');
+      const optHideSum = document.getElementById('optHideSum');
+      const optTools = document.getElementById('optTools');
+      const optAutoExpandTurn = document.getElementById('optAutoExpandTurn');
+      const optAutoExpandThink = document.getElementById('optAutoExpandThink');
+      const optAutoCollapse = document.getElementById('optAutoCollapse');
+      const optSmooth = document.getElementById('optSmooth');
+      const optCompact = document.getElementById('optCompact');
+      const optTranslate = document.getElementById('optTranslate');
+      const optDisableThink = document.getElementById('optDisableThink');
+      const optBaseUrl = document.getElementById('optBaseUrl');
+      const optApiKey = document.getElementById('optApiKey');
+      const toggleKeyEye = document.getElementById('toggleKeyEye');
+      const clearKeyBtn = document.getElementById('clearKeyBtn');
+      const detectModelsBtn = document.getElementById('detectModelsBtn');
+      const optModels = document.getElementById('optModels');
+      const modelListEl = document.getElementById('modelList');
+      const modelListMeta = document.getElementById('modelListMeta');
+      const modelSearchInput = document.getElementById('modelSearchInput');
+      const filterRecBtn = document.getElementById('filterRecBtn');
+      const pickTop3Btn = document.getElementById('pickTop3Btn');
+      const saveTransBtn = document.getElementById('saveTransBtn');
+      const testTransBtn = document.getElementById('testTransBtn');
+      const retryFailedBtn = document.getElementById('retryFailedBtn');
+      const clearCacheBtn = document.getElementById('clearCacheBtn');
+      const testStatus = document.getElementById('testStatus');
+      const healthPoll = document.getElementById('healthPoll');
+      const healthCdp = document.getElementById('healthCdp');
+      const healthCache = document.getElementById('healthCache');
+      const healthModel = document.getElementById('healthModel');
+
+      statusStar.innerHTML = ICONS.star;
+      for (const sp of document.querySelectorAll('[data-spark]')) sp.innerHTML = ICONS.star;
+
+      // ─── 平台预设 & 内置三维评分参考模型库 ───
+      const PRESETS = {
+        siliconflow: {
+          baseUrl: 'https://api.siliconflow.cn/v1',
+          models: 'Qwen/Qwen2.5-7B-Instruct, THUDM/glm-4-9b-chat, tencent/Hunyuan-MT-7B',
+          hint: '已切换硅基流动预设（支持免费主力模型，粘贴 Key 自动识别全量并按三维度评分）。',
+          curated: [
+            { id: 'deepseek-ai/DeepSeek-V3', overall: 98, value: 94, natural: 99, costTag: '极低价', costTone: 'cheap', reason: '外译中母语级自然，几乎零机翻味（新户送额度）' },
+            { id: 'Qwen/Qwen2.5-7B-Instruct', overall: 95, value: 99, natural: 93, costTag: '免费', costTone: 'free', reason: '平台常驻免费，中文技术语感自然、代码零误翻' },
+            { id: 'THUDM/glm-4-9b-chat', overall: 95, value: 100, natural: 91, costTag: '免费', costTone: 'free', reason: '平台常驻免费，口语流畅稳定、低延迟' },
+            { id: 'Qwen/Qwen3-8B', overall: 94, value: 98, natural: 93, costTag: '免费 / 轻量', costTone: 'free', reason: '新一代轻量通义，关思考后速度快、译文自然' },
+            { id: 'tencent/Hunyuan-MT-7B', overall: 85, value: 96, natural: 78, costTag: '免费 / 专译', costTone: 'free', reason: '专职翻译极快，但偏书面腔，推荐放备选位' },
+          ],
+        },
+        deepseek: {
+          baseUrl: 'https://api.deepseek.com/v1',
+          models: 'deepseek-chat',
+          hint: '已切换 DeepSeek 官方预设：deepseek-chat (V3) 自然感与综合推荐双料第一。',
+          curated: [
+            { id: 'deepseek-chat', overall: 98, value: 94, natural: 99, costTag: '极低价·缓存省', costTone: 'cheap', reason: '外译中自然感天花板，最像中国人说话、毫无机翻腔' },
+          ],
+        },
+        zhipu: {
+          baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+          models: 'glm-4.5-flash, glm-4-flash',
+          hint: '已切换智谱 GLM 预设：Flash 系列官方常驻完全免费，性价比拉满。',
+          curated: [
+            { id: 'glm-4.7-flash', overall: 96, value: 100, natural: 92, costTag: '官方免费', costTone: 'free', reason: '最新免费 Flash 档，中文表达更细腻顺畅' },
+            { id: 'glm-4.5-flash', overall: 96, value: 100, natural: 91, costTag: '官方免费', costTone: 'free', reason: '官方常驻免费主力，关思考后极速自然' },
+            { id: 'glm-4-flash', overall: 94, value: 100, natural: 89, costTag: '官方免费', costTone: 'free', reason: '经典免费标杆，响应稳、零成本翻译' },
+            { id: 'glm-4.5-air', overall: 87, value: 86, natural: 90, costTag: '高性价比', costTone: 'cheap', reason: '进阶轻量版，复杂技术长句理解更稳' },
+          ],
+        },
+        qwen: {
+          baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+          models: 'qwen-flash, qwen-mt-plus, qwen-turbo',
+          hint: '已切换阿里云百炼预设：qwen-flash 约 ¥0.15/M 性价比炸裂，qwen-mt-plus 专职高质量翻译。',
+          curated: [
+            { id: 'qwen-flash', overall: 95, value: 98, natural: 93, costTag: '¥0.15/M 极低', costTone: 'cheap', reason: '白菜价通用快模，配合口语提示词译文极自然' },
+            { id: 'qwen-turbo', overall: 94, value: 97, natural: 91, costTag: '¥0.3/M 极低', costTone: 'cheap', reason: '经典超低价快模，响应极快、代码格式稳' },
+            { id: 'qwen-mt-plus', overall: 93, value: 88, natural: 96, costTag: '¥1.8/M 专译', costTone: 'cheap', reason: '高质量专职翻译，复杂语境与术语极准' },
+            { id: 'qwen-mt-flash', overall: 88, value: 93, natural: 84, costTag: '¥0.7/M 专译', costTone: 'cheap', reason: '专职极速快译，便宜稳定、风格略工整' },
+          ],
+        },
+        openrouter: {
+          baseUrl: 'https://openrouter.ai/api/v1',
+          models: 'deepseek/deepseek-chat, google/gemini-2.5-flash-lite, openai/gpt-4o-mini',
+          hint: '已切换 OpenRouter 预设，填入 Key 后自动识别你账号可用的全量模型并按三维度评分。',
+          curated: [
+            { id: 'deepseek/deepseek-chat', overall: 98, value: 94, natural: 99, costTag: '极低价', costTone: 'cheap', reason: '外译中母语级自然，几乎零机翻味' },
+            { id: 'google/gemini-2.5-flash-lite', overall: 91, value: 96, natural: 88, costTag: '地板价·超快', costTone: 'cheap', reason: '极低单价、吞吐极快，长思考也不卡顿' },
+            { id: 'qwen/qwen-2.5-7b-instruct', overall: 94, value: 97, natural: 93, costTag: '极低价', costTone: 'cheap', reason: '中文技术思考语感顺滑、便宜稳定' },
+            { id: 'anthropic/claude-3.5-haiku', overall: 89, value: 78, natural: 97, costTag: '中等价位', costTone: 'mid', reason: '自然感顶级有网感，但单价略高于国产' },
+          ],
+        },
+        local: {
+          baseUrl: 'http://127.0.0.1:11434/v1',
+          models: 'qwen2.5:7b, gemma3:4b',
+          hint: '已切换本地网关预设（默认 Ollama 11434；LM Studio 请改为 1234），免 Key 可直接点「自动识别模型」。',
+          curated: [
+            { id: 'qwen2.5:7b', overall: 96, value: 100, natural: 93, costTag: '本机免费', costTone: 'free', reason: '本机 7B 中文自然度最佳、速度与质量最均衡' },
+            { id: 'qwen3:8b', overall: 96, value: 100, natural: 93, costTag: '本机免费', costTone: 'free', reason: '新一代本机通义，自动关思考后响应很快' },
+            { id: 'gemma3:4b', overall: 87, value: 100, natural: 82, costTag: '本机超轻', costTone: 'free', reason: '低显存机器首选，速度快、日常翻译够用' },
+          ],
+        },
+      };
+
+      const DIM_LABELS = {
+        overall: '综合',
+        value: '性价比',
+        natural: '自然感',
+      };
+
+      let activeTab = 'settings';
+      let tabInitialized = false;
+      let feedKindFilter = 'think';
+      let selectedConvId = 'auto';
+      let searchQuery = '';
+      let currentState = null;
+      let eventSource = null;
+      let reconnectTimer = null;
+      let settingsHydrated = false;
+      let lastRenderedConvId = '';
+      let streamRaf = 0;
+      let lastStreamTickAt = 0;
+
+      // 三维模型选择器状态
+      let discoveredModels = null;
+      let recDim = 'overall'; // 'overall' | 'value' | 'natural'
+      let onlyHighRec = true;
+      let modelSearch = '';
+      let autoDetectTimer = null;
+      let discoverReqSeq = 0;
+
+      const openMap = new Map();
+      const userPinnedMap = new Map();
+      const turnSettledSet = new Set();
+      const rawOverrideMap = new Map();
+      const expandedFullMap = new Map();
+      const streamShownMap = new Map();
+
+      function syncHostTheme() {
+        const bg = getComputedStyle(document.body).backgroundColor || '';
+        const m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+        if (!m) return;
+        const lum = (0.2126 * Number(m[1]) + 0.7152 * Number(m[2]) + 0.0722 * Number(m[3])) / 255;
+        document.documentElement.dataset.theme = lum < 0.5 ? 'dark' : 'light';
+      }
+      syncHostTheme();
+      try {
+        const themeObserver = new MutationObserver(() => syncHostTheme());
+        themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'class'] });
+        window.matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => {
+          delete document.documentElement.dataset.theme;
+          requestAnimationFrame(syncHostTheme);
+        });
+      } catch {}
+
+      function normalizeUrl(u) {
+        return String(u || '').trim().replace(/\/+$/, '').toLowerCase();
+      }
+
+      function apiUrl(path) {
+        return token ? `${path}?token=${encodeURIComponent(token)}` : path;
+      }
+
+      async function postJson(path, body = {}) {
+        const res = await fetch(apiUrl(path), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+      }
+
+      function switchTab(tab) {
+        activeTab = tab === 'feed' ? 'feed' : 'settings';
+        for (const btn of navTabs) {
+          btn.classList.toggle('active', btn.dataset.tab === activeTab);
+        }
+        paneSettings.classList.toggle('active', activeTab === 'settings');
+        paneFeed.classList.toggle('active', activeTab === 'feed');
+        if (activeTab === 'feed') renderFeed();
+      }
+
+      function setSegmentedActive(containerId, val) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        for (const btn of el.querySelectorAll('.seg-btn')) {
+          btn.classList.toggle('active', btn.dataset.val === val);
+        }
+      }
+
+      function bindSegmented(containerId, onSelect) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        el.addEventListener('click', (ev) => {
+          const btn = ev.target.closest('.seg-btn');
+          if (!btn) return;
+          setSegmentedActive(containerId, btn.dataset.val);
+          onSelect(btn.dataset.val);
+        });
+      }
+
+      function parseModelInput() {
+        return String(optModels.value || '')
+          .split(/[,，\n]+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+
+      function inferPresetByUrl(url) {
+        const u = String(url || '').toLowerCase();
+        if (u.includes('siliconflow')) return 'siliconflow';
+        if (u.includes('deepseek')) return 'deepseek';
+        if (u.includes('bigmodel')) return 'zhipu';
+        if (u.includes('dashscope')) return 'qwen';
+        if (u.includes('openrouter')) return 'openrouter';
+        if (/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/.test(u)) return 'local';
+        return 'siliconflow';
+      }
+
+      function scoreOf(m, dim = recDim) {
+        if (dim === 'value') return Number(m.value ?? m.overall ?? m.score ?? 70);
+        if (dim === 'natural') return Number(m.natural ?? m.overall ?? m.score ?? 70);
+        return Number(m.overall ?? m.score ?? 70);
+      }
+
+      function gradeAndTier(score) {
+        if (score >= 95) return { grade: 'S+', cls: 's-plus' };
+        if (score >= 90) return { grade: 'S', cls: 's-tier' };
+        if (score >= 84) return { grade: 'A+', cls: 'a-tier' };
+        if (score >= 76) return { grade: 'A', cls: 'a-tier' };
+        return { grade: 'B', cls: 'b-tier' };
+      }
+
+      function getSortedCatalog() {
+        const base = Array.isArray(discoveredModels)
+          ? discoveredModels
+          : (PRESETS[inferPresetByUrl(optBaseUrl.value)]?.curated || PRESETS.siliconflow.curated);
+        return [...base].sort((a, b) => scoreOf(b, recDim) - scoreOf(a, recDim) || scoreOf(b, 'overall') - scoreOf(a, 'overall') || a.id.localeCompare(b.id));
+      }
+
+      function getCurrentTop3Ids() {
+        const sorted = getSortedCatalog();
+        const high = sorted.filter((m) => scoreOf(m, recDim) >= 84).slice(0, 3).map((m) => m.id);
+        return high.length > 0 ? high : sorted.slice(0, 3).map((m) => m.id);
+      }
+
+      function isTop3Selected(selectedList, top3Ids) {
+        return top3Ids.length > 0 && top3Ids.every((id) => selectedList.includes(id));
+      }
+
+      function syncTop3Button(selectedList) {
+        const top3Ids = getCurrentTop3Ids();
+        const active = isTop3Selected(selectedList, top3Ids);
+        pickTop3Btn.classList.toggle('active', active);
+        pickTop3Btn.textContent = active ? `✓ 已选 Top ${top3Ids.length}` : `选推荐 Top ${top3Ids.length || 3}`;
+        pickTop3Btn.title = active ? '再次点击取消选中这组推荐模型' : `按当前「${DIM_LABELS[recDim]}」维度一键选中前 3 名`;
+      }
+
+      function renderModelList() {
+        const selected = parseModelInput();
+        const selectedIndexMap = new Map(selected.map((id, idx) => [id, idx + 1]));
+        const catalog = getSortedCatalog();
+        const q = modelSearch.trim().toLowerCase();
+
+        syncTop3Button(selected);
+
+        const filtered = catalog.filter((m) => {
+          const dimScore = scoreOf(m, recDim);
+          if (onlyHighRec && !selectedIndexMap.has(m.id) && dimScore < 84) return false;
+          if (!q) return true;
+          return m.id.toLowerCase().includes(q) || (m.reason || '').toLowerCase().includes(q) || (m.costTag || '').toLowerCase().includes(q);
+        });
+
+        if (Array.isArray(discoveredModels)) {
+          const highCount = discoveredModels.filter((m) => scoreOf(m, recDim) >= 84).length;
+          modelListMeta.textContent = `已识别 ${discoveredModels.length} 个 · ${highCount} 个高分`;
+        } else {
+          modelListMeta.textContent = '精选参考 · 填 Key 自动识别全量';
+        }
+
+        if (filtered.length === 0) {
+          modelListEl.innerHTML = `<div class="model-empty">${onlyHighRec ? '当前维度下暂无 ≥84 分模型，点上方取消「只看高分」查看全部' : '没有匹配的模型'}</div>`;
+          return;
+        }
+
+        const dimLabel = DIM_LABELS[recDim];
+        const html = filtered.slice(0, 120).map((m) => {
+          const rank = selectedIndexMap.get(m.id);
+          const isSel = Boolean(rank);
+          const curScore = scoreOf(m, recDim);
+          const ov = scoreOf(m, 'overall');
+          const val = scoreOf(m, 'value');
+          const nat = scoreOf(m, 'natural');
+          const { grade, cls } = gradeAndTier(curScore);
+          const tone = m.costTone || 'neutral';
+          return (
+            `<div class="model-item${isSel ? ' selected' : ''}" data-model-id="${escapeHtml(m.id)}">` +
+              `<span class="model-rank-badge" title="${isSel ? '顺延优先级 #' + rank + '（点击取消）' : '点击勾选'}">${isSel ? '#' + rank : '+'}</span>` +
+              `<div class="model-info">` +
+                `<div class="model-top">` +
+                  `<span class="model-id" title="${escapeHtml(m.id)}">${escapeHtml(m.id)}</span>` +
+                  `<span class="score-pill ${cls}" title="${dimLabel}推荐分 ${curScore}/100">${grade} · ${curScore}</span>` +
+                `</div>` +
+                `<div class="model-metrics">` +
+                  `<span class="cost-tag ${escapeHtml(tone)}">${escapeHtml(m.costTag || '可用')}</span>` +
+                  `<span class="metric-chip${recDim === 'overall' ? ' focus' : ''}">综合 ${ov}</span>` +
+                  `<span class="metric-chip${recDim === 'value' ? ' focus' : ''}">性价比 ${val}</span>` +
+                  `<span class="metric-chip${recDim === 'natural' ? ' focus' : ''}">自然感 ${nat}</span>` +
+                `</div>` +
+                `<div class="model-reason">${escapeHtml(m.reason || '')}</div>` +
+              `</div>` +
+            `</div>`
+          );
+        }).join('');
+        modelListEl.innerHTML = html;
+      }
+
+      async function runDiscoverModels(silent = false) {
+        const baseUrl = optBaseUrl.value.trim();
+        const rawKey = optApiKey.value.trim();
+        const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(baseUrl);
+        const sameProvider = normalizeUrl(baseUrl) === normalizeUrl(currentState?.settings?.translateBaseUrl);
+        const hasSavedKey = Boolean(currentState?.settings?.hasApiKey) && sameProvider;
+        if (!baseUrl) return;
+        if (!rawKey && !hasSavedKey && !isLocal) {
+          if (!silent) {
+            testStatus.className = 'test-status err';
+            testStatus.textContent = sameProvider
+              ? '请先粘贴 API Key，再点「自动识别模型」。'
+              : '已切换服务商地址，请先粘贴该服务商的 API Key 再识别模型。';
+          }
+          return;
+        }
+
+        const reqSeq = ++discoverReqSeq;
+        detectModelsBtn.disabled = true;
+        detectModelsBtn.textContent = '识别中…';
+        if (!silent) {
+          testStatus.className = 'test-status';
+          testStatus.textContent = '正在拉取该 Key 下可用的翻译模型并计算综合 / 性价比 / 自然感三维评分…';
+        }
+        try {
+          const body = { translateBaseUrl: baseUrl };
+          if (rawKey) body.translateApiKey = rawKey;
+          const res = await postJson('/api/translate/models', body);
+          if (reqSeq !== discoverReqSeq) return;
+          discoveredModels = Array.isArray(res.models) ? res.models : [];
+          if (discoveredModels.length > 0 && !discoveredModels.some((m) => scoreOf(m, recDim) >= 84)) {
+            onlyHighRec = false;
+            filterRecBtn.classList.remove('active');
+          }
+          renderModelList();
+          const highCount = discoveredModels.filter((m) => scoreOf(m, 'overall') >= 84).length;
+          if (!silent || !testStatus.textContent) {
+            testStatus.className = 'test-status ok';
+            testStatus.textContent = `识别完成！该网关可用 ${discoveredModels.length} 个文本模型（${highCount} 个高推荐），可切换「综合 / 性价比 / 自然感」维度挑选。`;
+          }
+        } catch (err) {
+          if (reqSeq !== discoverReqSeq) return;
+          if (!silent) {
+            testStatus.className = 'test-status err';
+            testStatus.textContent = `${err.message}（部分代理网关未开放 /models，可直接点下方参考模型或手动输入）`;
+          }
+        } finally {
+          if (reqSeq === discoverReqSeq) {
+            detectModelsBtn.disabled = false;
+            detectModelsBtn.textContent = '自动识别模型';
+          }
+        }
+      }
+
+      function hydrateSettingsInputs(settings) {
+        optInline.checked = settings.inlineEnabled !== false;
+        optHideSum.checked = settings.hideSummaryWhenOpen !== false;
+        optTools.checked = settings.includeTools !== false;
+        optAutoExpandTurn.checked = settings.autoExpandRunningTurn !== false;
+        optAutoExpandThink.checked = settings.autoExpandRunningThink !== false;
+        optAutoCollapse.checked = Boolean(settings.autoCollapseDoneTurn);
+        optSmooth.checked = settings.smoothStream !== false;
+        optCompact.checked = Boolean(settings.compactMode);
+        optTranslate.checked = settings.translateEnabled !== false;
+        optDisableThink.checked = settings.disableTranslatorThinking !== false;
+
+        document.body.dataset.font = settings.fontSize || 'md';
+        document.body.dataset.compact = String(Boolean(settings.compactMode));
+        document.body.dataset.thinkHeight = settings.thinkHeightMode || 'md';
+
+        setSegmentedActive('segDisplayMode', settings.displayMode || 'zh');
+        setSegmentedActive('segTranslateStyle', settings.translateStyle || 'natural');
+        setSegmentedActive('segFontSize', settings.fontSize || 'md');
+        setSegmentedActive('segThinkHeight', settings.thinkHeightMode || 'md');
+        setSegmentedActive('segSidebarTab', settings.sidebarDefaultTab || 'settings');
+
+        if (!tabInitialized) {
+          tabInitialized = true;
+          const preferred = settings.sidebarDefaultTab || (settings.inlineEnabled !== false ? 'settings' : 'feed');
+          switchTab(preferred);
+        }
+
+        clearKeyBtn.style.display = settings.hasApiKey ? '' : 'none';
+        if (!settingsHydrated) {
+          settingsHydrated = true;
+          optBaseUrl.value = settings.translateBaseUrl || '';
+          optModels.value = settings.translateModels || '';
+          optApiKey.value = '';
+          optApiKey.placeholder = settings.hasApiKey
+            ? `已配置 (${settings.translateApiKey})，留空则保持不变`
+            : '粘贴你的 sk-... 密钥（本地免鉴权可留空）';
+          renderModelList();
+          const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(settings.translateBaseUrl || '');
+          if (settings.hasApiKey || isLocal) {
+            void runDiscoverModels(true);
+          }
+        }
+      }
+
+      function updateHealthPanel(state) {
+        const rt = state.runtime || {};
+        const modeMap = {
+          streaming: ['极速流式 (350ms)', 'live'],
+          cooldown: ['收尾观察 (1s)', 'ok'],
+          idle: ['低功耗空闲', 'ok'],
+          sleeping: ['已休眠 (0 轮询)', 'ok'],
+        };
+        const [pollText, pollCls] = modeMap[rt.pollMode] || ['低功耗空闲', 'ok'];
+        healthPoll.textContent = pollText;
+        healthPoll.className = `health-v ${pollCls}`;
+
+        const cdpMap = {
+          ok: ['已连接主对话窗口', 'ok', '内嵌已连'],
+          missing: ['未检测到调试端口', 'warn', '仅侧边栏'],
+          unreachable: ['端口暂不可达', 'warn', '仅侧边栏'],
+          'no-ws': ['需 Node.js ≥ 22', 'warn', '需 Node 22+'],
+          superseded: ['已被新实例接管', 'warn', '仅侧边栏'],
+          unknown: ['检测中', '', '检测中'],
+        };
+        const inlineOff = state.settings?.inlineEnabled === false;
+        const [cdpText, cdpCls, badgeText] = inlineOff
+          ? ['已关闭（省电模式）', '', '内嵌已关']
+          : (cdpMap[state.cdpState] || [state.cdpState || '未知', '', '检测中']);
+        healthCdp.textContent = cdpText;
+        healthCdp.className = `health-v ${cdpCls}`;
+
+        topCdpBadge.textContent = state.isGenerating ? '实时思考中' : badgeText;
+        topCdpBadge.className = `live-badge ${state.isGenerating ? 'live' : cdpCls === 'ok' ? 'ok' : ''}`;
+
+        healthCache.textContent = `${rt.cacheCount ?? 0} 条`;
+        healthModel.textContent = rt.activeModel ? shortModelName(rt.activeModel) : '—';
+        healthModel.title = rt.activeModel || '';
+      }
+
+      function buildChipsHtml(item, running) {
+        const chips = [];
+        if (item.thinkingTokens > 0) chips.push(`<span class="chip">${item.thinkingTokens} tok</span>`);
+        else if (running) chips.push('<span class="chip live">流式思考中</span>');
+        if (item.translateStatus === 'translating') chips.push('<span class="chip live">实时译中</span>');
+        else if (item.translateStatus === 'no-key') chips.push('<span class="chip">切「控制中心」填 Key 译中文</span>');
+        else if (item.translateStatus === 'error') chips.push(`<span class="chip err" title="${escapeHtml(item.translateError || '')}">译文失败</span>`);
+        else if (item.translateModel) chips.push(`<span class="chip">${escapeHtml(shortModelName(item.translateModel))}</span>`);
+        return chips.join('');
+      }
+
+      function formatTurnHeader(turn, itemCount) {
+        const dur = turn.isRunning && turn.startedAtMs
+          ? Math.max(0, (Date.now() - turn.startedAtMs) / 1000).toFixed(1)
+          : (typeof turn.durationSec === 'number' ? turn.durationSec.toFixed(1) : null);
+        const label = turn.isRunning
+          ? (dur ? `实时思考中 · ${dur}s` : '实时思考中…')
+          : (dur ? `思考完成 · ${dur}s` : '思考完成');
+        return { label, counts: `· ${itemCount} 项` };
+      }
+
+      function syncThinkOverflow(cardEl, mdEl) {
+        if (!cardEl || !mdEl) return;
+        const isFull = cardEl.dataset.full === 'true';
+        const hasOverflow = !isFull && mdEl.scrollHeight > mdEl.clientHeight + 8;
+        cardEl.dataset.overflow = String(hasOverflow);
+        const btn = cardEl.querySelector('.expand-full-btn');
+        if (btn) btn.textContent = isFull ? '收起高度' : '展开全文';
+      }
+
+      function updateThinkDom(cardEl, displayText, item, effectiveMode, isStreamingThink) {
+        const sumEl = cardEl.querySelector('.step-sum');
+        const nextSum = thinkSummary(displayText || item.translatedThinking || item.thinking || '', isStreamingThink);
+        if (sumEl && sumEl.textContent !== nextSum) sumEl.textContent = nextSum;
+
+        if (cardEl.dataset.open !== 'true') return;
+        const mdEl = cardEl.querySelector('.think-md');
+        if (!mdEl) return;
+
+        const raw = item.thinking || '';
+        const zh = item.translatedThinking || '';
+        const cursor = isStreamingThink ? '<span class="cursor"></span>' : '';
+        const extra = effectiveMode === 'bilingual' && zh && zh !== raw
+          ? `<div class="bilingual-raw">${renderMarkdown(raw)}</div>`
+          : '';
+        const mdHtml = `${renderMarkdown(displayText) || '<p>正在酝酿思路…</p>'}${cursor}${extra}`;
+        if (mdEl._lastHtml !== mdHtml) {
+          const nearBottom = mdEl.scrollHeight - mdEl.scrollTop - mdEl.clientHeight < 48;
+          mdEl._lastHtml = mdHtml;
+          mdEl.innerHTML = mdHtml;
+          if (isStreamingThink && nearBottom && cardEl.dataset.full !== 'true') {
+            mdEl.scrollTop = mdEl.scrollHeight;
+          }
+          syncThinkOverflow(cardEl, mdEl);
+        }
+      }
+
+      function scheduleStreamTick() {
+        if (streamRaf) return;
+        streamRaf = requestAnimationFrame((ts) => {
+          streamRaf = 0;
+          if (document.visibilityState !== 'visible' || activeTab !== 'feed') {
+            for (const rec of streamShownMap.values()) rec.shownLen = rec.text.length;
+            return;
+          }
+          if (ts - lastStreamTickAt < 30) {
+            scheduleStreamTick();
+            return;
+          }
+          lastStreamTickAt = ts;
+          let hasMore = false;
+          for (const rec of streamShownMap.values()) {
+            if (rec.shownLen < rec.text.length) {
+              const delta = rec.text.length - rec.shownLen;
+              const step = Math.max(2, Math.min(12, Math.ceil(delta / 5)));
+              rec.shownLen = Math.min(rec.text.length, rec.shownLen + step);
+              if (rec.cardEl && rec.cardEl.isConnected) {
+                const shown = rec.text.slice(0, rec.shownLen);
+                updateThinkDom(rec.cardEl, shown, rec.item, rec.effectiveMode, rec.isStreamingThink || rec.shownLen < rec.text.length);
+              }
+              if (rec.shownLen < rec.text.length) hasMore = true;
+            }
+          }
+          if (hasMore) scheduleStreamTick();
+        });
+      }
+
+      function isTurnOpen(turnKey, turn, isLast, settings) {
+        if (
+          settings.autoCollapseDoneTurn &&
+          !turn.isRunning &&
+          !isLast &&
+          !userPinnedMap.get(turnKey) &&
+          !turnSettledSet.has(turnKey)
+        ) {
+          turnSettledSet.add(turnKey);
+          openMap.set(turnKey, false);
+        }
+        if (openMap.has(turnKey)) return openMap.get(turnKey);
+        if (turn.isRunning && settings.autoExpandRunningTurn !== false) return true;
+        if (isLast) return true;
+        return false;
+      }
+
+      function renderFeed() {
+        if (!currentState) return;
+        const settings = currentState.settings || {};
+
+        if (currentState.activeId && lastRenderedConvId && currentState.activeId !== lastRenderedConvId) {
+          streamShownMap.clear();
+          openMap.clear();
+          userPinnedMap.clear();
+          turnSettledSet.clear();
+          rawOverrideMap.clear();
+          expandedFullMap.clear();
+        }
+        if (currentState.activeId) lastRenderedConvId = currentState.activeId;
+
+        const list = currentState.conversations || [];
+        const activeMeta = list.find((c) => c.id === currentState.activeId);
+        const options = [`<option value="auto">${escapeHtml(activeMeta ? '自动跟随 · ' + activeMeta.summary : '自动跟随活跃对话')}</option>`];
+        const hasSelectedInList = selectedConvId === 'auto' || list.some((c) => c.id === selectedConvId);
+        if (!hasSelectedInList) {
+          const fallbackLabel = currentState.activeId === selectedConvId
+            ? (currentState.activeTitle || selectedConvId.slice(0, 8))
+            : selectedConvId.slice(0, 8);
+          options.push(`<option value="${escapeHtml(selectedConvId)}">${escapeHtml(fallbackLabel)}</option>`);
+        }
+        for (const c of list) {
+          const tag = c.status === 'CASCADE_RUN_STATUS_RUNNING' ? ' [进行中]' : '';
+          options.push(`<option value="${escapeHtml(c.id)}">${escapeHtml(c.summary + tag)}</option>`);
+        }
+        const optHtml = options.join('');
+        if (convSelect.dataset.hash !== optHtml) {
+          convSelect.dataset.hash = optHtml;
+          convSelect.innerHTML = optHtml;
+          convSelect.value = selectedConvId;
+        }
+
+        const q = searchQuery.trim().toLowerCase();
+        const allTurns = (currentState.turns || []).filter((t) => t.items && t.items.length > 0);
+        let totalThink = 0;
+        let totalTools = 0;
+        for (const t of allTurns) {
+          totalThink += t.thinkCount || 0;
+          totalTools += t.toolCount || 0;
+        }
+        feedStatsHint.textContent = `${totalThink} 思考 · ${totalTools} 步骤`;
+
+        if (allTurns.length === 0) {
+          feed.innerHTML = '<div class="empty-state">当前对话还没有思考或步骤记录</div>';
+          toggleAllBtn.textContent = '展开';
+          return;
+        }
+
+        const nearBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 64;
+        const mode = settings.displayMode || 'zh';
+        const useSmooth = settings.smoothStream !== false;
+        const hideSum = settings.hideSummaryWhenOpen !== false;
+
+        const emptyEl = feed.querySelector(':scope > .empty-state');
+        if (emptyEl) emptyEl.remove();
+
+        const existingTurns = new Map();
+        for (const el of feed.children) {
+          if (el.dataset?.turnKey) existingTurns.set(el.dataset.turnKey, el);
+        }
+
+        const nextTurnEls = [];
+        let needsStreamMore = false;
+        let anyRenderedClosed = false;
+
+        for (let i = 0; i < allTurns.length; i++) {
+          const turn = allTurns[i];
+          const items = turn.items.filter((it) => {
+            if (feedKindFilter === 'think' && it.kind !== 'think') return false;
+            if (feedKindFilter === 'tools' && it.kind === 'think') return false;
+            if (!q) return true;
+            const hay = [it.translatedThinking, it.thinking, it.detail, it.summary, it.label, turn.prompt]
+              .filter(Boolean)
+              .join('\n')
+              .toLowerCase();
+            return hay.includes(q);
+          });
+          if (items.length === 0) continue;
+
+          const turnKey = `${currentState.activeId}:turn:${turn.turnIndex}`;
+          const isLast = i === allTurns.length - 1;
+          const turnOpen = isTurnOpen(turnKey, turn, isLast, settings);
+          if (!turnOpen) anyRenderedClosed = true;
+
+          let turnEl = existingTurns.get(turnKey);
+          if (!turnEl) {
+            turnEl = document.createElement('section');
+            turnEl.className = 'turn-block';
+            turnEl.dataset.turnKey = turnKey;
+            turnEl.innerHTML =
+              '<div class="turn-prompt-tag"></div>' +
+              `<button class="turn-bar" type="button" data-action="toggle-turn" data-key="${escapeHtml(turnKey)}">` +
+                `<span class="turn-star">${ICONS.star}</span>` +
+                '<span class="turn-label"></span>' +
+                '<span class="turn-counts"></span>' +
+                `<span class="turn-chev">${ICONS.chev}</span>` +
+              '</button>' +
+              '<div class="turn-steps-shell"><div class="turn-steps-inner"><div class="turn-steps"></div></div></div>';
+          }
+
+          turnEl._turnData = turn;
+          turnEl.dataset.running = String(Boolean(turn.isRunning));
+          turnEl.dataset.turnOpen = String(Boolean(turnOpen));
+
+          const promptEl = turnEl.querySelector('.turn-prompt-tag');
+          const promptTxt = `第 ${turn.turnIndex} 轮 · ${turn.prompt}`;
+          if (promptEl.textContent !== promptTxt) {
+            promptEl.textContent = promptTxt;
+            promptEl.title = turn.prompt;
+          }
+          const hdr = formatTurnHeader(turn, items.length);
+          const lblEl = turnEl.querySelector('.turn-label');
+          if (lblEl.textContent !== hdr.label) lblEl.textContent = hdr.label;
+          const cntEl = turnEl.querySelector('.turn-counts');
+          if (cntEl.textContent !== hdr.counts) cntEl.textContent = hdr.counts;
+
+          const stepsBox = turnEl.querySelector('.turn-steps');
+          const existingSteps = new Map();
+          for (const sEl of stepsBox.children) existingSteps.set(sEl.dataset.stepKey, sEl);
+
+          const nextStepEls = [];
+          for (const item of items) {
+            let cardEl = existingSteps.get(item.id);
+            if (!cardEl) {
+              cardEl = document.createElement('div');
+              cardEl.className = 'step-card';
+              cardEl.dataset.stepKey = item.id;
+              cardEl.innerHTML =
+                `<button class="step-head" type="button" data-action="toggle-step" data-key="${escapeHtml(item.id)}">` +
+                  '<span class="step-ico"></span>' +
+                  '<span class="step-kind"></span>' +
+                  '<span class="step-sep"></span>' +
+                  '<span class="step-sum"></span>' +
+                  '<span class="step-time"></span>' +
+                  `<span class="step-chev">${ICONS.chev}</span>` +
+                '</button>' +
+                '<div class="step-body-shell"><div class="step-body-inner"><div class="step-body"></div></div></div>';
+            }
+
+            const running = item.status === 'generating' || item.status === 'running';
+            const isStreamingThink = item.kind === 'think' && (running || item.translateStatus === 'translating');
+            const stepOpen = openMap.has(item.id)
+              ? openMap.get(item.id)
+              : (item.kind === 'think' && isStreamingThink && settings.autoExpandRunningThink !== false);
+
+            cardEl.dataset.kind = item.kind;
+            cardEl.dataset.status = item.status || 'done';
+            cardEl.dataset.running = String(running);
+            cardEl.dataset.open = String(Boolean(stepOpen));
+            cardEl.dataset.hideSum = String(hideSum);
+            cardEl.dataset.full = String(expandedFullMap.get(item.id) === true);
+            cardEl._itemData = item;
+
+            const raw = item.kind === 'think' ? (item.thinking || '') : (item.detail || '');
+            const zh = item.kind === 'think' ? (item.translatedThinking || '') : '';
+            const showRawOverride = rawOverrideMap.get(item.id) === true;
+            const effectiveMode = showRawOverride ? (mode === 'raw' ? 'zh' : 'raw') : mode;
+            const targetText = item.kind === 'think' && effectiveMode !== 'raw' && zh ? zh : raw;
+
+            let displayText = targetText;
+            if (item.kind === 'think') {
+              const modeKey = `${effectiveMode}:${zh && effectiveMode !== 'raw' ? 'zh' : 'raw'}`;
+              let rec = streamShownMap.get(item.id);
+              if (!useSmooth) {
+                streamShownMap.delete(item.id);
+                displayText = targetText;
+              } else {
+                if (!rec || rec.modeKey !== modeKey) {
+                  const startLen = isStreamingThink ? 0 : targetText.length;
+                  rec = { text: targetText, shownLen: startLen, modeKey, cardEl, item, effectiveMode, running, isStreamingThink };
+                  streamShownMap.set(item.id, rec);
+                } else {
+                  rec.cardEl = cardEl;
+                  rec.item = item;
+                  rec.effectiveMode = effectiveMode;
+                  rec.running = running;
+                  rec.isStreamingThink = isStreamingThink;
+                  if (isStreamingThink && targetText.length < rec.shownLen) {
+                    rec.text = rec.text.slice(0, rec.shownLen);
+                  } else {
+                    rec.text = targetText;
+                  }
+                }
+                if (rec.shownLen < rec.text.length) needsStreamMore = true;
+                displayText = rec.text.slice(0, Math.min(rec.shownLen, rec.text.length));
+              }
+            }
+
+            const sum = item.kind === 'think' ? thinkSummary(displayText || targetText, isStreamingThink) : (item.summary || '');
+            const tStr = running && item.startedAtMs
+              ? `${Math.max(0, (Date.now() - item.startedAtMs) / 1000).toFixed(1)}s`
+              : (typeof item.durationSec === 'number' ? `${item.durationSec.toFixed(1)}s` : '');
+
+            const headSig = `${item.kind}|${item.label}|${sum}|${running}`;
+            if (cardEl.dataset.headSig !== headSig) {
+              cardEl.dataset.headSig = headSig;
+              cardEl.querySelector('.step-ico').innerHTML = ICONS[item.kind] || ICONS.tool;
+              cardEl.querySelector('.step-kind').textContent = item.label;
+              cardEl.querySelector('.step-sum').textContent = sum;
+            }
+            const timeEl = cardEl.querySelector('.step-time');
+            if (timeEl.textContent !== tStr) timeEl.textContent = tStr;
+
+            const renderBody = () => {
+              const liveRec = item.kind === 'think' ? streamShownMap.get(item.id) : null;
+              const curDisplayText = liveRec
+                ? liveRec.text.slice(0, Math.min(liveRec.shownLen, liveRec.text.length))
+                : targetText;
+              const curStreaming = isStreamingThink || Boolean(liveRec && liveRec.shownLen < liveRec.text.length);
+              const bodySig = `${curDisplayText}|${raw}|${effectiveMode}|${settings.thinkHeightMode || 'md'}|${item.translateStatus || ''}|${item.translateModel || ''}|${item.translateError || ''}|${running}|${curStreaming}|${item.thinkingTokens || 0}`;
+              if (cardEl.dataset.bodySig === bodySig) return;
+              cardEl.dataset.bodySig = bodySig;
+              const bodyEl = cardEl.querySelector('.step-body');
+
+              if (item.kind === 'think') {
+                const cursor = curStreaming ? '<span class="cursor"></span>' : '';
+                const extra = effectiveMode === 'bilingual' && zh && zh !== raw
+                  ? `<div class="bilingual-raw">${renderMarkdown(raw)}</div>`
+                  : '';
+                const mdHtml = `${renderMarkdown(curDisplayText) || '<p>正在酝酿思路…</p>'}${cursor}${extra}`;
+                const chipsHtml = buildChipsHtml(item, running);
+                const langBtn = zh && zh !== raw
+                  ? `<button class="copy-btn" type="button" data-action="toggle-lang" data-key="${escapeHtml(item.id)}">${effectiveMode === 'raw' ? '看中文' : '看原文'}</button>`
+                  : '';
+                const retryBtn = settings.translateEnabled !== false && item.translateStatus !== 'off' && item.translateStatus !== 'no-key' && item.translateModel !== 'native-zh'
+                  ? `<button class="copy-btn" type="button" data-action="retry-one" data-key="${escapeHtml(item.id)}">重译</button>`
+                  : '';
+                const actSig = `${Boolean(langBtn)}:${Boolean(retryBtn)}:${effectiveMode}`;
+
+                const existingMd = bodyEl.querySelector('.think-md');
+                const existingFoot = bodyEl.querySelector('.step-foot');
+                if (existingMd && existingFoot) {
+                  if (existingMd._lastHtml !== mdHtml) {
+                    const nearBottom = existingMd.scrollHeight - existingMd.scrollTop - existingMd.clientHeight < 48;
+                    existingMd._lastHtml = mdHtml;
+                    existingMd.innerHTML = mdHtml;
+                    if (curStreaming && nearBottom && cardEl.dataset.full !== 'true') {
+                      existingMd.scrollTop = existingMd.scrollHeight;
+                    }
+                  }
+                  syncThinkOverflow(cardEl, existingMd);
+                  const metaEl = existingFoot.querySelector('.foot-meta');
+                  if (metaEl && metaEl._lastHtml !== chipsHtml) {
+                    metaEl._lastHtml = chipsHtml;
+                    metaEl.innerHTML = chipsHtml;
+                  }
+                  const actEl = existingFoot.querySelector('.foot-actions');
+                  if (actEl && actEl.dataset.sig !== actSig) {
+                    actEl.dataset.sig = actSig;
+                    actEl.innerHTML = `${langBtn}${retryBtn}<button class="copy-btn" type="button" data-action="copy" data-key="${escapeHtml(item.id)}">复制</button>`;
+                  }
+                } else {
+                  bodyEl.innerHTML =
+                    `<div class="think-md">${mdHtml}</div>` +
+                    `<div class="expand-bar"><button class="expand-full-btn" type="button" data-action="toggle-full" data-key="${escapeHtml(item.id)}">展开全文</button></div>` +
+                    `<div class="step-foot">` +
+                      `<span class="foot-meta">${chipsHtml}</span>` +
+                      `<span class="foot-actions" data-sig="${actSig}">${langBtn}${retryBtn}<button class="copy-btn" type="button" data-action="copy" data-key="${escapeHtml(item.id)}">复制</button></span>` +
+                    `</div>`;
+                  const newMd = bodyEl.querySelector('.think-md');
+                  newMd._lastHtml = mdHtml;
+                  bodyEl.querySelector('.foot-meta')._lastHtml = chipsHtml;
+                  if (curStreaming && cardEl.dataset.full !== 'true') {
+                    newMd.scrollTop = newMd.scrollHeight;
+                  }
+                  syncThinkOverflow(cardEl, newMd);
+                }
+              } else {
+                const pre = bodyEl.querySelector('.detail-pre');
+                const txt = raw || '{}';
+                if (!pre) {
+                  bodyEl.innerHTML =
+                    `<pre class="detail-pre">${escapeHtml(txt)}</pre>` +
+                    `<div class="step-foot"><span class="foot-meta"><span class="chip">${escapeHtml(item.label)}</span></span><span class="foot-actions"><button class="copy-btn" type="button" data-action="copy" data-key="${escapeHtml(item.id)}">复制</button></span></div>`;
+                } else if (pre.textContent !== txt) {
+                  pre.textContent = txt;
+                }
+              }
+            };
+
+            cardEl._renderBody = renderBody;
+            if (stepOpen) renderBody();
+            nextStepEls.push(cardEl);
+          }
+
+          const curStepEls = Array.from(stepsBox.children);
+          const sameSteps = curStepEls.length === nextStepEls.length && curStepEls.every((el, idx) => el === nextStepEls[idx]);
+          if (!sameSteps) stepsBox.replaceChildren(...nextStepEls);
+
+          nextTurnEls.push(turnEl);
+        }
+
+        if (nextTurnEls.length === 0) {
+          feed.innerHTML = '<div class="empty-state">当前筛选条件下没有内容，可切换上方「全部步骤」查看</div>';
+          toggleAllBtn.textContent = '展开';
+          return;
+        }
+
+        const curTurnEls = Array.from(feed.children);
+        const sameTurns = curTurnEls.length === nextTurnEls.length && curTurnEls.every((el, idx) => el === nextTurnEls[idx]);
+        if (!sameTurns) feed.replaceChildren(...nextTurnEls);
+
+        toggleAllBtn.textContent = anyRenderedClosed ? '展开' : '收起';
+        if (currentState.isGenerating && nearBottom) feed.scrollTop = feed.scrollHeight;
+        if (needsStreamMore) scheduleStreamTick();
+      }
+
+      function render() {
+        if (!currentState) return;
+        const settings = currentState.settings || {};
+        hydrateSettingsInputs(settings);
+        updateHealthPanel(currentState);
+        statusStar.classList.toggle('running', Boolean(currentState.isGenerating || currentState.activeStatus === 'CASCADE_RUN_STATUS_RUNNING'));
+        statusStar.classList.remove('error');
+        if (activeTab === 'feed') renderFeed();
+      }
+
+      async function saveSetting(patch) {
+        return postJson('/api/settings', patch);
+      }
+
+      function connectStream() {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+        if (eventSource) eventSource.close();
+        const qs = new URLSearchParams({ conversationId: selectedConvId });
+        if (token) qs.set('token', token);
+        if (hostConvId) qs.set('hostConvId', hostConvId);
+        const es = new EventSource(`/api/stream?${qs.toString()}`);
+        eventSource = es;
+        es.onopen = () => {
+          if (eventSource !== es) return;
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+          statusStar.classList.remove('error');
+        };
+        es.addEventListener('state', (ev) => {
+          if (eventSource !== es) return;
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+          try {
+            currentState = JSON.parse(ev.data);
+            render();
+          } catch {}
+        });
+        es.onerror = () => {
+          if (eventSource !== es) return;
+          statusStar.classList.add('error');
+          es.close();
+          if (!reconnectTimer) {
+            reconnectTimer = setTimeout(() => {
+              reconnectTimer = null;
+              connectStream();
+            }, 2500);
+          }
+        };
+      }
+
+      function findItemById(id) {
+        for (const t of currentState?.turns || []) {
+          const found = (t.items || []).find((it) => it.id === id);
+          if (found) return found;
+        }
+        return null;
+      }
+
+      // ─── 交互事件绑定 ───
+      for (const btn of navTabs) {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+      }
+
+      bindSegmented('segDisplayMode', (val) => void saveSetting({ displayMode: val }));
+      bindSegmented('segTranslateStyle', (val) => void saveSetting({ translateStyle: val }));
+      bindSegmented('segFontSize', (val) => {
+        document.body.dataset.font = val;
+        void saveSetting({ fontSize: val });
+      });
+      bindSegmented('segThinkHeight', (val) => {
+        document.body.dataset.thinkHeight = val;
+        void saveSetting({ thinkHeightMode: val });
+        if (activeTab === 'feed') renderFeed();
+      });
+      bindSegmented('segSidebarTab', (val) => void saveSetting({ sidebarDefaultTab: val }));
+      bindSegmented('segFeedKind', (val) => {
+        feedKindFilter = val;
+        renderFeed();
+      });
+      bindSegmented('segRecDim', (val) => {
+        recDim = val;
+        renderModelList();
+      });
+
+      paneSettings.addEventListener('click', (ev) => {
+        const presetBtn = ev.target.closest('[data-preset]');
+        if (presetBtn) {
+          const p = PRESETS[presetBtn.dataset.preset];
+          if (!p) return;
+          optBaseUrl.value = p.baseUrl;
+          optModels.value = p.models;
+          discoveredModels = null;
+          renderModelList();
+          testStatus.className = 'test-status';
+          testStatus.textContent = p.hint;
+          return;
+        }
+
+        const modelCard = ev.target.closest('.model-item[data-model-id]');
+        if (modelCard) {
+          const id = modelCard.dataset.modelId;
+          const list = parseModelInput();
+          const idx = list.indexOf(id);
+          if (idx >= 0) list.splice(idx, 1);
+          else list.push(id);
+          optModels.value = list.join(', ');
+          renderModelList();
+        }
+      });
+
+      filterRecBtn.addEventListener('click', () => {
+        onlyHighRec = !onlyHighRec;
+        filterRecBtn.classList.toggle('active', onlyHighRec);
+        renderModelList();
+      });
+
+      // 支持再次点击取消选中推荐 Top 3！
+      pickTop3Btn.addEventListener('click', () => {
+        const current = parseModelInput();
+        const top3Ids = getCurrentTop3Ids();
+        if (top3Ids.length === 0) return;
+
+        if (isTop3Selected(current, top3Ids)) {
+          const remaining = current.filter((id) => !top3Ids.includes(id));
+          optModels.value = remaining.join(', ');
+          renderModelList();
+          testStatus.className = 'test-status';
+          testStatus.textContent = `已取消选中「${DIM_LABELS[recDim]}」推荐 Top ${top3Ids.length}。`;
+        } else {
+          optModels.value = top3Ids.join(', ');
+          renderModelList();
+          testStatus.className = 'test-status ok';
+          testStatus.textContent = `已按「${DIM_LABELS[recDim]}」维度选中 Top ${top3Ids.length} 顺延队列（再点可取消），记得点「保存配置」生效。`;
+        }
+      });
+
+      modelSearchInput.addEventListener('input', () => {
+        modelSearch = modelSearchInput.value;
+        renderModelList();
+      });
+
+      optModels.addEventListener('input', () => renderModelList());
+
+      optBaseUrl.addEventListener('change', () => {
+        discoveredModels = null;
+        renderModelList();
+      });
+
+      optApiKey.addEventListener('input', () => {
+        clearTimeout(autoDetectTimer);
+        const val = optApiKey.value.trim();
+        if (val.length >= 12) {
+          autoDetectTimer = setTimeout(() => void runDiscoverModels(false), 650);
+        }
+      });
+      detectModelsBtn.addEventListener('click', () => void runDiscoverModels(false));
+
+      clearKeyBtn.addEventListener('click', async () => {
+        testStatus.className = 'test-status';
+        testStatus.textContent = '正在清空已保存的 API Key…';
+        try {
+          const saved = await saveSetting({ translateApiKey: '' });
+          optApiKey.value = '';
+          optApiKey.placeholder = '粘贴你的 sk-... 密钥（本地免鉴权可留空）';
+          clearKeyBtn.style.display = saved.hasApiKey ? '' : 'none';
+          discoveredModels = null;
+          renderModelList();
+          testStatus.className = 'test-status ok';
+          testStatus.textContent = '已清空本机保存的 API Key。';
+        } catch (err) {
+          testStatus.className = 'test-status err';
+          testStatus.textContent = `清空失败：${err.message}`;
+        }
+      });
+
+      toggleKeyEye.addEventListener('click', () => {
+        const showing = optApiKey.type === 'text';
+        optApiKey.type = showing ? 'password' : 'text';
+        toggleKeyEye.textContent = showing ? '显示' : '隐藏';
+      });
+
+      async function persistTranslationConfig(runTest) {
+        const baseUrl = optBaseUrl.value.trim();
+        if (!baseUrl) {
+          testStatus.className = 'test-status err';
+          testStatus.textContent = '请先填写 API Base URL。';
+          return;
+        }
+        const activeModeBtn = document.querySelector('#segDisplayMode .seg-btn.active');
+        const activeStyleBtn = document.querySelector('#segTranslateStyle .seg-btn.active');
+        const patch = {
+          translateEnabled: optTranslate.checked,
+          disableTranslatorThinking: optDisableThink.checked,
+          displayMode: activeModeBtn?.dataset.val || 'zh',
+          translateStyle: activeStyleBtn?.dataset.val || 'natural',
+          translateBaseUrl: baseUrl,
+          translateModels: optModels.value.trim(),
+        };
+        if (optApiKey.value.trim()) {
+          patch.translateApiKey = optApiKey.value.trim();
+        }
+        testStatus.className = 'test-status';
+        testStatus.textContent = runTest ? '正在保存并测试首字延迟与译文质量…' : '正在保存…';
+        try {
+          const saved = await saveSetting(patch);
+          optApiKey.value = '';
+          optApiKey.placeholder = saved.hasApiKey
+            ? `已配置 (${saved.translateApiKey})，留空则保持不变`
+            : '粘贴你的 sk-... 密钥（本地免鉴权可留空）';
+          clearKeyBtn.style.display = saved.hasApiKey ? '' : 'none';
+          if (!runTest) {
+            testStatus.className = 'test-status ok';
+            testStatus.textContent = '配置已保存！新思考将立即按新模型与风格翻译。';
+            return;
+          }
+          const data = await postJson('/api/translate/test', {});
+          testStatus.className = 'test-status ok';
+          const timing = typeof data.ttftMs === 'number'
+            ? `｜首字 ${data.ttftMs}ms / 总计 ${data.totalMs}ms`
+            : '';
+          testStatus.textContent = `连通成功！命中：${data.model}${timing}\n试译：「${data.sample}」`;
+        } catch (err) {
+          testStatus.className = 'test-status err';
+          testStatus.textContent = `连接失败：${err.message}`;
+        }
+      }
+
+      saveTransBtn.addEventListener('click', () => void persistTranslationConfig(false));
+      testTransBtn.addEventListener('click', () => void persistTranslationConfig(true));
+
+      retryFailedBtn.addEventListener('click', async () => {
+        testStatus.className = 'test-status';
+        testStatus.textContent = '正在重置失败状态并重新触发翻译…';
+        try {
+          await postJson('/api/translate/retry', {});
+          testStatus.className = 'test-status ok';
+          testStatus.textContent = '已重新触发失败条目翻译。';
+        } catch (err) {
+          testStatus.className = 'test-status err';
+          testStatus.textContent = `重试失败：${err.message}`;
+        }
+      });
+
+      clearCacheBtn.addEventListener('click', async () => {
+        testStatus.className = 'test-status';
+        testStatus.textContent = '正在清空翻译缓存…';
+        try {
+          await postJson('/api/translate/cache/clear', {});
+          streamShownMap.clear();
+          testStatus.className = 'test-status ok';
+          testStatus.textContent = '翻译缓存已清空，将按新模型/风格重新翻译。';
+        } catch (err) {
+          testStatus.className = 'test-status err';
+          testStatus.textContent = `清空失败：${err.message}`;
+        }
+      });
+
+      feed.addEventListener('click', async (ev) => {
+        const btn = ev.target.closest('[data-action]');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const key = btn.dataset.key;
+        if (action === 'toggle-turn') {
+          const el = btn.closest('.turn-block');
+          const next = el.dataset.turnOpen !== 'true';
+          openMap.set(key, next);
+          userPinnedMap.set(key, true);
+          el.dataset.turnOpen = String(next);
+          renderFeed();
+        } else if (action === 'toggle-step') {
+          const el = btn.closest('.step-card');
+          const next = el.dataset.open !== 'true';
+          openMap.set(key, next);
+          el.dataset.open = String(next);
+          if (next && el._renderBody) {
+            el._renderBody();
+            setTimeout(() => {
+              if (el.isConnected && el.dataset.open === 'true') {
+                syncThinkOverflow(el, el.querySelector('.think-md'));
+              }
+            }, 210);
+          }
+        } else if (action === 'toggle-full') {
+          const el = btn.closest('.step-card');
+          const nextFull = el.dataset.full !== 'true';
+          expandedFullMap.set(key, nextFull);
+          el.dataset.full = String(nextFull);
+          syncThinkOverflow(el, el.querySelector('.think-md'));
+        } else if (action === 'toggle-lang') {
+          rawOverrideMap.set(key, rawOverrideMap.get(key) !== true);
+          streamShownMap.delete(key);
+          const el = btn.closest('.step-card');
+          if (el) { el.dataset.bodySig = ''; el.dataset.headSig = ''; }
+          renderFeed();
+        } else if (action === 'retry-one') {
+          const found = findItemById(key);
+          if (!found) return;
+          btn.textContent = '重译中…';
+          streamShownMap.delete(key);
+          try {
+            await postJson('/api/translate/retry', { itemId: key, rawText: found.thinking || '' });
+          } catch {}
+          setTimeout(() => { if (btn.isConnected) btn.textContent = '重译'; }, 1000);
+        } else if (action === 'copy') {
+          const found = findItemById(key);
+          if (!found) return;
+          const mode = currentState?.settings?.displayMode || 'zh';
+          const showRaw = rawOverrideMap.get(key) === true ? (mode !== 'raw') : (mode === 'raw');
+          const txt = found.kind === 'think'
+            ? (!showRaw && found.translatedThinking ? found.translatedThinking : found.thinking)
+            : found.detail;
+          try {
+            await navigator.clipboard.writeText(txt || '');
+            btn.textContent = '已复制';
+            setTimeout(() => { if (btn.isConnected) btn.textContent = '复制'; }, 1000);
+          } catch {}
+        }
+      });
+
+      toggleAllBtn.addEventListener('click', () => {
+        const turns = (currentState?.turns || []).filter((t) => t.items && t.items.length > 0);
+        const settings = currentState?.settings || {};
+        const anyClosed = turns.some((t, idx) => {
+          const key = `${currentState.activeId}:turn:${t.turnIndex}`;
+          return !isTurnOpen(key, t, idx === turns.length - 1, settings);
+        });
+        for (const t of turns) {
+          const key = `${currentState.activeId}:turn:${t.turnIndex}`;
+          openMap.set(key, anyClosed);
+          userPinnedMap.set(key, true);
+        }
+        toggleAllBtn.textContent = anyClosed ? '收起' : '展开';
+        renderFeed();
+      });
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && activeTab === 'feed') {
+          renderFeed();
+        }
+      });
+
+      searchToggleBtn.addEventListener('click', () => {
+        const open = searchWrap.classList.toggle('open');
+        searchToggleBtn.classList.toggle('active', open);
+        if (open) searchInput.focus();
+        else { searchInput.value = ''; searchQuery = ''; renderFeed(); }
+      });
+
+      searchInput.addEventListener('input', () => { searchQuery = searchInput.value; renderFeed(); });
+      convSelect.addEventListener('change', () => { selectedConvId = convSelect.value || 'auto'; connectStream(); });
+
+      optInline.addEventListener('change', () => void saveSetting({ inlineEnabled: optInline.checked }));
+      optHideSum.addEventListener('change', () => void saveSetting({ hideSummaryWhenOpen: optHideSum.checked }));
+      optTools.addEventListener('change', () => void saveSetting({ includeTools: optTools.checked }));
+      optAutoExpandTurn.addEventListener('change', () => void saveSetting({ autoExpandRunningTurn: optAutoExpandTurn.checked }));
+      optAutoExpandThink.addEventListener('change', () => void saveSetting({ autoExpandRunningThink: optAutoExpandThink.checked }));
+      optAutoCollapse.addEventListener('change', () => void saveSetting({ autoCollapseDoneTurn: optAutoCollapse.checked }));
+      optSmooth.addEventListener('change', () => void saveSetting({ smoothStream: optSmooth.checked }));
+      optCompact.addEventListener('change', () => {
+        document.body.dataset.compact = String(optCompact.checked);
+        void saveSetting({ compactMode: optCompact.checked });
+      });
+      optTranslate.addEventListener('change', () => void saveSetting({ translateEnabled: optTranslate.checked }));
+      optDisableThink.addEventListener('change', () => void saveSetting({ disableTranslatorThinking: optDisableThink.checked }));
+
+      setInterval(() => {
+        if (activeTab !== 'feed' || !currentState?.isGenerating || document.visibilityState !== 'visible') return;
+        for (const turnEl of feed.querySelectorAll('.turn-block[data-running="true"]')) {
+          const turn = turnEl._turnData;
+          if (!turn) continue;
+          const lblEl = turnEl.querySelector('.turn-label');
+          if (lblEl) lblEl.textContent = formatTurnHeader(turn, turn.items?.length || 0).label;
+          for (const cardEl of turnEl.querySelectorAll('.step-card[data-running="true"]')) {
+            const item = cardEl._itemData;
+            if (!item?.startedAtMs) continue;
+            const timeEl = cardEl.querySelector('.step-time');
+            if (timeEl) timeEl.textContent = `${Math.max(0, (Date.now() - item.startedAtMs) / 1000).toFixed(1)}s`;
+          }
+        }
+      }, 250);
+
+      renderModelList();
+      connectStream();
+    })();
+  </script>
+</body>
+</html>

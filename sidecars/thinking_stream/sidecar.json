@@ -1,0 +1,20 @@
+{
+  "command": "node",
+  "args": [
+    "server.mjs"
+  ],
+  "description": "低功耗实时流式思考过程侧边栏，支持会话内嵌、折叠展开、首行流光摘要、实时中文翻译与主题自适应。",
+  "display_name": "AGY 思考流",
+  "has_web_ui": true,
+  "restart_policy": "always",
+  "ui_config": {
+    "display_name": "AGY 思考流",
+    "views": [
+      {
+        "entrypoint": "SIDECAR_UI_ENTRYPOINT_AUX_PANE",
+        "path": "/",
+        "title": "思考过程"
+      }
+    ]
+  }
+}

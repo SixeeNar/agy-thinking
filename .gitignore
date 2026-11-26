@@ -1,0 +1,22 @@
+# OS & Editor
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Logs & Temp
+*.log
+*.tmp
+npm-debug.log*
+
+# Dependencies (this plugin has zero npm dependencies)
+node_modules/
+
+# Local secrets if ever placed here by mistake
+.env
+.env.*
+settings.json
+translation-cache.json
