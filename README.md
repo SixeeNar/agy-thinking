@@ -43,13 +43,13 @@
 ### Windows (PowerShell)
 
 ```powershell
-git clone https://github.com/otuiovoi/agy-thinking.git "$HOME\.gemini\config\plugins\agy-thinking"
+git clone https://github.com/SixeeNar/agy-thinking.git "$HOME\.gemini\config\plugins\agy-thinking"
 ```
 
 ### macOS / Linux
 
 ```bash
-git clone https://github.com/otuiovoi/agy-thinking.git ~/.gemini/config/plugins/agy-thinking
+git clone https://github.com/SixeeNar/agy-thinking.git ~/.gemini/config/plugins/agy-thinking
 ```
 
 安装完成后，在 Antigravity 的 **Plugins Manager** 中启用 **AGY 思考流（agy-thinking）**，并在右侧栏打开 **思考过程** 面板即可。
