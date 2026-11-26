@@ -4,20 +4,17 @@ import { dirname, join } from 'node:path';
 
 export const DEFAULT_SETTINGS = Object.freeze({
   inlineEnabled: true,
+  displayLevel: 'focus', // 'focus'（完成后收起）| 'expanded'（始终保持展开）
   includeTools: true,
-  autoExpandRunningTurn: true,
-  autoCollapseDoneTurn: false,
-  autoExpandRunningThink: true,
+  autoExpandRunningThink: true, // 默认开启：思考流中自动展开当前思考正文
   hideSummaryWhenOpen: true,
   smoothStream: true,
-  compactMode: false,
   fontSize: 'md', // 'sm' | 'md' | 'lg'
-  thinkHeightMode: 'md', // 'sm' | 'md' | 'full'
-  sidebarDefaultTab: 'settings', // 'settings' | 'feed'
   translateEnabled: true,
+  summaryEnabled: false, // 分步脉络首条标题即摘要，默认关闭额外摘要请求省额度
   disableTranslatorThinking: true,
   displayMode: 'zh', // 'zh' | 'bilingual' | 'raw'
-  translateStyle: 'natural', // 'natural' | 'technical' | 'concise'
+  translateStyle: 'steps', // 'steps'（分步脉络）| 'natural'（自然直译）
   translateBaseUrl: 'https://api.siliconflow.cn/v1',
   translateApiKey: '',
   translateModels: 'Qwen/Qwen2.5-7B-Instruct, THUDM/glm-4-9b-chat, tencent/Hunyuan-MT-7B',
@@ -40,33 +37,34 @@ export function validateSettings(raw) {
   const boolKeys = [
     'inlineEnabled',
     'includeTools',
-    'autoExpandRunningTurn',
-    'autoCollapseDoneTurn',
     'autoExpandRunningThink',
     'hideSummaryWhenOpen',
     'smoothStream',
-    'compactMode',
     'translateEnabled',
+    'summaryEnabled',
     'disableTranslatorThinking',
   ];
   for (const key of boolKeys) {
     if (typeof raw[key] === 'boolean') clean[key] = raw[key];
   }
 
+  if (raw.displayLevel === 'focus' || raw.displayLevel === 'expanded') {
+    clean.displayLevel = raw.displayLevel;
+  } else if (raw.displayLevel === 'verbose') {
+    clean.displayLevel = 'expanded';
+  } else if (['timeline', 'compact', 'standard', 'detailed'].includes(raw.displayLevel)) {
+    clean.displayLevel = 'focus';
+  }
   if (['zh', 'bilingual', 'raw'].includes(raw.displayMode)) {
     clean.displayMode = raw.displayMode;
   }
-  if (['natural', 'technical', 'concise'].includes(raw.translateStyle)) {
+  if (raw.translateStyle === 'steps' || raw.translateStyle === 'natural') {
     clean.translateStyle = raw.translateStyle;
+  } else if (['technical', 'concise'].includes(raw.translateStyle)) {
+    clean.translateStyle = 'natural';
   }
   if (['sm', 'md', 'lg'].includes(raw.fontSize)) {
     clean.fontSize = raw.fontSize;
-  }
-  if (['sm', 'md', 'full'].includes(raw.thinkHeightMode)) {
-    clean.thinkHeightMode = raw.thinkHeightMode;
-  }
-  if (['settings', 'feed'].includes(raw.sidebarDefaultTab)) {
-    clean.sidebarDefaultTab = raw.sidebarDefaultTab;
   }
   if (typeof raw.translateBaseUrl === 'string' && raw.translateBaseUrl.trim()) {
     clean.translateBaseUrl = raw.translateBaseUrl.trim().replace(/\/+$/, '');

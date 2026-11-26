@@ -27,6 +27,8 @@ const settingsStore = createSettingsStore();
 let inlineInjector = null;
 const clients = new Set();
 let pollTimer = null;
+let isPolling = false;
+let pendingPollDelay = null;
 let cachedBroadcastPending = false;
 let cachedBroadcastTriggerNew = false;
 
@@ -158,13 +160,16 @@ async function listConversationsCached(options = {}) {
       const data = await callLs('GetAllCascadeTrajectories', {});
       const map = data?.trajectorySummaries || {};
       const list = Object.entries(map)
-        .map(([id, info]) => ({
-          id,
-          summary: info?.summary || id.slice(0, 8),
-          status: info?.status || '',
-          lastModifiedTime: info?.lastModifiedTime || '',
-          mtimeMs: info?.lastModifiedTime ? Date.parse(info.lastModifiedTime) : 0,
-        }))
+        .map(([id, info]) => {
+          const parsedMtime = info?.lastModifiedTime ? Date.parse(info.lastModifiedTime) : 0;
+          return {
+            id,
+            summary: info?.summary || id.slice(0, 8),
+            status: info?.status || '',
+            lastModifiedTime: info?.lastModifiedTime || '',
+            mtimeMs: Number.isFinite(parsedMtime) ? parsedMtime : 0,
+          };
+        })
         .sort((a, b) => b.mtimeMs - a.mtimeMs);
       conversationsCache = { list, fetchedAt: Date.now() };
       return list;
@@ -207,11 +212,13 @@ async function fetchTrajectoryCached(activeId, options = {}) {
         st?.status === 'CORTEX_STEP_STATUS_PENDING'
       );
       updateConvActivity(activeId, isRunning);
+      // 先删后插实现真正 LRU，确保最新访问的对话排在队尾，避免误删活跃对话或卡住清理循环
+      trajectoryCache.delete(activeId);
       trajectoryCache.set(activeId, { data, fetchedAt: Date.now(), isRunning });
       // 只保留最近 6 条对话轨迹缓存，防止长时运行内存膨胀
       while (trajectoryCache.size > 6) {
         const oldestKey = trajectoryCache.keys().next().value;
-        if (oldestKey === activeId) break;
+        if (!oldestKey || oldestKey === activeId) break;
         trajectoryCache.delete(oldestKey);
         activeConvMap.delete(oldestKey);
       }
@@ -242,6 +249,7 @@ function attachRuntimeMeta(payload) {
   payload.runtime = {
     pollMode: getPollMode(),
     cacheCount: tStats.cacheCount,
+    cacheEpoch: tStats.cacheEpoch,
     activeModel: tStats.activeModel,
     inFlightTranslations: tStats.inFlightCount,
     lsListCalls: runtimeStats.lsListCalls,
@@ -303,16 +311,45 @@ function computeSignature(payload, cdpState, publicSettings) {
     .slice(0, 30)
     .map((c) => `${c.id}:${c.summary}:${c.status}`)
     .join(',');
-  let hash = `${payload.activeId}|${payload.activeStatus}|${cdpState}|${payload.runtime?.pollMode || ''}|${payload.runtime?.cacheCount || 0}|${payload.runtime?.activeModel || ''}|${convSig}|${JSON.stringify(publicSettings)}|`;
+  let hash = `${payload.activeId}|${payload.activeStatus}|${cdpState}|${payload.runtime?.pollMode || ''}|${payload.runtime?.cacheCount || 0}|${payload.runtime?.cacheEpoch || 0}|${payload.runtime?.activeModel || ''}|${convSig}|${JSON.stringify(publicSettings)}|`;
   for (const turn of payload.turns) {
-    hash += `${turn.turnIndex}:${turn.items.length}:${turn.isRunning}:${turn.durationSec ?? ''}:`;
+    hash += `${turn.turnIndex}:${turn.items.length}:${turn.isRunning}:${turn.hasError ? 1 : 0}:${turn.durationSec ?? ''}:`;
     for (const item of turn.items) {
       const len = item.kind === 'think' ? (item.thinking?.length || 0) : (item.detail?.length || 0);
       const tSig = sampleTextSig(item.translatedThinking);
-      hash += `${item.id}/${item.status}/${len}/${tSig}/${item.translateStatus || ''}/${item.translateModel || ''}/${item.translateError || ''}/${item.thinkingTokens || 0}/${item.durationSec ?? ''};`;
+      const fSig = sampleTextSig(item.fullTranslatedThinking);
+      const nSig = sampleTextSig(item.narrativeSummary);
+      hash += `${item.id}/${item.status}/${len}/${tSig}/${item.translateStatus || ''}/${item.translatePhase || ''}/${item.translateModel || ''}/${item.translateError || ''}/${fSig}/${item.fullTranslateStatus || ''}/${item.fullTranslateModel || ''}/${item.fullTranslateError || ''}/${nSig}/${item.narrativeStatus || ''}/${item.narrativeModel || ''}/${item.narrativeError || ''}/${item.thinkingTokens || 0}/${item.durationSec ?? ''};`;
     }
   }
   return hash;
+}
+
+function removeClient(client) {
+  if (!client || client.closed) return;
+  client.closed = true;
+  if (client.keepalive) {
+    clearInterval(client.keepalive);
+    client.keepalive = null;
+  }
+  clients.delete(client);
+  if (clients.size === 0) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+    pendingPollDelay = null;
+    runtimeStats.pollMode = getPollMode();
+  }
+}
+
+function writeClientSafe(client, chunk) {
+  if (client.closed) return false;
+  try {
+    client.res.write(chunk);
+    return true;
+  } catch {
+    removeClient(client);
+    return false;
+  }
 }
 
 function broadcastCachedToClients(triggerNew = false) {
@@ -331,7 +368,10 @@ function broadcastCachedToClients(triggerNew = false) {
   }
 
   for (const group of groups.values()) {
-    const payload = buildCachedSnapshot(group.requestedId, group.hostConvId, rawSettings, triggerNew);
+    let payload = buildCachedSnapshot(group.requestedId, group.hostConvId, rawSettings, triggerNew);
+    if (!payload && conversationsCache.list.length === 0 && !isUuidLike(group.requestedId)) {
+      payload = attachRuntimeMeta(buildTurnsPayload([], '', null, rawSettings));
+    }
     if (!payload) continue;
     payload.cdpState = cdpState;
     payload.settings = publicSettings;
@@ -341,7 +381,8 @@ function broadcastCachedToClients(triggerNew = false) {
       if (client.lastSig !== sig) {
         if (!encoded) encoded = `event: state\ndata: ${JSON.stringify(payload)}\n\n`;
         client.lastSig = sig;
-        try { client.res.write(encoded); } catch {}
+        client.lastErr = '';
+        writeClientSafe(client, encoded);
       }
     }
   }
@@ -361,82 +402,103 @@ function scheduleCachedBroadcast(triggerNew = false) {
 }
 
 async function pollAndBroadcast() {
+  if (isPolling) return;
   if (clients.size === 0) {
+    clearTimeout(pollTimer);
     pollTimer = null;
+    pendingPollDelay = null;
     runtimeStats.pollMode = getPollMode();
     return;
   }
   clearTimeout(pollTimer);
   pollTimer = null;
+  pendingPollDelay = null;
+  isPolling = true;
 
   let anyChanged = false;
-  const rawSettings = settingsStore.read();
-  const publicSettings = settingsStore.readPublic();
-  const cdpState = inlineInjector?.status?.() ?? 'unknown';
+  try {
+    const rawSettings = settingsStore.read();
+    const publicSettings = settingsStore.readPublic();
+    const cdpState = inlineInjector?.status?.() ?? 'unknown';
 
-  const groups = new Map();
-  for (const client of clients) {
-    const key = `${client.requestedId}::${client.hostConvId}`;
-    if (!groups.has(key)) {
-      groups.set(key, { requestedId: client.requestedId, hostConvId: client.hostConvId, list: [] });
+    const groups = new Map();
+    for (const client of clients) {
+      const key = `${client.requestedId}::${client.hostConvId}`;
+      if (!groups.has(key)) {
+        groups.set(key, { requestedId: client.requestedId, hostConvId: client.hostConvId, list: [] });
+      }
+      groups.get(key).list.push(client);
     }
-    groups.get(key).list.push(client);
-  }
 
-  for (const group of groups.values()) {
-    try {
-      const payload = await fetchSnapshot(group.requestedId, group.hostConvId, rawSettings);
-      payload.cdpState = cdpState;
-      payload.settings = publicSettings;
-      const sig = computeSignature(payload, cdpState, publicSettings);
-      let encoded = '';
-      for (const client of group.list) {
-        if (client.lastSig !== sig) {
-          if (!encoded) encoded = `event: state\ndata: ${JSON.stringify(payload)}\n\n`;
-          client.lastSig = sig;
-          anyChanged = true;
-          try { client.res.write(encoded); } catch {}
+    for (const group of groups.values()) {
+      try {
+        const payload = await fetchSnapshot(group.requestedId, group.hostConvId, rawSettings);
+        payload.cdpState = cdpState;
+        payload.settings = publicSettings;
+        const sig = computeSignature(payload, cdpState, publicSettings);
+        let encoded = '';
+        for (const client of group.list) {
+          client.lastErr = '';
+          if (client.lastSig !== sig) {
+            if (!encoded) encoded = `event: state\ndata: ${JSON.stringify(payload)}\n\n`;
+            client.lastSig = sig;
+            anyChanged = true;
+            writeClientSafe(client, encoded);
+          }
+        }
+      } catch (err) {
+        const errMsg = `event: notice\ndata: ${JSON.stringify({ message: err.message })}\n\n`;
+        for (const client of group.list) {
+          if (client.lastErr !== err.message) {
+            client.lastErr = err.message;
+            writeClientSafe(client, errMsg);
+          }
         }
       }
-    } catch (err) {
-      const errMsg = `event: notice\ndata: ${JSON.stringify({ message: err.message })}\n\n`;
-      for (const client of group.list) {
-        if (client.lastErr !== err.message) {
-          client.lastErr = err.message;
-          try { client.res.write(errMsg); } catch {}
-        }
-      }
     }
-  }
-
-  if (anyChanged) runtimeStats.lastChangeAt = Date.now();
-  if (clients.size > 0) {
-    pollTimer = setTimeout(pollAndBroadcast, getCurrentPollIntervalMs());
+  } finally {
+    isPolling = false;
+    if (anyChanged) runtimeStats.lastChangeAt = Date.now();
+    if (clients.size > 0) {
+      const nextDelay = pendingPollDelay !== null ? pendingPollDelay : getCurrentPollIntervalMs();
+      pendingPollDelay = null;
+      clearTimeout(pollTimer);
+      pollTimer = setTimeout(pollAndBroadcast, nextDelay);
+    }
   }
 }
 
 function ensurePollRunning(delayMs = 40) {
   if (clients.size === 0) return;
+  if (isPolling) {
+    pendingPollDelay = pendingPollDelay === null ? delayMs : Math.min(pendingPollDelay, delayMs);
+    return;
+  }
   clearTimeout(pollTimer);
   pollTimer = setTimeout(pollAndBroadcast, delayMs);
 }
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
-    let raw = '';
+    const chunks = [];
+    let totalBytes = 0;
     let settled = false;
     req.on('data', (chunk) => {
       if (settled) return;
-      raw += chunk;
-      if (raw.length > 1024 * 1024) {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalBytes += buf.length;
+      if (totalBytes > 1024 * 1024) {
         settled = true;
         reject(new Error('Payload too large'));
         req.destroy();
+        return;
       }
+      chunks.push(buf);
     });
     req.on('end', () => {
       if (settled) return;
       settled = true;
+      const raw = Buffer.concat(chunks).toString('utf-8');
       if (!raw.trim()) return resolve({});
       try {
         resolve(JSON.parse(raw));
@@ -454,7 +516,15 @@ function readJsonBody(req) {
 
 function startServer() {
   const server = createServer(async (req, res) => {
-    const url = new URL(req.url, `http://${BIND_HOST}:${WEB_PORT || 80}`);
+    try {
+      let url;
+      try {
+        url = new URL(req.url || '/', `http://${BIND_HOST}:${WEB_PORT || 80}`);
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Bad Request');
+        return;
+      }
 
     if (req.method === 'GET' && url.pathname === '/preload.js') {
       res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
@@ -508,9 +578,19 @@ function startServer() {
             cleanedPatch.translateApiKey = '';
           }
           const next = settingsStore.update(cleanedPatch);
-          translator.resetErrors();
-          if (cleanedPatch.translateStyle && cleanedPatch.translateStyle !== prev.translateStyle) {
+          const styleChanged = Boolean(cleanedPatch.translateStyle && cleanedPatch.translateStyle !== prev.translateStyle);
+          const translateConfigChanged =
+            (cleanedPatch.translateBaseUrl !== undefined && cleanedPatch.translateBaseUrl !== prev.translateBaseUrl) ||
+            (cleanedPatch.translateApiKey !== undefined && cleanedPatch.translateApiKey !== prev.translateApiKey) ||
+            (cleanedPatch.translateModels !== undefined && cleanedPatch.translateModels !== prev.translateModels) ||
+            (cleanedPatch.translateEnabled !== undefined && cleanedPatch.translateEnabled !== prev.translateEnabled) ||
+            (cleanedPatch.disableTranslatorThinking !== undefined && cleanedPatch.disableTranslatorThinking !== prev.disableTranslatorThinking);
+          if (styleChanged) {
             translator.resetForStyleChange();
+          } else if (translateConfigChanged) {
+            translator.resetForConfigChange();
+          } else {
+            translator.resetErrors();
           }
           broadcastCachedToClients(true);
           inlineInjector?.nudge?.();
@@ -546,6 +626,21 @@ function startServer() {
         const result = await translator.testConnection(override);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(result));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/translate/full') {
+      try {
+        const body = await readJsonBody(req);
+        if (body?.itemId) translator.requestFullTranslation(body.itemId);
+        broadcastCachedToClients(true);
+        inlineInjector?.pushCached?.(true);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: true }));
       } catch (err) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ ok: false, error: err.message }));
@@ -611,19 +706,16 @@ function startServer() {
       });
       res.write(': connected\n\n');
 
-      const client = { res, requestedId, hostConvId, lastSig: '', lastErr: '', closed: false };
+      const client = { res, requestedId, hostConvId, lastSig: '', lastErr: '', closed: false, keepalive: null };
       clients.add(client);
 
-      const keepalive = setInterval(() => {
+      client.keepalive = setInterval(() => {
         if (client.closed) return;
-        try { res.write(': ping\n\n'); } catch {}
+        writeClientSafe(client, ': ping\n\n');
       }, 20000);
 
-      req.on('close', () => {
-        client.closed = true;
-        clearInterval(keepalive);
-        clients.delete(client);
-      });
+      req.on('close', () => removeClient(client));
+      res.on('close', () => removeClient(client));
 
       try {
         const rawSettings = settingsStore.read();
@@ -634,11 +726,12 @@ function startServer() {
         initial.cdpState = cdpState;
         initial.settings = publicSettings;
         client.lastSig = computeSignature(initial, cdpState, publicSettings);
-        try { res.write(`event: state\ndata: ${JSON.stringify(initial)}\n\n`); } catch {}
+        client.lastErr = '';
+        writeClientSafe(client, `event: state\ndata: ${JSON.stringify(initial)}\n\n`);
       } catch (err) {
         if (client.closed) return;
         client.lastErr = err.message;
-        try { res.write(`event: notice\ndata: ${JSON.stringify({ message: err.message })}\n\n`); } catch {}
+        writeClientSafe(client, `event: notice\ndata: ${JSON.stringify({ message: err.message })}\n\n`);
       }
       if (!client.closed) ensurePollRunning(400);
       return;
@@ -646,6 +739,14 @@ function startServer() {
 
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Not found');
+    } catch (err) {
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: err?.message || 'Internal Server Error' }));
+      } else {
+        try { res.end(); } catch {}
+      }
+    }
   });
 
   server.listen(WEB_PORT, BIND_HOST, () => {
@@ -658,9 +759,10 @@ function startServer() {
 if (WEB_PORT) {
   const server = startServer();
   inlineInjector = startInlineInjector(
-    (convId, rawSettings) =>
+    (convId, rawSettings, opts = {}) =>
       fetchSnapshot(convId || 'auto', convId || DEFAULT_CONV_ID, rawSettings, {
         includeConversations: !isUuidLike(convId),
+        force: Boolean(opts.force),
       }),
     (convId, rawSettings, triggerNew = false) =>
       buildCachedSnapshot(convId || 'auto', convId || DEFAULT_CONV_ID, rawSettings, triggerNew),
@@ -671,6 +773,10 @@ if (WEB_PORT) {
       onAction: (action) => {
         if (action?.type === 'retry' && action.itemId) {
           translator.retryItem(action.itemId, action.rawText || '');
+          broadcastCachedToClients(true);
+          inlineInjector?.pushCached?.(true);
+        } else if (action?.type === 'translate-full' && action.itemId) {
+          translator.requestFullTranslation(action.itemId);
           broadcastCachedToClients(true);
           inlineInjector?.pushCached?.(true);
         }

@@ -15,6 +15,7 @@
                  radial-gradient(circle at 52% 105%, rgba(155, 114, 203, 0.1), transparent 52%);
       --bg-elev: rgba(138, 174, 242, 0.052);
       --bg-card: rgba(15, 20, 35, 0.72);
+      --bg-sticky-card: #121829;
       --bg-card-hover: rgba(155, 114, 203, 0.095);
       --fg-base: var(--foreground, #eef3ff);
       --fg-muted: var(--muted-foreground, #9fb0d0);
@@ -29,10 +30,10 @@
       --gem-grad-soft: linear-gradient(135deg, rgba(77, 163, 255, 0.16) 0%, rgba(155, 114, 203, 0.16) 55%, rgba(232, 121, 168, 0.14) 100%);
       --code-bg: rgba(5, 8, 18, 0.48);
       --think-clr: #b392f0;
-      --cmd-clr: #34d399;
+      --cmd-clr: #2dd4bf;
       --file-clr: #60a5fa;
       --search-clr: #38bdf8;
-      --tool-clr: #fbbf24;
+      --tool-clr: #e879a8;
       --err-clr: #fb7185;
       --ok-clr: #34d399;
       --font-sans: var(--font-sans, "PingFang SC", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif);
@@ -47,6 +48,7 @@
                  radial-gradient(circle at 52% 105%, rgba(139, 92, 246, 0.08), transparent 52%);
       --bg-elev: rgba(66, 133, 244, 0.055);
       --bg-card: rgba(255, 255, 255, 0.88);
+      --bg-sticky-card: #f6f8ff;
       --bg-card-hover: rgba(139, 92, 246, 0.07);
       --fg-base: var(--foreground, #141c2f);
       --fg-muted: var(--muted-foreground, #526382);
@@ -78,6 +80,7 @@
                    radial-gradient(circle at 52% 105%, rgba(139, 92, 246, 0.08), transparent 52%);
         --bg-elev: rgba(66, 133, 244, 0.055);
         --bg-card: rgba(255, 255, 255, 0.88);
+        --bg-sticky-card: #f6f8ff;
         --bg-card-hover: rgba(139, 92, 246, 0.07);
         --fg-base: var(--foreground, #141c2f);
         --fg-muted: var(--muted-foreground, #526382);
@@ -245,26 +248,128 @@
     .scroll-body::-webkit-scrollbar { width: 5px; }
     .scroll-body::-webkit-scrollbar-thumb { background: rgba(138, 174, 242, 0.24); border-radius: 999px; }
 
-    /* ─── 状态仪表板卡片 ─── */
-    .health-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 7px;
-      margin-bottom: 11px;
-    }
-    .health-card {
-      position: relative;
-      padding: 8px 10px;
+    /* ─── 顶部轻量化极光状态微条（降权省空间，信息零丢失） ─── */
+    .status-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 9px;
+      margin-bottom: 10px;
       border-radius: 11px;
       border: 1px solid var(--border-soft);
       background: var(--bg-card);
       box-shadow: var(--shadow-card);
+    }
+    .stat-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      max-width: 100%;
+      padding: 2.5px 8px;
+      border-radius: 999px;
+      background: var(--bg-elev);
+      border: 1px solid rgba(138, 174, 242, 0.11);
+      font-size: 10.8px;
+      color: var(--fg-muted);
+    }
+    .stat-k { color: var(--fg-dim); flex: 0 0 auto; }
+    .health-v {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--fg-base);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 118px;
+    }
+    .health-v.ok { color: var(--ok-clr); }
+    .health-v.live { color: var(--gem-pink); }
+    .health-v.warn { color: var(--tool-clr); }
+
+    .setting-card {
+      position: relative;
+      overflow: hidden;
+      padding: 13px 13px;
+      border-radius: 14px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-card);
+      box-shadow: var(--shadow-card);
+      margin-bottom: 10px;
+      backdrop-filter: blur(8px);
+    }
+    .setting-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 1.5px;
+      background: var(--gem-grad);
+      opacity: 0.45;
+    }
+    .setting-card:last-child { margin-bottom: 0; }
+
+    /* 第一视觉重心：双核心大开关磁贴 */
+    .hero-toggles {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .hero-tile {
+      position: relative;
       display: flex;
       flex-direction: column;
-      gap: 3px;
-      overflow: hidden;
+      justify-content: space-between;
+      gap: 7px;
+      padding: 10px 11px;
+      border-radius: 12px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-elev);
+      cursor: pointer;
+      user-select: none;
+      transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.1s ease;
     }
-    .health-card::before {
+    .hero-tile:hover { border-color: var(--border-strong); background: var(--bg-card-hover); }
+    .hero-tile:active { transform: scale(0.988); }
+    .hero-tile.is-on {
+      border-color: rgba(155, 114, 203, 0.52);
+      background: var(--gem-grad-soft);
+      box-shadow: 0 0 0 1px rgba(155, 114, 203, 0.14), 0 4px 16px -8px rgba(155, 114, 203, 0.55);
+    }
+    .hero-tile-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .hero-tile-title { font-size: 12.4px; font-weight: 650; color: var(--fg-base); }
+    .hero-tile-desc { font-size: 10.6px; color: var(--fg-muted); line-height: 1.38; }
+
+    .compact-grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 9px;
+      padding-top: 9px;
+      border-top: 1px solid rgba(138, 174, 242, 0.09);
+    }
+    .compact-cell { display: flex; flex-direction: column; gap: 5px; }
+    .compact-cell .seg-group { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+    .compact-cell .seg-btn { padding: 4.5px 5px; font-size: 11px; text-align: center; }
+
+    /* 可折叠配置卡（翻译引擎 / 高级交互） */
+    .fold-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 14px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-card);
+      box-shadow: var(--shadow-card);
+      margin-bottom: 10px;
+      backdrop-filter: blur(8px);
+    }
+    .fold-card::before {
       content: "";
       position: absolute;
       inset: 0 0 auto 0;
@@ -272,29 +377,75 @@
       background: var(--gem-grad);
       opacity: 0.35;
     }
-    .health-k { font-size: 10.5px; color: var(--fg-dim); }
-    .health-v {
-      font-size: 12px;
+    .fold-card:last-child { margin-bottom: 0; }
+    .fold-summary {
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 11px 13px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s ease;
+    }
+    .fold-summary::-webkit-details-marker { display: none; }
+    .fold-summary:hover { background: var(--bg-card-hover); }
+    .fold-summary-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+    .fold-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12.6px;
       font-weight: 600;
       color: var(--fg-base);
+    }
+    .fold-sub {
+      font-size: 10.9px;
+      color: var(--fg-muted);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .health-v.ok { color: var(--ok-clr); }
-    .health-v.live { color: var(--gem-pink); }
-    .health-v.warn { color: var(--tool-clr); }
-
-    .setting-card {
-      padding: 12px 12px;
-      border-radius: 13px;
-      border: 1px solid var(--border-soft);
-      background: var(--bg-card);
-      box-shadow: var(--shadow-card);
-      margin-bottom: 11px;
-      backdrop-filter: blur(8px);
+    .fold-sub.ok { color: var(--ok-clr); }
+    .fold-sub.warn { color: var(--tool-clr); }
+    .fold-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex: 0 0 auto;
     }
-    .setting-card:last-child { margin-bottom: 0; }
+    .fold-chev {
+      display: inline-block;
+      font-size: 13px;
+      color: var(--fg-dim);
+      transition: transform 0.18s ease, color 0.16s ease;
+    }
+    .fold-card details { margin: 0; }
+    .fold-card details[open] > .fold-summary .fold-chev { transform: rotate(90deg); color: var(--gem-purple); }
+    .fold-body {
+      padding: 4px 13px 13px;
+      border-top: 1px solid rgba(138, 174, 242, 0.11);
+    }
+    .fold-quickbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 0 13px 10px;
+    }
+    .fold-card details[open] + .fold-quickbar { display: none; }
+    .test-status:empty { display: none; }
+    .adv-subhead {
+      margin: 10px 0 3px;
+      font-size: 10.4px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--fg-dim);
+      text-transform: uppercase;
+    }
+    .adv-subhead:first-child { margin-top: 6px; }
 
     .section-head {
       display: flex;
@@ -408,6 +559,25 @@
       color: var(--fg-base);
       box-shadow: inset 0 0 0 1px var(--border-strong);
     }
+    #segDisplayLevel .seg-btn,
+    #segTranslateStyle .seg-btn {
+      padding: 4.5px 3px;
+      font-size: 10.7px;
+      text-align: center;
+    }
+    .translate-sub-controls.is-off { display: none; }
+    .translate-off-hint {
+      display: none;
+      margin-top: 8px;
+      padding: 6px 9px;
+      border-radius: 8px;
+      border: 1px dashed var(--border-soft);
+      background: var(--bg-elev);
+      font-size: 10.9px;
+      color: var(--fg-dim);
+      line-height: 1.4;
+    }
+    .translate-off-hint.show { display: block; }
 
     .field-group {
       margin-top: 9px;
@@ -740,6 +910,38 @@
       align-items: center;
       gap: 6px;
     }
+    .feed-toolbar-row.wrap-row {
+      flex-wrap: wrap;
+      justify-content: space-between;
+      row-gap: 5px;
+    }
+    .feed-toolbar-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
+    }
+    .mini-select {
+      height: 25px;
+      padding: 0 7px;
+      border-radius: 7px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-card);
+      color: var(--fg-muted);
+      font: inherit;
+      font-size: 11px;
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.14s ease, color 0.14s ease;
+    }
+    .mini-select:hover, .mini-select:focus {
+      border-color: var(--border-strong);
+      color: var(--fg-base);
+    }
+    :root[data-theme="light"] .mini-select { background: #ffffff; }
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) .mini-select { background: #ffffff; }
+    }
     .feed-toolbar-row .conv-select { flex: 1 1 auto; min-width: 0; height: 28px; }
     .mini-btn {
       flex: 0 0 auto;
@@ -755,8 +957,9 @@
       white-space: nowrap;
       transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
     }
-    .mini-btn:hover { background: var(--bg-card-hover); color: var(--fg-base); }
+    .mini-btn:hover:not(:disabled) { background: var(--bg-card-hover); color: var(--fg-base); }
     .mini-btn.active { border-color: var(--border-strong); background: var(--gem-grad-soft); color: var(--fg-base); }
+    .mini-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
     .feed-search-wrap { display: none; }
     .feed-search-wrap.open { display: block; }
@@ -782,38 +985,78 @@
       text-overflow: ellipsis;
     }
     .turn-bar {
+      position: relative;
+      overflow: hidden;
       display: inline-flex;
       align-items: center;
       gap: 7px;
       max-width: 100%;
-      padding: 4px 12px 4px 9px;
+      padding: 4.5px 13px 4.5px 10px;
       border-radius: 999px;
-      border: 1px solid var(--border-soft);
-      background: var(--bg-card);
+      border: 1px solid rgba(155, 114, 203, 0.26);
+      background: linear-gradient(135deg, rgba(77, 163, 255, 0.09), rgba(155, 114, 203, 0.09) 52%, rgba(232, 121, 168, 0.08));
       color: var(--fg-base);
       font: inherit;
       font-size: 12.2px;
       cursor: pointer;
       user-select: none;
-      transition: background 0.15s ease, border-color 0.15s ease;
+      box-shadow: 0 2px 12px -6px rgba(77, 163, 255, 0.30);
+      transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.2s ease;
     }
-    .turn-bar:hover { background: var(--bg-card-hover); border-color: var(--border-strong); }
-    .turn-block[data-running="true"] .turn-bar { border-color: var(--border-strong); }
+    .turn-bar::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(105deg, transparent 20%, rgba(255, 255, 255, 0.22) 48%, rgba(232, 121, 168, 0.16) 56%, transparent 80%);
+      transform: translateX(-130%);
+      pointer-events: none;
+    }
+    .turn-bar:hover {
+      background: var(--gem-grad-soft);
+      border-color: var(--border-strong);
+      box-shadow: 0 0 0 1px rgba(155, 114, 203, 0.18), 0 4px 16px -6px rgba(155, 114, 203, 0.42);
+    }
+    .turn-bar:hover::after { animation: bar-sheen 1.15s cubic-bezier(0.22, 1, 0.36, 1); }
+    .turn-block[data-running="true"] .turn-bar {
+      border-color: rgba(232, 121, 168, 0.48);
+      box-shadow: 0 0 0 1px rgba(155, 114, 203, 0.22), 0 4px 18px -5px rgba(155, 114, 203, 0.46);
+    }
+    .turn-block[data-running="true"] .turn-bar::after { animation: bar-sheen 2.4s ease-in-out infinite; }
+    @keyframes bar-sheen {
+      0% { transform: translateX(-130%); }
+      60%, 100% { transform: translateX(130%); }
+    }
 
     .turn-star {
-      width: 12px;
-      height: 12px;
+      position: relative;
+      width: 14px;
+      height: 14px;
       flex: 0 0 auto;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      color: var(--ok-clr);
+      filter: drop-shadow(0 0 5px rgba(155, 114, 203, 0.55));
+    }
+    .turn-star svg { display: none; }
+    .turn-star::before {
+      content: "";
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: linear-gradient(90deg, var(--gem-blue) 0%, var(--gem-purple) 36%, var(--gem-pink) 68%, var(--gem-blue) 100%);
+      background-size: 220% 220%;
+      background-position: 15% 50%;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M12 1.5L14.6 9.4L22.5 12L14.6 14.6L12 22.5L9.4 14.6L1.5 12L9.4 9.4Z'/%3E%3C/svg%3E") center/contain no-repeat;
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M12 1.5L14.6 9.4L22.5 12L14.6 14.6L12 22.5L9.4 14.6L1.5 12L9.4 9.4Z'/%3E%3C/svg%3E") center/contain no-repeat;
     }
     .turn-block[data-running="true"] .turn-star {
-      color: var(--gem-pink);
-      animation: star-pulse 1.5s ease-in-out infinite;
+      filter: drop-shadow(0 0 8px rgba(232, 121, 168, 0.78));
+      animation: star-pulse 1.6s ease-in-out infinite;
     }
-    .turn-label { font-weight: 500; white-space: nowrap; }
+    .turn-block[data-running="true"] .turn-star::before {
+      animation: shimmer 2.2s linear infinite;
+    }
+    .turn-label { font-weight: 550; white-space: nowrap; }
     .turn-block[data-running="true"] .turn-label {
       background: linear-gradient(90deg, var(--gem-blue) 0%, var(--gem-purple) 45%, var(--gem-pink) 75%, var(--gem-blue) 100%);
       background-size: 220% auto;
@@ -824,8 +1067,17 @@
     }
     @keyframes shimmer { to { background-position: 220% center; } }
     .turn-counts { font-size: 11px; color: var(--fg-dim); white-space: nowrap; }
-    .turn-chev { width: 13px; height: 13px; transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1); opacity: 0.72; }
-    .turn-block[data-turn-open="true"] .turn-chev { transform: rotate(90deg); }
+    .turn-chev {
+      width: 13px;
+      height: 13px;
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+      opacity: 0.72;
+    }
+    .turn-chev svg { width: 13px; height: 13px; display: block; }
 
     .turn-steps-shell {
       display: grid;
@@ -835,15 +1087,12 @@
     }
     .turn-block[data-turn-open="true"] .turn-steps-shell { grid-template-rows: 1fr; opacity: 1; }
     .turn-steps-inner { overflow: hidden; }
-    .turn-steps {
-      margin: 6px 0 2px 11px;
-      padding-left: 11px;
-      border-left: 1.5px solid var(--guide-line);
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
+    @keyframes rail-beam {
+      0% { background-position: 0 100%; opacity: 0.25; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { background-position: 0 0%; opacity: 0.25; }
     }
-    body[data-compact="true"] .turn-steps { gap: 1px; margin: 4px 0 2px 9px; padding-left: 9px; }
 
     .step-card {
       border-radius: 10px;
@@ -854,7 +1103,8 @@
       background: var(--bg-card);
       border-color: var(--border-soft);
       box-shadow: var(--shadow-card);
-      margin: 3px 0;
+      margin: 0;
+      overflow: clip;
     }
     .step-card[data-open="true"][data-running="true"] { border-color: var(--border-strong); }
 
@@ -886,27 +1136,12 @@
       pointer-events: none;
     }
 
-    .step-ico { width: 14px; height: 14px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; }
-    .step-card[data-kind="think"] .step-ico { color: var(--think-clr); }
-    .step-card[data-kind="cmd"] .step-ico { color: var(--cmd-clr); }
-    .step-card[data-kind="file"] .step-ico { color: var(--file-clr); }
-    .step-card[data-kind="search"] .step-ico { color: var(--search-clr); }
-    .step-card[data-kind="tool"] .step-ico { color: var(--tool-clr); }
-    .step-card[data-status="error"] .step-ico { color: var(--err-clr); }
-    .step-card[data-running="true"] .step-ico { animation: spin 2.2s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .step-kind { flex: 0 0 auto; font-weight: 500; color: var(--fg-base); white-space: nowrap; }
     .step-sep { width: 2.5px; height: 2.5px; border-radius: 50%; background: var(--fg-dim); flex: 0 0 auto; }
     .step-sum { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .step-card[data-running="true"] .step-sum {
-      text-overflow: clip;
-      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
-      mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
-    }
-    .step-time { flex: 0 0 auto; font-size: 11px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
-    .step-chev { width: 12px; height: 12px; flex: 0 0 auto; color: var(--fg-dim); transition: transform 0.16s ease; }
-    .step-card[data-open="true"] .step-chev { transform: rotate(90deg); }
+    .step-time { flex: 0 0 auto; margin-left: auto; font-size: 11px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
 
     .step-body-shell {
       display: grid;
@@ -915,18 +1150,44 @@
     }
     .step-card[data-open="true"] .step-body-shell { grid-template-rows: 1fr; }
     .step-body-inner { overflow: hidden; }
-    .step-body { padding: 3px 11px 10px 26px; }
-    body[data-compact="true"] .step-body { padding: 2px 9px 8px 22px; }
+    .step-body { padding: 8px 11px 10px 26px; }
+    body[data-compact="true"] .step-body { padding: 6px 9px 8px 22px; }
+    .step-card[data-kind="think"][data-brief="true"] .step-body { padding: 5px 10px 7px 24px; }
+    .step-card[data-kind="think"][data-brief="true"] .think-md {
+      border-left: 1.5px dashed var(--border-soft);
+      font-size: 12.1px;
+      line-height: 1.58;
+      opacity: 0.86;
+    }
 
     .think-md {
+      width: 100%;
       padding-left: 11px;
       border-left: 2px solid var(--guide-line);
       color: var(--fg-base);
       opacity: 0.92;
       font-size: 12.5px;
-      line-height: 1.64;
+      line-height: 1.7;
       word-break: break-word;
       user-select: text;
+    }
+    .step-card[data-kind="think"]:not([data-full="true"]) .think-md {
+      max-height: 260px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-right: 6px;
+    }
+    .step-card[data-kind="think"]:not([data-full="true"]) .think-md.live-fade-top {
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 100%);
+      mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 100%);
+    }
+    .step-card[data-kind="think"]:not([data-full="true"]) .think-md.live-fade-bottom {
+      -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 22px), transparent 100%);
+      mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 22px), transparent 100%);
+    }
+    .step-card[data-kind="think"]:not([data-full="true"]) .think-md.live-fade-top.live-fade-bottom {
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%);
+      mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%);
     }
     body[data-think-height="sm"] .step-card:not([data-full="true"]) .think-md {
       max-height: 220px;
@@ -949,7 +1210,7 @@
       border-left-color: transparent;
       border-image: linear-gradient(180deg, var(--gem-blue), var(--gem-purple), var(--gem-pink)) 1;
     }
-    .think-md p { margin: 0 0 9px; }
+    .think-md p { margin: 0 0 12px; }
     .think-md p:last-child { margin-bottom: 0; }
     .expand-bar {
       display: none;
@@ -957,8 +1218,8 @@
       justify-content: center;
       margin-top: 6px;
     }
-    body:not([data-think-height="full"]) .step-card[data-overflow="true"] .expand-bar,
-    body:not([data-think-height="full"]) .step-card[data-full="true"] .expand-bar {
+    .step-card[data-overflow="true"] .expand-bar,
+    .step-card[data-full="true"] .expand-bar {
       display: flex;
     }
     .expand-full-btn {
@@ -1002,6 +1263,53 @@
     .think-md ul, .think-md ol { margin: 4px 0 7px; padding-left: 18px; }
     .think-md li { margin-bottom: 2px; }
     .think-md blockquote { margin: 5px 0; padding-left: 9px; border-left: 2px solid var(--border-soft); }
+    .think-md .tstep-list { display: flex; flex-direction: column; gap: 9px; }
+    body[data-compact="true"] .think-md .tstep-list { gap: 6px; }
+    .think-md .tstep-node { position: relative; display: flex; align-items: flex-start; gap: 9px; }
+    .think-md .tstep-node:not(:last-child)::before {
+      content: "";
+      position: absolute;
+      left: 8.5px;
+      top: 20px;
+      bottom: -9px;
+      width: 1px;
+      background: linear-gradient(180deg, rgba(155, 114, 203, 0.36), rgba(77, 163, 255, 0.14));
+    }
+    .think-md .tstep-idx {
+      flex: 0 0 auto;
+      width: 18px;
+      height: 18px;
+      margin-top: 1px;
+      border-radius: 999px;
+      border: 1px solid rgba(155, 114, 203, 0.42);
+      background: var(--gem-grad-soft);
+      color: var(--fg-base);
+      font-family: var(--font-mono);
+      font-size: 10.2px;
+      font-weight: 650;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .think-md .tstep-body { flex: 1 1 auto; min-width: 0; }
+    .think-md .tstep-title { font-size: 12.4px; font-weight: 600; color: var(--fg-base); line-height: 1.45; }
+    .think-md .tstep-desc { margin-top: 2px; color: var(--fg-muted); font-size: 12.1px; line-height: 1.6; }
+    .think-md .tstep-desc p { margin: 0 0 6px; }
+    .think-md .tstep-desc p:last-child { margin-bottom: 0; }
+    .step-count-pill {
+      flex: 0 0 auto;
+      padding: 0 5px;
+      height: 16px;
+      line-height: 16px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 550;
+      color: var(--think-clr);
+      background: var(--bg-elev);
+      border: 1px solid var(--border-soft);
+      white-space: nowrap;
+    }
+    .step-count-pill:empty { display: none; }
     .bilingual-raw { margin-top: 8px; padding-top: 7px; border-top: 1px dashed var(--border-soft); font-size: 11.5px; opacity: 0.72; }
 
     .cursor {
@@ -1051,6 +1359,230 @@
       transition: background 0.14s ease, color 0.14s ease;
     }
     .copy-btn:hover { background: var(--bg-card-hover); color: var(--fg-base); }
+
+    /* ─── DSH 三层过程组 + 极光星轨样式（侧边栏思考记录与主窗口保持完全一致） ─── */
+    .turn-bar:disabled { cursor: default; }
+    .turn-bar:disabled .turn-chev { display: none; }
+    .turn-block[data-turn-open="true"] .turn-chev { transform: rotate(180deg); }
+    .turn-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .turn-block[data-error="true"]:not([data-running="true"]) .turn-label { color: var(--err-clr); }
+
+    .turn-groups {
+      position: relative;
+      margin: 7px 0 4px 0;
+      padding: 4px 0 4px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    body[data-compact="true"] .turn-groups { gap: 5px; padding: 3px 0 2px 26px; }
+    .turn-groups::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 8px;
+      left: 16px;
+      width: 1.5px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, rgba(77, 163, 255, 0.46) 0%, rgba(155, 114, 203, 0.36) 55%, rgba(232, 121, 168, 0.2) 88%, transparent 100%);
+    }
+    .turn-groups::after {
+      content: "";
+      display: none;
+      position: absolute;
+      top: 0;
+      bottom: 8px;
+      left: 16px;
+      width: 1.5px;
+      border-radius: 999px;
+      background: linear-gradient(
+        180deg,
+        transparent 0%,
+        transparent 36%,
+        rgba(77, 163, 255, 0.95) 45%,
+        rgba(155, 114, 203, 1) 50%,
+        rgba(232, 121, 168, 0.95) 55%,
+        transparent 64%,
+        transparent 100%
+      );
+      background-size: 100% 260%;
+      background-repeat: no-repeat;
+      filter: drop-shadow(0 0 2.5px rgba(155, 114, 203, 0.58));
+      pointer-events: none;
+    }
+    .turn-block[data-running="true"] .turn-groups::after {
+      display: block;
+      animation: rail-beam 1.95s linear infinite;
+    }
+
+    .proc-group { min-width: 0; display: flex; flex-direction: column; }
+    .proc-group-head {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+      min-height: 24px;
+      padding: 2px 10px 2px 6px;
+      margin-left: 0;
+      border: 1px solid var(--border-soft);
+      border-radius: 999px;
+      background: var(--bg-elev);
+      color: var(--fg-muted);
+      font: inherit;
+      font-size: 11.8px;
+      text-align: left;
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
+    }
+    .proc-group-head:hover { color: var(--fg-base); background: var(--bg-card-hover); border-color: var(--border-strong); }
+    .proc-group[data-grouped="false"] > .proc-group-head { display: none; }
+
+    .lead-box {
+      position: relative;
+      flex: 0 0 auto;
+      width: 18px;
+      height: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--think-clr);
+    }
+    .lead-box[data-ico="read"], .lead-box[data-ico="file"] { color: var(--file-clr); }
+    .lead-box[data-ico="edit"] { color: var(--think-clr); }
+    .lead-box[data-ico="search"], .lead-box[data-ico="webSearch"], .lead-box[data-ico="webFetch"] { color: var(--search-clr); }
+    .lead-box[data-ico="cmd"] { color: var(--cmd-clr); }
+    .lead-box[data-ico="code"] { color: var(--gem-blue); }
+    .lead-box[data-ico="subagents"] { color: var(--gem-pink); }
+    .lead-box[data-ico="plan"] { color: var(--ok-clr); }
+    .lead-box[data-ico="questions"], .lead-box[data-ico="tool"] { color: var(--tool-clr); }
+    .lead-box[data-err="true"] { color: var(--err-clr); }
+
+    .act-ico, .act-chev {
+      position: absolute;
+      inset: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.1s ease;
+    }
+    .act-ico svg, .act-chev svg { width: 14px; height: 14px; display: block; }
+    .act-ico { opacity: 1; }
+    .act-chev { opacity: 0; color: var(--gem-purple); }
+    .proc-group-head:hover .act-ico,
+    .proc-group-head:focus-visible .act-ico,
+    .proc-group[data-group-open="true"] > .proc-group-head .act-ico,
+    .step-head:hover .act-ico,
+    .step-head:focus-visible .act-ico,
+    .step-card[data-open="true"] > .step-head .act-ico { opacity: 0; }
+    .proc-group-head:hover .act-chev,
+    .proc-group-head:focus-visible .act-chev,
+    .proc-group[data-group-open="true"] > .proc-group-head .act-chev,
+    .step-head:hover .act-chev,
+    .step-head:focus-visible .act-chev,
+    .step-card[data-open="true"] > .step-head .act-chev { opacity: 1; }
+    .proc-group[data-live="true"] > .proc-group-head .act-ico svg,
+    .step-card[data-running="true"] > .step-head .act-ico svg { animation: spin 2.2s linear infinite; }
+
+    .proc-group-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 520;
+    }
+    .proc-group[data-live="true"] > .proc-group-head .proc-group-title {
+      background: linear-gradient(90deg, var(--gem-blue) 0%, var(--gem-purple) 45%, var(--gem-pink) 75%, var(--gem-blue) 100%);
+      background-size: 220% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: shimmer 2.1s linear infinite;
+    }
+
+    .proc-body-shell {
+      display: grid;
+      grid-template-rows: 0fr;
+      opacity: 0;
+      transition: grid-template-rows 0.18s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.15s ease;
+    }
+    .proc-group[data-group-open="true"] > .proc-body-shell,
+    .proc-group[data-grouped="false"] > .proc-body-shell {
+      grid-template-rows: 1fr;
+      opacity: 1;
+    }
+    .proc-body-inner { overflow: hidden; }
+    .proc-body {
+      margin-top: 6px;
+      padding: 0 4px 4px 2px;
+      max-height: min(400px, 50vh);
+      overflow-y: auto;
+      overscroll-behavior-y: auto;
+      scrollbar-gutter: stable;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .proc-group[data-grouped="false"] > .proc-body-shell > .proc-body-inner > .proc-body {
+      margin-top: 0;
+      padding: 0;
+      max-height: none;
+      overflow: visible;
+      scrollbar-gutter: auto;
+    }
+    body[data-compact="true"] .proc-body { gap: 2px; }
+    .proc-body::-webkit-scrollbar { width: 4px; }
+    .proc-body::-webkit-scrollbar-thumb { background: rgba(138, 174, 242, 0.28); border-radius: 999px; }
+    .proc-body.fade-top { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 100%); }
+    .proc-body.fade-bottom { -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 24px), transparent 100%); mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 24px), transparent 100%); }
+    .proc-body.fade-top.fade-bottom { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%); }
+
+    /* DSH 思考行展开无缝吸顶 + 无预览时隐藏圆点与摘要 */
+    .step-card[data-kind="think"][data-open="true"] > .step-head {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: var(--bg-sticky-card);
+      border-bottom: 1px solid rgba(138, 174, 242, 0.14);
+      border-radius: 0;
+    }
+    .step-card[data-preview="false"] .step-sep,
+    .step-card[data-preview="false"] .step-sum { display: none; }
+    .step-card[data-streaming="true"] .step-sum {
+      text-overflow: clip;
+      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent);
+      mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent);
+      background: linear-gradient(90deg, var(--gem-blue) 0%, var(--gem-purple) 45%, var(--gem-pink) 75%, var(--gem-blue) 100%);
+      background-size: 220% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: shimmer 2.2s linear infinite;
+    }
+    .mode-hint {
+      font-size: 10.8px;
+      color: var(--fg-dim);
+      margin-top: 2px;
+      line-height: 1.4;
+    }
+
+    /* ─── 窄侧边栏响应式适配（< 340px / < 280px） ─── */
+    @media (max-width: 340px) {
+      #topCdpBadge { display: none; }
+      .topbar { padding: 8px 9px; gap: 6px; }
+      .nav-tab { padding: 0 9px; font-size: 11.2px; }
+      .scroll-body { padding: 9px 9px 24px; }
+      .setting-card { padding: 11px 10px; }
+      .hero-tile { padding: 8px 9px; gap: 5px; }
+      .seg-btn { padding: 4px 6px; font-size: 10.8px; }
+      #segDisplayLevel .seg-btn { padding: 4px 2px; font-size: 10.4px; }
+      .feed-toolbar { padding: 7px 9px; }
+    }
+    @media (max-width: 280px) {
+      .hero-toggles { grid-template-columns: 1fr; }
+      .compact-grid-2 { grid-template-columns: 1fr; }
+      .fold-right .section-badge { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -1067,246 +1599,222 @@
       </nav>
     </header>
 
-    <!-- ═══ Tab 1: 控制中心 ═══ -->
+    <!-- ═══ Tab 1: 控制中心（按使用频次分层：状态微条 → 核心速控 → 翻译服务配置 → 进阶偏好） ═══ -->
     <section id="paneSettings" class="pane active">
       <div class="scroll-body">
-        <div class="health-grid">
-          <div class="health-card">
-            <span class="health-k">运行功耗档位</span>
-            <span id="healthPoll" class="health-v ok">低功耗空闲</span>
-          </div>
-          <div class="health-card">
-            <span class="health-k">主窗口内嵌通道</span>
-            <span id="healthCdp" class="health-v">检测中</span>
-          </div>
-          <div class="health-card">
-            <span class="health-k">本地持久化缓存</span>
-            <span id="healthCache" class="health-v">0 条</span>
-          </div>
-          <div class="health-card">
-            <span class="health-k">最近命中译模</span>
-            <span id="healthModel" class="health-v">—</span>
-          </div>
+        <!-- L1: 轻量运行状态微条 -->
+        <div class="status-strip" aria-label="运行状态">
+          <span class="stat-pill" title="主窗口内嵌通道"><span class="stat-k">内嵌</span><span id="healthCdp" class="health-v">检测中</span></span>
+          <span class="stat-pill" title="运行功耗档位"><span class="stat-k">功耗</span><span id="healthPoll" class="health-v ok">低功耗空闲</span></span>
+          <span class="stat-pill" title="本地持久化译文缓存"><span class="stat-k">缓存</span><span id="healthCache" class="health-v">0 条</span></span>
+          <span class="stat-pill" title="最近命中翻译模型"><span class="stat-k">译模</span><span id="healthModel" class="health-v">—</span></span>
         </div>
 
-        <!-- 实时中文翻译与三维智能选模 -->
+        <!-- L2: 第一视觉中心 · 极简核心速控 -->
         <div class="setting-card">
           <div class="section-head">
-            <span class="section-title"><span class="section-spark" data-spark="1"></span>实时中文翻译 & 智能选模</span>
-            <span class="section-badge">零主模型消耗</span>
+            <span class="section-title"><span class="section-spark" data-spark="1"></span>核心设置</span>
+            <span class="section-badge">思考直显 · 连续工具归并</span>
           </div>
 
-          <div class="setting-row">
-            <div>
-              <div class="setting-title">自动翻译英文思考</div>
-              <div class="setting-desc">按段异步流式翻译并落盘缓存，重启后直接复用零请求</div>
-            </div>
-            <label class="switch"><input type="checkbox" id="optTranslate" /><span class="slider"></span></label>
-          </div>
-
-          <div class="setting-row">
-            <div>
-              <div class="setting-title">关闭译者思考链（极速模式）</div>
-              <div class="setting-desc">自动对本地网关与推理模型关闭内部思考，压低首字延迟</div>
-            </div>
-            <label class="switch"><input type="checkbox" id="optDisableThink" /><span class="slider"></span></label>
-          </div>
-
-          <div class="field-group">
-            <span class="field-label">思考正文展示方式</span>
-            <div class="seg-group full" id="segDisplayMode">
-              <button type="button" class="seg-btn" data-val="zh">直接中文</button>
-              <button type="button" class="seg-btn" data-val="bilingual">中英双语</button>
-              <button type="button" class="seg-btn" data-val="raw">仅原文</button>
-            </div>
-          </div>
-
-          <div class="field-group">
-            <span class="field-label">译文语感风格（去机翻味）</span>
-            <div class="seg-group full" id="segTranslateStyle">
-              <button type="button" class="seg-btn" data-val="natural">自然口语</button>
-              <button type="button" class="seg-btn" data-val="technical">精准技术</button>
-              <button type="button" class="seg-btn" data-val="concise">极简直白</button>
-            </div>
-          </div>
-
-          <div class="field-group">
-            <span class="field-label">服务商快捷预设</span>
-            <div class="preset-row">
-              <button type="button" class="pill-btn recommend" data-preset="siliconflow">硅基流动 · 免费</button>
-              <button type="button" class="pill-btn recommend" data-preset="deepseek">DeepSeek · 最自然</button>
-              <button type="button" class="pill-btn recommend" data-preset="zhipu">智谱 GLM · 免费</button>
-              <button type="button" class="pill-btn" data-preset="qwen">阿里云百炼</button>
-              <button type="button" class="pill-btn" data-preset="openrouter">OpenRouter</button>
-              <button type="button" class="pill-btn" data-preset="local">本地 Ollama</button>
-            </div>
-          </div>
-
-          <div class="field-group">
-            <label class="field-label" for="optBaseUrl">API Base URL（OpenAI 兼容地址）</label>
-            <input id="optBaseUrl" class="field-input" type="text" placeholder="https://api.siliconflow.cn/v1" />
-          </div>
-
-          <div class="field-group">
-            <div class="field-label-row">
-              <label class="field-label" for="optApiKey">API Key（仅存本机，填完自动识别模型）</label>
-              <div style="display:inline-flex;gap:5px;">
-                <button type="button" id="clearKeyBtn" class="pill-btn danger" style="padding:2px 8px;font-size:10.5px;display:none;">清空 Key</button>
-                <button type="button" id="detectModelsBtn" class="pill-btn recommend" style="padding:2px 9px;font-size:10.8px;">自动识别模型</button>
+          <div class="hero-toggles">
+            <label class="hero-tile" id="tileInline" for="optInline">
+              <div class="hero-tile-top">
+                <span class="hero-tile-title">主窗口内嵌</span>
+                <span class="switch"><input type="checkbox" id="optInline" /><span class="slider"></span></span>
               </div>
-            </div>
-            <div class="input-wrap">
-              <input id="optApiKey" class="field-input" type="password" placeholder="粘贴你的 sk-... 密钥（本地免鉴权可留空）" />
-              <button type="button" id="toggleKeyEye" class="eye-btn">显示</button>
-            </div>
+              <span class="hero-tile-desc">对话中直显思考流，关即休眠</span>
+            </label>
+            <label class="hero-tile" id="tileTranslate" for="optTranslate">
+              <div class="hero-tile-top">
+                <span class="hero-tile-title">实时中文翻译</span>
+                <span class="switch"><input type="checkbox" id="optTranslate" /><span class="slider"></span></span>
+              </div>
+              <span class="hero-tile-desc">分步精炼思路，零主模型消耗</span>
+            </label>
           </div>
 
-          <!-- 三维推荐度模型选择列表 -->
-          <div class="model-picker-box">
-            <div class="model-picker-bar">
-              <span class="model-picker-title">
-                可选翻译模型
-                <span id="modelListMeta" class="model-picker-meta">精选参考</span>
-              </span>
-              <div style="display:inline-flex;gap:5px;">
-                <button type="button" id="filterRecBtn" class="pill-btn active" style="padding:2px 8px;font-size:10.5px;">只看高分</button>
-                <button type="button" id="pickTop3Btn" class="pill-btn" style="padding:2px 8px;font-size:10.5px;">选推荐 Top 3</button>
+          <div class="field-group" style="margin-top:4px;">
+            <span class="field-label">回答结束后</span>
+            <div class="seg-group full" id="segDisplayLevel">
+              <button type="button" class="seg-btn" data-val="focus">自动收起</button>
+              <button type="button" class="seg-btn" data-val="expanded">保持展开</button>
+            </div>
+            <div id="displayLevelHint" class="mode-hint">思考直出时间线，连续工具自动收为一行胶囊，回答完自动折起整轮</div>
+          </div>
+
+          <div id="translateSubControls" class="translate-sub-controls">
+            <div class="field-group">
+              <span class="field-label">译文模式</span>
+              <div class="seg-group full" id="segTranslateStyle">
+                <button type="button" class="seg-btn" data-val="steps">分步脉络（去废话）</button>
+                <button type="button" class="seg-btn" data-val="natural">自然直译（逐句）</button>
               </div>
             </div>
 
-            <div class="dim-bar">
-              <div class="seg-group full" id="segRecDim">
-                <button type="button" class="seg-btn active" data-val="overall">综合推荐</button>
-                <button type="button" class="seg-btn" data-val="value">性价比优先</button>
-                <button type="button" class="seg-btn" data-val="natural">自然感优先</button>
+            <div class="field-group">
+              <span class="field-label">显示语言</span>
+              <div class="seg-group full" id="segDisplayMode">
+                <button type="button" class="seg-btn" data-val="zh">直接中文</button>
+                <button type="button" class="seg-btn" data-val="bilingual">中英双语</button>
+                <button type="button" class="seg-btn" data-val="raw">仅原文</button>
               </div>
             </div>
-
-            <div class="model-filter-row">
-              <input id="modelSearchInput" class="field-input" type="search" placeholder="搜索模型名或特点（点击勾选 / 再点取消）…" />
-            </div>
-            <div id="modelList" class="model-list"></div>
           </div>
+          <div id="translateOffHint" class="translate-off-hint">实时中文翻译已关闭，思考流将直接显示原始思考内容。</div>
 
           <div class="field-group">
-            <label class="field-label" for="optModels">当前启用队列（按顺序主用 / 限流自动顺延，可手动微调）</label>
-            <input id="optModels" class="field-input" type="text" placeholder="Qwen/Qwen2.5-7B-Instruct, THUDM/glm-4-9b-chat" />
-          </div>
-
-          <div class="preset-row" style="margin-top:10px;">
-            <button type="button" id="saveTransBtn" class="pill-btn primary">保存配置</button>
-            <button type="button" id="testTransBtn" class="pill-btn">保存并测速</button>
-            <button type="button" id="retryFailedBtn" class="pill-btn">重试失败</button>
-            <button type="button" id="clearCacheBtn" class="pill-btn danger">清空缓存</button>
-          </div>
-          <div id="testStatus" class="test-status"></div>
-        </div>
-
-        <!-- 展示与交互设置 -->
-        <div class="setting-card">
-          <div class="section-head">
-            <span class="section-title"><span class="section-spark" data-spark="1"></span>展示与交互设置</span>
-            <span class="section-badge">实时同步主窗口</span>
-          </div>
-
-          <div class="setting-row">
-            <div>
-              <div class="setting-title">在主窗口会话中嵌入展示</div>
-              <div class="setting-desc">直接挂在每轮回复上方（关闭后彻底休眠 CDP 注入）</div>
-            </div>
-            <label class="switch"><input type="checkbox" id="optInline" /><span class="slider"></span></label>
-          </div>
-
-          <div class="setting-row">
-            <div>
-              <div class="setting-title">展开思考时隐藏标题重复首行</div>
-              <div class="setting-desc">折叠时显示首行摘要，展开后只保留正文不再重复占位</div>
-            </div>
-            <label class="switch"><input type="checkbox" id="optHideSum" /><span class="slider"></span></label>
-          </div>
-
-          <div class="setting-row">
-            <div>
-              <div class="setting-title">包含命令与工具调用步骤</div>
-              <div class="setting-desc">关闭后时间线只显示纯思考过程，界面更清爽</div>
-            </div>
-            <label class="switch"><input type="checkbox" id="optTools" /><span class="slider"></span></label>
-          </div>
-
-          <div class="setting-row">
-            <div>
-              <div class="setting-title">进行中自动展开当前轮次</div>
-              <div class="setting-desc">新一轮回答开始时自动展开步骤时间线</div>
-            </div>
-            <label class="switch"><input type="checkbox" id="optAutoExpandTurn" /><span class="slider"></span></label>
-          </div>
-
-          <div class="setting-row">
-            <div>
-              <div class="setting-title">实时思考卡片自动展开</div>
-              <div class="setting-desc">模型思考时自动打开卡片实时跟读</div>
-            </div>
-            <label class="switch"><input type="checkbox" id="optAutoExpandThink" /><span class="slider"></span></label>
-          </div>
-
-          <div class="setting-row">
-            <div>
-              <div class="setting-title">已完成历史轮次默认收起</div>
-              <div class="setting-desc">只展开最新一轮或正在执行的轮次，节省纵向空间</div>
-            </div>
-            <label class="switch"><input type="checkbox" id="optAutoCollapse" /><span class="slider"></span></label>
-          </div>
-
-          <div class="setting-row">
-            <div>
-              <div class="setting-title">逐字平滑流式吐字</div>
-              <div class="setting-desc">30fps 精准局部跟字动画，关闭则整段直出</div>
-            </div>
-            <label class="switch"><input type="checkbox" id="optSmooth" /><span class="slider"></span></label>
-          </div>
-
-          <div class="setting-row">
-            <div>
-              <div class="setting-title">紧凑卡片密度</div>
-              <div class="setting-desc">收紧行间距与留白，一屏展示更多步骤</div>
-            </div>
-            <label class="switch"><input type="checkbox" id="optCompact" /><span class="slider"></span></label>
-          </div>
-
-          <div class="setting-row">
-            <div>
-              <div class="setting-title">思考正文字号</div>
-              <div class="setting-desc">同时作用于主窗口内嵌卡片与侧边栏</div>
-            </div>
-            <div class="seg-group" id="segFontSize">
+            <span class="field-label">正文字号</span>
+            <div class="seg-group full" id="segFontSize">
               <button type="button" class="seg-btn" data-val="sm">小</button>
               <button type="button" class="seg-btn" data-val="md">标准</button>
               <button type="button" class="seg-btn" data-val="lg">大</button>
             </div>
           </div>
+        </div>
 
-          <div class="setting-row">
-            <div>
-              <div class="setting-title">超长思考展示高度</div>
-              <div class="setting-desc">限高时内部滚动跟读最新思路，随时点「展开全文」查看完整长文</div>
-            </div>
-            <div class="seg-group" id="segThinkHeight">
-              <button type="button" class="seg-btn" data-val="sm">紧凑</button>
-              <button type="button" class="seg-btn" data-val="md">适中</button>
-              <button type="button" class="seg-btn" data-val="full">不限高</button>
-            </div>
-          </div>
+        <!-- L3: 第二权重 · 翻译服务与智能选模（已配好默认优雅收起，未填 Key 自动展开） -->
+        <div class="fold-card">
+          <details id="apiConfigDetails">
+            <summary class="fold-summary">
+              <div class="fold-summary-main">
+                <span class="fold-title"><span class="section-spark" data-spark="1"></span>翻译服务与智能选模</span>
+                <span id="apiProviderSummary" class="fold-sub">正在读取配置…</span>
+              </div>
+              <span class="fold-right">
+                <span class="section-badge">零主模型消耗</span>
+                <span class="fold-chev">›</span>
+              </span>
+            </summary>
 
-          <div class="setting-row">
-            <div>
-              <div class="setting-title">侧边栏默认打开页</div>
-              <div class="setting-desc">已开主窗口内嵌时建议默认「控制中心」</div>
+            <div class="fold-body">
+              <div class="field-group" style="margin-top:6px;">
+                <span class="field-label">服务商快捷预设</span>
+                <div class="preset-row">
+                  <button type="button" class="pill-btn recommend" data-preset="siliconflow">硅基流动 · 免费</button>
+                  <button type="button" class="pill-btn recommend" data-preset="deepseek">DeepSeek · 最自然</button>
+                  <button type="button" class="pill-btn recommend" data-preset="zhipu">智谱 GLM · 免费</button>
+                  <button type="button" class="pill-btn" data-preset="qwen">阿里云百炼</button>
+                  <button type="button" class="pill-btn" data-preset="openrouter">OpenRouter</button>
+                  <button type="button" class="pill-btn" data-preset="local">本地 Ollama</button>
+                </div>
+              </div>
+
+              <div class="field-group">
+                <label class="field-label" for="optBaseUrl">API Base URL（OpenAI 兼容地址）</label>
+                <input id="optBaseUrl" class="field-input" type="text" placeholder="https://api.siliconflow.cn/v1" />
+              </div>
+
+              <div class="field-group">
+                <div class="field-label-row">
+                  <label class="field-label" for="optApiKey">API Key（仅存本机，填完自动识别模型）</label>
+                  <div style="display:inline-flex;gap:5px;">
+                    <button type="button" id="clearKeyBtn" class="pill-btn danger" style="padding:2px 8px;font-size:10.5px;display:none;">清空 Key</button>
+                    <button type="button" id="detectModelsBtn" class="pill-btn recommend" style="padding:2px 9px;font-size:10.8px;">自动识别模型</button>
+                  </div>
+                </div>
+                <div class="input-wrap">
+                  <input id="optApiKey" class="field-input" type="password" placeholder="粘贴你的 sk-... 密钥（本地免鉴权可留空）" />
+                  <button type="button" id="toggleKeyEye" class="eye-btn">显示</button>
+                </div>
+              </div>
+
+              <!-- 三维推荐度模型选择列表 -->
+              <div class="model-picker-box">
+                <div class="model-picker-bar">
+                  <span class="model-picker-title">
+                    可选翻译模型
+                    <span id="modelListMeta" class="model-picker-meta">精选参考</span>
+                  </span>
+                  <div style="display:inline-flex;gap:5px;">
+                    <button type="button" id="filterRecBtn" class="pill-btn active" style="padding:2px 8px;font-size:10.5px;">只看高分</button>
+                    <button type="button" id="pickTop3Btn" class="pill-btn" style="padding:2px 8px;font-size:10.5px;">选推荐 Top 3</button>
+                  </div>
+                </div>
+
+                <div class="dim-bar">
+                  <div class="seg-group full" id="segRecDim">
+                    <button type="button" class="seg-btn active" data-val="overall">综合推荐</button>
+                    <button type="button" class="seg-btn" data-val="value">性价比优先</button>
+                    <button type="button" class="seg-btn" data-val="natural">自然感优先</button>
+                  </div>
+                </div>
+
+                <div class="model-filter-row">
+                  <input id="modelSearchInput" class="field-input" type="search" placeholder="搜索模型名或特点（点击勾选 / 再点取消）…" />
+                </div>
+                <div id="modelList" class="model-list"></div>
+              </div>
+
+              <div class="field-group">
+                <label class="field-label" for="optModels">当前启用队列（按顺序主用 / 限流自动顺延）</label>
+                <input id="optModels" class="field-input" type="text" placeholder="Qwen/Qwen2.5-7B-Instruct, THUDM/glm-4-9b-chat" />
+              </div>
+
+              <div class="setting-row" style="margin-top:6px;">
+                <div>
+                  <div class="setting-title">关闭译者思考链（极速模式）</div>
+                  <div class="setting-desc">对本地网关与推理模型关闭内部思考，压低首字延迟</div>
+                </div>
+                <label class="switch"><input type="checkbox" id="optDisableThink" /><span class="slider"></span></label>
+              </div>
+
+              <div class="preset-row" style="margin-top:8px;">
+                <button type="button" id="saveTransBtn" class="pill-btn primary">保存配置</button>
+                <button type="button" id="testTransBtn" class="pill-btn">保存并测速</button>
+                <button type="button" id="retryFailedBtn" class="pill-btn">重试失败</button>
+                <button type="button" id="clearCacheBtn" class="pill-btn danger">清空缓存</button>
+              </div>
             </div>
-            <div class="seg-group" id="segSidebarTab">
-              <button type="button" class="seg-btn" data-val="settings">控制中心</button>
-              <button type="button" class="seg-btn" data-val="feed">思考记录</button>
+          </details>
+
+          <div class="fold-quickbar">
+            <div style="display:inline-flex;gap:5px;flex-wrap:wrap;">
+              <button type="button" id="quickTestBtn" class="pill-btn recommend" style="padding:3px 9px;font-size:10.8px;">快速测速</button>
+              <button type="button" id="quickRetryBtn" class="pill-btn" style="padding:3px 9px;font-size:10.8px;">重试失败</button>
             </div>
+            <span style="font-size:10.6px;color:var(--fg-dim);">点上方展开换 Key / 选模型</span>
           </div>
+          <div id="testStatus" class="test-status" style="padding:0 13px 10px;margin-top:0;"></div>
+        </div>
+
+        <!-- L4: 低频收纳 · 更多偏好 -->
+        <div class="fold-card">
+          <details>
+            <summary class="fold-summary">
+              <div class="fold-summary-main">
+                <span class="fold-title">更多偏好</span>
+                <span class="fold-sub">自动展开当前思考、工具动作胶囊与吐字动画</span>
+              </div>
+              <span class="fold-right">
+                <span id="advCountBadge" class="section-badge">已启 3/3</span>
+                <span class="fold-chev">›</span>
+              </span>
+            </summary>
+            <div class="fold-body">
+              <div class="setting-row">
+                <div>
+                  <div class="setting-title">进行中自动展开当前思考</div>
+                  <div class="setting-desc">默认开启；关闭后单条思考默认收起、按需点开</div>
+                </div>
+                <label class="switch"><input type="checkbox" id="optAutoExpandThink" /><span class="slider"></span></label>
+              </div>
+              <div class="setting-row">
+                <div>
+                  <div class="setting-title">显示工具动作胶囊</div>
+                  <div class="setting-desc">关闭后只保留纯思考脉络，不显示工具步骤</div>
+                </div>
+                <label class="switch"><input type="checkbox" id="optTools" /><span class="slider"></span></label>
+              </div>
+              <div class="setting-row">
+                <div>
+                  <div class="setting-title">逐字平滑流式吐字</div>
+                  <div class="setting-desc">30fps 局部跟字动画，关闭则整段直出</div>
+                </div>
+                <label class="switch"><input type="checkbox" id="optSmooth" /><span class="slider"></span></label>
+              </div>
+            </div>
+          </details>
         </div>
       </div>
     </section>
@@ -1321,13 +1829,14 @@
           <button id="toggleAllBtn" class="mini-btn" title="展开/收起全部">展开</button>
           <button id="searchToggleBtn" class="mini-btn" title="搜索过滤">搜索</button>
         </div>
-        <div class="feed-toolbar-row" style="justify-content:space-between;">
+        <div class="feed-toolbar-row wrap-row">
           <div class="seg-group" id="segFeedKind">
-            <button type="button" class="seg-btn active" data-val="think">仅看思考</button>
-            <button type="button" class="seg-btn" data-val="all">全部步骤</button>
-            <button type="button" class="seg-btn" data-val="tools">仅看工具</button>
+            <button type="button" class="seg-btn" data-val="think">仅看思考</button>
+            <button type="button" class="seg-btn active" data-val="all">思考 + 工具</button>
           </div>
-          <span id="feedStatsHint" style="font-size:11px;color:var(--fg-dim);"></span>
+          <div class="feed-toolbar-right">
+            <span id="feedStatsHint" style="font-size:11px;color:var(--fg-dim);white-space:nowrap;"></span>
+          </div>
         </div>
         <div id="searchWrap" class="feed-search-wrap">
           <input id="searchInput" class="field-input" type="search" placeholder="搜索思考内容、命令或工具名…" />
@@ -1341,7 +1850,10 @@
 
   <script>
     (function () {
-      const { escapeHtml, renderMarkdown, thinkSummary, shortModelName, ICONS } = window.__agyThinkingShared;
+      const {
+        escapeHtml, renderMarkdown, renderThinkingSteps, countThinkingSteps, thinkSummary, shortModelName, formatDurationParts,
+        getPresentationPolicy, classifyToolActivity, activityIconKey, buildProcessGroups, formatProcessGroupTitle, ICONS,
+      } = window.__agyThinkingShared;
       const params = new URLSearchParams(window.location.search);
       const token = params.get('token') || '';
       const hostConvId = params.get('conversationId') || '';
@@ -1361,15 +1873,14 @@
       const feed = document.getElementById('feed');
 
       const optInline = document.getElementById('optInline');
-      const optHideSum = document.getElementById('optHideSum');
       const optTools = document.getElementById('optTools');
-      const optAutoExpandTurn = document.getElementById('optAutoExpandTurn');
       const optAutoExpandThink = document.getElementById('optAutoExpandThink');
-      const optAutoCollapse = document.getElementById('optAutoCollapse');
       const optSmooth = document.getElementById('optSmooth');
-      const optCompact = document.getElementById('optCompact');
       const optTranslate = document.getElementById('optTranslate');
+      const translateSubControls = document.getElementById('translateSubControls');
+      const translateOffHint = document.getElementById('translateOffHint');
       const optDisableThink = document.getElementById('optDisableThink');
+      const displayLevelHint = document.getElementById('displayLevelHint');
       const optBaseUrl = document.getElementById('optBaseUrl');
       const optApiKey = document.getElementById('optApiKey');
       const toggleKeyEye = document.getElementById('toggleKeyEye');
@@ -1469,7 +1980,7 @@
 
       let activeTab = 'settings';
       let tabInitialized = false;
-      let feedKindFilter = 'think';
+      let feedKindFilter = 'all';
       let selectedConvId = 'auto';
       let searchQuery = '';
       let currentState = null;
@@ -1477,6 +1988,8 @@
       let reconnectTimer = null;
       let settingsHydrated = false;
       let lastRenderedConvId = '';
+      let lastTranslateStyle = '';
+      let lastCacheEpoch = -1;
       let streamRaf = 0;
       let lastStreamTickAt = 0;
 
@@ -1492,14 +2005,19 @@
       const userPinnedMap = new Map();
       const turnSettledSet = new Set();
       const rawOverrideMap = new Map();
+      const fullDetailMap = new Map();
       const expandedFullMap = new Map();
       const streamShownMap = new Map();
 
       function syncHostTheme() {
-        const bg = getComputedStyle(document.body).backgroundColor || '';
-        const m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
-        if (!m) return;
-        const lum = (0.2126 * Number(m[1]) + 0.7152 * Number(m[2]) + 0.0722 * Number(m[3])) / 255;
+        const parseBg = (bg) => {
+          const m = String(bg || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/i);
+          if (!m || (m[4] !== undefined && Number(m[4]) === 0)) return null;
+          return [Number(m[1]), Number(m[2]), Number(m[3])];
+        };
+        const rgb = parseBg(getComputedStyle(document.body).backgroundColor) || parseBg(getComputedStyle(document.documentElement).backgroundColor);
+        if (!rgb) return;
+        const lum = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
         document.documentElement.dataset.theme = lum < 0.5 ? 'dark' : 'light';
       }
       syncHostTheme();
@@ -1575,7 +2093,7 @@
         if (u.includes('dashscope')) return 'qwen';
         if (u.includes('openrouter')) return 'openrouter';
         if (/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/.test(u)) return 'local';
-        return 'siliconflow';
+        return '';
       }
 
       function scoreOf(m, dim = recDim) {
@@ -1593,9 +2111,10 @@
       }
 
       function getSortedCatalog() {
+        const presetKey = inferPresetByUrl(optBaseUrl.value);
         const base = Array.isArray(discoveredModels)
           ? discoveredModels
-          : (PRESETS[inferPresetByUrl(optBaseUrl.value)]?.curated || PRESETS.siliconflow.curated);
+          : ((presetKey && PRESETS[presetKey]?.curated) || []);
         return [...base].sort((a, b) => scoreOf(b, recDim) - scoreOf(a, recDim) || scoreOf(b, 'overall') - scoreOf(a, 'overall') || a.id.localeCompare(b.id));
       }
 
@@ -1635,12 +2154,17 @@
         if (Array.isArray(discoveredModels)) {
           const highCount = discoveredModels.filter((m) => scoreOf(m, recDim) >= 84).length;
           modelListMeta.textContent = `已识别 ${discoveredModels.length} 个 · ${highCount} 个高分`;
-        } else {
+        } else if (inferPresetByUrl(optBaseUrl.value)) {
           modelListMeta.textContent = '精选参考 · 填 Key 自动识别全量';
+        } else {
+          modelListMeta.textContent = '自定义网关 · 填 Key 后自动识别模型';
         }
 
         if (filtered.length === 0) {
-          modelListEl.innerHTML = `<div class="model-empty">${onlyHighRec ? '当前维度下暂无 ≥84 分模型，点上方取消「只看高分」查看全部' : '没有匹配的模型'}</div>`;
+          const emptyMsg = !Array.isArray(discoveredModels) && !inferPresetByUrl(optBaseUrl.value)
+            ? '自定义网关请填完 API Key 点「自动识别模型」，或直接在下方输入模型名'
+            : (onlyHighRec ? '当前维度下暂无 ≥84 分模型，点上方取消「只看高分」查看全部' : '没有匹配的模型');
+          modelListEl.innerHTML = `<div class="model-empty">${emptyMsg}</div>`;
           return;
         }
 
@@ -1730,48 +2254,115 @@
         }
       }
 
+      function syncApiKeyHint(settings = currentState?.settings) {
+        const curUrl = optBaseUrl.value.trim();
+        const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(curUrl);
+        const savedUrl = settings?.translateBaseUrl || '';
+        const sameProvider = !savedUrl || normalizeUrl(curUrl) === normalizeUrl(savedUrl);
+        const hasSavedKey = Boolean(settings?.hasApiKey);
+        clearKeyBtn.style.display = hasSavedKey && sameProvider ? '' : 'none';
+        if (hasSavedKey && sameProvider) {
+          optApiKey.placeholder = `已配置 (${settings.translateApiKey})，留空则保持不变`;
+        } else if (isLocal) {
+          optApiKey.placeholder = '本地免鉴权网关可留空';
+        } else if (hasSavedKey && !sameProvider) {
+          optApiKey.placeholder = '已切换服务商，请粘贴该服务商的 API Key（保存将清空旧 Key）';
+        } else {
+          optApiKey.placeholder = '粘贴你的 sk-... 密钥（本地免鉴权可留空）';
+        }
+      }
+
+      const DISPLAY_LEVEL_HINTS = {
+        focus: '思考直出时间线，连续工具自动收为一行胶囊，回答完自动折起整轮',
+        expanded: '思考直出时间线，连续工具自动收为一行胶囊，回答完保持展开方便复盘',
+      };
+
       function hydrateSettingsInputs(settings) {
+        const nextStyle = settings.translateStyle === 'natural' ? 'natural' : 'steps';
+        if (lastTranslateStyle && nextStyle !== lastTranslateStyle) {
+          streamShownMap.clear();
+        }
+        lastTranslateStyle = nextStyle;
+
+        const policy = getPresentationPolicy(settings);
         optInline.checked = settings.inlineEnabled !== false;
-        optHideSum.checked = settings.hideSummaryWhenOpen !== false;
         optTools.checked = settings.includeTools !== false;
-        optAutoExpandTurn.checked = settings.autoExpandRunningTurn !== false;
         optAutoExpandThink.checked = settings.autoExpandRunningThink !== false;
-        optAutoCollapse.checked = Boolean(settings.autoCollapseDoneTurn);
         optSmooth.checked = settings.smoothStream !== false;
-        optCompact.checked = Boolean(settings.compactMode);
         optTranslate.checked = settings.translateEnabled !== false;
         optDisableThink.checked = settings.disableTranslatorThinking !== false;
 
+        document.getElementById('tileInline')?.classList.toggle('is-on', optInline.checked);
+        document.getElementById('tileTranslate')?.classList.toggle('is-on', optTranslate.checked);
+        translateSubControls?.classList.toggle('is-off', !optTranslate.checked);
+        translateOffHint?.classList.toggle('show', !optTranslate.checked);
+
+        setSegmentedActive('segDisplayLevel', policy.mode);
+        if (displayLevelHint) displayLevelHint.textContent = DISPLAY_LEVEL_HINTS[policy.mode] || DISPLAY_LEVEL_HINTS.focus;
+
+        const advBadge = document.getElementById('advCountBadge');
+        if (advBadge) {
+          const onCount = [
+            optAutoExpandThink.checked,
+            optTools.checked,
+            optSmooth.checked,
+          ].filter(Boolean).length;
+          advBadge.textContent = `已启 ${onCount}/3`;
+        }
+
+        const apiSummaryEl = document.getElementById('apiProviderSummary');
+        const apiDetailsEl = document.getElementById('apiConfigDetails');
+        const isLocalUrl = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(settings.translateBaseUrl || '');
+        const providerNames = {
+          siliconflow: '硅基流动',
+          deepseek: 'DeepSeek',
+          zhipu: '智谱 GLM',
+          qwen: '阿里云百炼',
+          openrouter: 'OpenRouter',
+          local: '本地网关',
+        };
+        const pName = providerNames[inferPresetByUrl(settings.translateBaseUrl || '')] || '自定义网关';
+        const firstModel = String(settings.translateModels || '').split(/[,，\n]+/).map((s) => s.trim()).filter(Boolean)[0] || '';
+        if (apiSummaryEl) {
+          if (settings.hasApiKey || isLocalUrl) {
+            apiSummaryEl.className = 'fold-sub ok';
+            apiSummaryEl.textContent = `${pName} · ${firstModel ? shortModelName(firstModel) : '已就绪'}${isLocalUrl ? '（本地免 Key）' : ' · 已配 Key'}`;
+          } else {
+            apiSummaryEl.className = 'fold-sub warn';
+            apiSummaryEl.textContent = `${pName} · 待填写 API Key`;
+          }
+        }
+        if (apiDetailsEl && !settingsHydrated) {
+          apiDetailsEl.open = !(settings.hasApiKey || isLocalUrl);
+        }
+
         document.body.dataset.font = settings.fontSize || 'md';
-        document.body.dataset.compact = String(Boolean(settings.compactMode));
-        document.body.dataset.thinkHeight = settings.thinkHeightMode || 'md';
+        document.body.dataset.compact = 'false';
+        document.body.dataset.thinkHeight = 'full';
 
         setSegmentedActive('segDisplayMode', settings.displayMode || 'zh');
-        setSegmentedActive('segTranslateStyle', settings.translateStyle || 'natural');
+        setSegmentedActive('segTranslateStyle', nextStyle);
         setSegmentedActive('segFontSize', settings.fontSize || 'md');
-        setSegmentedActive('segThinkHeight', settings.thinkHeightMode || 'md');
-        setSegmentedActive('segSidebarTab', settings.sidebarDefaultTab || 'settings');
 
         if (!tabInitialized) {
           tabInitialized = true;
-          const preferred = settings.sidebarDefaultTab || (settings.inlineEnabled !== false ? 'settings' : 'feed');
+          const preferred = settings.inlineEnabled !== false ? 'settings' : 'feed';
           switchTab(preferred);
         }
 
-        clearKeyBtn.style.display = settings.hasApiKey ? '' : 'none';
         if (!settingsHydrated) {
           settingsHydrated = true;
           optBaseUrl.value = settings.translateBaseUrl || '';
           optModels.value = settings.translateModels || '';
           optApiKey.value = '';
-          optApiKey.placeholder = settings.hasApiKey
-            ? `已配置 (${settings.translateApiKey})，留空则保持不变`
-            : '粘贴你的 sk-... 密钥（本地免鉴权可留空）';
+          syncApiKeyHint(settings);
           renderModelList();
           const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(settings.translateBaseUrl || '');
           if (settings.hasApiKey || isLocal) {
             void runDiscoverModels(true);
           }
+        } else {
+          syncApiKeyHint(settings);
         }
       }
 
@@ -1784,20 +2375,22 @@
           sleeping: ['已休眠 (0 轮询)', 'ok'],
         };
         const [pollText, pollCls] = modeMap[rt.pollMode] || ['低功耗空闲', 'ok'];
-        healthPoll.textContent = pollText;
+        healthPoll.textContent = pollText.replace(/\s*\(.+\)/, '');
+        healthPoll.title = pollText;
         healthPoll.className = `health-v ${pollCls}`;
 
         const cdpMap = {
-          ok: ['已连接主对话窗口', 'ok', '内嵌已连'],
-          missing: ['未检测到调试端口', 'warn', '仅侧边栏'],
-          unreachable: ['端口暂不可达', 'warn', '仅侧边栏'],
-          'no-ws': ['需 Node.js ≥ 22', 'warn', '需 Node 22+'],
-          superseded: ['已被新实例接管', 'warn', '仅侧边栏'],
+          ok: ['已连主窗', 'ok', '内嵌已连'],
+          'no-page': ['等待主窗', 'warn', '仅侧边栏'],
+          missing: ['无调试端口', 'warn', '仅侧边栏'],
+          unreachable: ['暂不可达', 'warn', '仅侧边栏'],
+          'no-ws': ['需 Node 22+', 'warn', '需 Node 22+'],
+          superseded: ['新实例接管', 'warn', '仅侧边栏'],
           unknown: ['检测中', '', '检测中'],
         };
         const inlineOff = state.settings?.inlineEnabled === false;
         const [cdpText, cdpCls, badgeText] = inlineOff
-          ? ['已关闭（省电模式）', '', '内嵌已关']
+          ? ['已关闭', '', '内嵌已关']
           : (cdpMap[state.cdpState] || [state.cdpState || '未知', '', '检测中']);
         healthCdp.textContent = cdpText;
         healthCdp.className = `health-v ${cdpCls}`;
@@ -1810,39 +2403,152 @@
         healthModel.title = rt.activeModel || '';
       }
 
-      function buildChipsHtml(item, running) {
+      function buildChipsHtml(item, running, wantFullDetail) {
         const chips = [];
         if (item.thinkingTokens > 0) chips.push(`<span class="chip">${item.thinkingTokens} tok</span>`);
         else if (running) chips.push('<span class="chip live">流式思考中</span>');
-        if (item.translateStatus === 'translating') chips.push('<span class="chip live">实时译中</span>');
+        if (wantFullDetail && item.fullTranslateStatus === 'translating') chips.push('<span class="chip live">完整译中</span>');
+        else if (wantFullDetail && item.fullTranslateStatus === 'error') chips.push(`<span class="chip err" title="${escapeHtml(item.fullTranslateError || '')}">完整译失败</span>`);
+        else if (wantFullDetail && item.fullTranslatedThinking) chips.push('<span class="chip">完整思考</span>');
+        if (item.translateStatus === 'translating') chips.push(`<span class="chip live">${item.translatePhase === 'distilling' ? '整理脉络中' : '实时译中'}</span>`);
         else if (item.translateStatus === 'no-key') chips.push('<span class="chip">切「控制中心」填 Key 译中文</span>');
         else if (item.translateStatus === 'error') chips.push(`<span class="chip err" title="${escapeHtml(item.translateError || '')}">译文失败</span>`);
         else if (item.translateModel) chips.push(`<span class="chip">${escapeHtml(shortModelName(item.translateModel))}</span>`);
         return chips.join('');
       }
 
-      function formatTurnHeader(turn, itemCount) {
-        const dur = turn.isRunning && turn.startedAtMs
-          ? Math.max(0, (Date.now() - turn.startedAtMs) / 1000).toFixed(1)
-          : (typeof turn.durationSec === 'number' ? turn.durationSec.toFixed(1) : null);
-        const label = turn.isRunning
-          ? (dur ? `实时思考中 · ${dur}s` : '实时思考中…')
-          : (dur ? `思考完成 · ${dur}s` : '思考完成');
-        return { label, counts: `· ${itemCount} 项` };
+      const groupFollowMap = new Map();
+      const liveTitleCache = new Map();
+      const LIVE_TITLE_MIN_MS = 150;
+
+      function resetTurnInnerDisclosures(turnKey) {
+        const prefix = `${turnKey}:`;
+        for (const k of Array.from(openMap.keys())) {
+          if (k.startsWith(prefix)) openMap.delete(k);
+        }
+        for (const k of Array.from(userPinnedMap.keys())) {
+          if (k.startsWith(prefix)) userPinnedMap.delete(k);
+        }
+        for (const k of Array.from(groupFollowMap.keys())) {
+          if (k.startsWith(prefix)) groupFollowMap.delete(k);
+        }
+      }
+
+      function clearLiveTitleTimers() {
+        for (const rec of liveTitleCache.values()) {
+          if (rec?.timer) clearTimeout(rec.timer);
+        }
+        liveTitleCache.clear();
+      }
+
+      function resolveStableGroupTitle(groupOpenKey, desired, isLive, onCommit) {
+        if (!isLive) {
+          const prev = liveTitleCache.get(groupOpenKey);
+          if (prev?.timer) clearTimeout(prev.timer);
+          liveTitleCache.delete(groupOpenKey);
+          return desired;
+        }
+        const now = Date.now();
+        const rec = liveTitleCache.get(groupOpenKey);
+        if (!rec) {
+          const fresh = { ...desired, committedAt: now, pending: null, timer: null };
+          liveTitleCache.set(groupOpenKey, fresh);
+          return desired;
+        }
+        if (rec.title === desired.title && rec.iconKey === desired.iconKey) return rec;
+        const remaining = LIVE_TITLE_MIN_MS - (now - rec.committedAt);
+        if (remaining <= 0) {
+          if (rec.timer) clearTimeout(rec.timer);
+          rec.title = desired.title;
+          rec.iconKey = desired.iconKey;
+          rec.activity = desired.activity;
+          rec.committedAt = now;
+          rec.pending = null;
+          rec.timer = null;
+          return rec;
+        }
+        rec.pending = desired;
+        if (!rec.timer) {
+          rec.timer = setTimeout(() => {
+            rec.timer = null;
+            if (rec.pending) {
+              rec.title = rec.pending.title;
+              rec.iconKey = rec.pending.iconKey;
+              rec.activity = rec.pending.activity;
+              rec.committedAt = Date.now();
+              rec.pending = null;
+              onCommit?.();
+            }
+          }, remaining);
+        }
+        return rec;
+      }
+
+      function updateGroupScrollFades(bodyEl) {
+        if (!bodyEl) return;
+        // 展开中的思考卡片头会 sticky 吸顶，避免顶部 24px 渐隐遮罩淡化吸顶标题
+        const hasOpenThink = Boolean(bodyEl.querySelector('.step-card[data-kind="think"][data-open="true"]'));
+        const canUp = !hasOpenThink && bodyEl.scrollTop > 2;
+        const canDown = bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight > 2;
+        bodyEl.classList.toggle('fade-top', canUp);
+        bodyEl.classList.toggle('fade-bottom', canDown);
+      }
+
+      function renderTurnLabelHtml(turn) {
+        const durNum = turn.isRunning && turn.startedAtMs
+          ? Math.max(1, (Date.now() - turn.startedAtMs) / 1000)
+          : (typeof turn.durationSec === 'number' ? turn.durationSec : null);
+        const parts = typeof durNum === 'number' ? formatDurationParts(durNum, turn.isRunning) : [];
+        const durHtml = parts.map((p) =>
+          p.numeric ? `<span class="turn-num">${escapeHtml(p.text)}</span>` : escapeHtml(p.text)
+        ).join('');
+        if (turn.isRunning) {
+          return durHtml ? `正在深度思考，已用时 ${durHtml} ···` : '正在深度思考 ···';
+        }
+        if (turn.hasError) {
+          return durHtml ? `处理异常，用时 ${durHtml}` : '处理异常';
+        }
+        return durHtml ? `已完成，用时 ${durHtml}` : '已完成';
+      }
+
+      function computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled) {
+        if (effectiveMode !== 'raw' && summaryEnabled && item.narrativeSummary) {
+          return item.narrativeSummary.replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
+        }
+        return thinkSummary(displayText || item.translatedThinking || item.thinking || '', isStreamingThink);
+      }
+
+      function updateThinkLiveFade(cardEl, mdEl) {
+        if (!cardEl || !mdEl) return;
+        const constrained = cardEl.dataset.full !== 'true';
+        const showTopFade = constrained && mdEl.scrollTop > 4;
+        const showBottomFade = constrained && mdEl.scrollHeight - mdEl.scrollTop - mdEl.clientHeight > 6;
+        mdEl.classList.toggle('live-fade-top', showTopFade);
+        mdEl.classList.toggle('live-fade-bottom', showBottomFade);
+      }
+
+      function bindThinkMdScroll(cardEl, mdEl) {
+        if (!mdEl || mdEl._liveScrollBound) return;
+        mdEl._liveScrollBound = true;
+        mdEl.addEventListener('scroll', () => updateThinkLiveFade(cardEl, mdEl), { passive: true });
       }
 
       function syncThinkOverflow(cardEl, mdEl) {
         if (!cardEl || !mdEl) return;
+        bindThinkMdScroll(cardEl, mdEl);
         const isFull = cardEl.dataset.full === 'true';
-        const hasOverflow = !isFull && mdEl.scrollHeight > mdEl.clientHeight + 8;
+        const hasOverflow = !isFull && mdEl.clientHeight >= 40 && mdEl.scrollHeight > mdEl.clientHeight + 8;
         cardEl.dataset.overflow = String(hasOverflow);
+        updateThinkLiveFade(cardEl, mdEl);
         const btn = cardEl.querySelector('.expand-full-btn');
         if (btn) btn.textContent = isFull ? '收起高度' : '展开全文';
       }
 
-      function updateThinkDom(cardEl, displayText, item, effectiveMode, isStreamingThink) {
+      function updateThinkDom(cardEl, displayText, item, effectiveMode, isStreamingThink, summaryEnabled, policy, useStepRender, wantFullDetail) {
         const sumEl = cardEl.querySelector('.step-sum');
-        const nextSum = thinkSummary(displayText || item.translatedThinking || item.thinking || '', isStreamingThink);
+        const nextSum = computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled);
+        const showPreview = Boolean(nextSum) && (isStreamingThink || policy.settledReasoningPreview);
+        cardEl.dataset.preview = String(showPreview);
         if (sumEl && sumEl.textContent !== nextSum) sumEl.textContent = nextSum;
 
         if (cardEl.dataset.open !== 'true') return;
@@ -1850,12 +2556,13 @@
         if (!mdEl) return;
 
         const raw = item.thinking || '';
-        const zh = item.translatedThinking || '';
+        const zh = wantFullDetail ? (item.fullTranslatedThinking || item.translatedThinking || '') : (item.translatedThinking || '');
         const cursor = isStreamingThink ? '<span class="cursor"></span>' : '';
         const extra = effectiveMode === 'bilingual' && zh && zh !== raw
           ? `<div class="bilingual-raw">${renderMarkdown(raw)}</div>`
           : '';
-        const mdHtml = `${renderMarkdown(displayText) || '<p>正在酝酿思路…</p>'}${cursor}${extra}`;
+        const rendered = renderThinkingSteps(displayText, useStepRender !== false && effectiveMode !== 'raw');
+        const mdHtml = `${rendered || '<p>正在酝酿思路…</p>'}${cursor}${extra}`;
         if (mdEl._lastHtml !== mdHtml) {
           const nearBottom = mdEl.scrollHeight - mdEl.scrollTop - mdEl.clientHeight < 48;
           mdEl._lastHtml = mdHtml;
@@ -1864,6 +2571,12 @@
             mdEl.scrollTop = mdEl.scrollHeight;
           }
           syncThinkOverflow(cardEl, mdEl);
+          const grpBody = cardEl.closest('.proc-body');
+          if (grpBody) {
+            const gKey = grpBody.dataset.groupOpenKey;
+            if (gKey && groupFollowMap.get(gKey) === true) grpBody.scrollTop = grpBody.scrollHeight;
+            updateGroupScrollFades(grpBody);
+          }
         }
       }
 
@@ -1888,7 +2601,7 @@
               rec.shownLen = Math.min(rec.text.length, rec.shownLen + step);
               if (rec.cardEl && rec.cardEl.isConnected) {
                 const shown = rec.text.slice(0, rec.shownLen);
-                updateThinkDom(rec.cardEl, shown, rec.item, rec.effectiveMode, rec.isStreamingThink || rec.shownLen < rec.text.length);
+                updateThinkDom(rec.cardEl, shown, rec.item, rec.effectiveMode, rec.isStreamingThink || rec.shownLen < rec.text.length, rec.summaryEnabled, rec.policy, rec.useStepRender, rec.wantFullDetail);
               }
               if (rec.shownLen < rec.text.length) hasMore = true;
             }
@@ -1897,21 +2610,52 @@
         });
       }
 
-      function isTurnOpen(turnKey, turn, isLast, settings) {
-        if (
-          settings.autoCollapseDoneTurn &&
-          !turn.isRunning &&
-          !isLast &&
-          !userPinnedMap.get(turnKey) &&
-          !turnSettledSet.has(turnKey)
-        ) {
-          turnSettledSet.add(turnKey);
-          openMap.set(turnKey, false);
+      function resolveTurnOpenState(turnKey, turn, isLast, settings) {
+        const policy = getPresentationPolicy(settings);
+        const forceOpen = Boolean(turn.isRunning || searchQuery.trim());
+        const canCollapse = !forceOpen && Boolean(turn.hasProcess !== false);
+        let open;
+        if (forceOpen) {
+          open = true;
+          if (turn.isRunning) turnSettledSet.delete(turnKey);
+        } else if (userPinnedMap.get(turnKey)) {
+          open = openMap.get(turnKey) === true;
+        } else if (!policy.foldCompletedTurns || turn.hasError) {
+          open = true;
+          openMap.set(turnKey, true);
+          turnSettledSet.delete(turnKey);
+        } else {
+          if (!turnSettledSet.has(turnKey)) {
+            turnSettledSet.add(turnKey);
+            openMap.set(turnKey, false);
+            resetTurnInnerDisclosures(turnKey);
+          }
+          open = openMap.get(turnKey) === true;
         }
-        if (openMap.has(turnKey)) return openMap.get(turnKey);
-        if (turn.isRunning && settings.autoExpandRunningTurn !== false) return true;
-        if (isLast) return true;
-        return false;
+        return { open, canCollapse, policy };
+      }
+
+      function getFilteredTurnEntries(allTurns) {
+        const q = searchQuery.trim().toLowerCase();
+        const result = [];
+        for (let i = 0; i < allTurns.length; i++) {
+          const turn = allTurns[i];
+          const items = turn.items.filter((it) => {
+            if (it.kind === 'reply-boundary') return !q && feedKindFilter === 'all';
+            if (feedKindFilter === 'think' && it.kind !== 'think') return false;
+            if (feedKindFilter === 'tools' && it.kind === 'think') return false;
+            if (!q) return true;
+            const hay = [it.translatedThinking, it.narrativeSummary, it.thinking, it.detail, it.summary, it.label, it.toolName, turn.prompt]
+              .filter(Boolean)
+              .join('\n')
+              .toLowerCase();
+            return hay.includes(q);
+          });
+          if (items.some((it) => it.kind !== 'reply-boundary')) {
+            result.push({ turn, items, isLast: i === allTurns.length - 1 });
+          }
+        }
+        return result;
       }
 
       function renderFeed() {
@@ -1923,10 +2667,20 @@
           openMap.clear();
           userPinnedMap.clear();
           turnSettledSet.clear();
+          groupFollowMap.clear();
+          clearLiveTitleTimers();
           rawOverrideMap.clear();
+          fullDetailMap.clear();
           expandedFullMap.clear();
         }
         if (currentState.activeId) lastRenderedConvId = currentState.activeId;
+
+        const curCacheEpoch = Number(currentState.runtime?.cacheEpoch || 0);
+        if (lastCacheEpoch !== -1 && curCacheEpoch !== lastCacheEpoch) {
+          fullDetailMap.clear();
+          streamShownMap.clear();
+        }
+        lastCacheEpoch = curCacheEpoch;
 
         const list = currentState.conversations || [];
         const activeMeta = list.find((c) => c.id === currentState.activeId);
@@ -1949,8 +2703,9 @@
           convSelect.value = selectedConvId;
         }
 
-        const q = searchQuery.trim().toLowerCase();
-        const allTurns = (currentState.turns || []).filter((t) => t.items && t.items.length > 0);
+        const allTurns = (currentState.turns || []).filter((t) =>
+          t.hasProcess || (Array.isArray(t.items) && t.items.some((it) => it.kind !== 'reply-boundary'))
+        );
         let totalThink = 0;
         let totalTools = 0;
         for (const t of allTurns) {
@@ -1962,13 +2717,16 @@
         if (allTurns.length === 0) {
           feed.innerHTML = '<div class="empty-state">当前对话还没有思考或步骤记录</div>';
           toggleAllBtn.textContent = '展开';
+          toggleAllBtn.disabled = true;
           return;
         }
 
         const nearBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 64;
         const mode = settings.displayMode || 'zh';
+        const summaryEnabled = settings.summaryEnabled === true;
         const useSmooth = settings.smoothStream !== false;
         const hideSum = settings.hideSummaryWhenOpen !== false;
+        const hasSearch = Boolean(searchQuery.trim());
 
         const emptyEl = feed.querySelector(':scope > .empty-state');
         if (emptyEl) emptyEl.remove();
@@ -1980,26 +2738,18 @@
 
         const nextTurnEls = [];
         let needsStreamMore = false;
+        let anyCollapsible = false;
         let anyRenderedClosed = false;
 
-        for (let i = 0; i < allTurns.length; i++) {
-          const turn = allTurns[i];
-          const items = turn.items.filter((it) => {
-            if (feedKindFilter === 'think' && it.kind !== 'think') return false;
-            if (feedKindFilter === 'tools' && it.kind === 'think') return false;
-            if (!q) return true;
-            const hay = [it.translatedThinking, it.thinking, it.detail, it.summary, it.label, turn.prompt]
-              .filter(Boolean)
-              .join('\n')
-              .toLowerCase();
-            return hay.includes(q);
-          });
-          if (items.length === 0) continue;
-
+        const visibleEntries = getFilteredTurnEntries(allTurns);
+        for (let i = 0; i < visibleEntries.length; i++) {
+          const { turn, items, isLast } = visibleEntries[i];
           const turnKey = `${currentState.activeId}:turn:${turn.turnIndex}`;
-          const isLast = i === allTurns.length - 1;
-          const turnOpen = isTurnOpen(turnKey, turn, isLast, settings);
-          if (!turnOpen) anyRenderedClosed = true;
+          const { open: turnOpen, canCollapse, policy } = resolveTurnOpenState(turnKey, turn, isLast, settings);
+          if (canCollapse) {
+            anyCollapsible = true;
+            if (!turnOpen) anyRenderedClosed = true;
+          }
 
           let turnEl = existingTurns.get(turnKey);
           if (!turnEl) {
@@ -2011,15 +2761,18 @@
               `<button class="turn-bar" type="button" data-action="toggle-turn" data-key="${escapeHtml(turnKey)}">` +
                 `<span class="turn-star">${ICONS.star}</span>` +
                 '<span class="turn-label"></span>' +
-                '<span class="turn-counts"></span>' +
-                `<span class="turn-chev">${ICONS.chev}</span>` +
+                `<span class="turn-chev">${ICONS.chevDown}</span>` +
               '</button>' +
-              '<div class="turn-steps-shell"><div class="turn-steps-inner"><div class="turn-steps"></div></div></div>';
+              '<div class="turn-steps-shell"><div class="turn-steps-inner"><div class="turn-groups"></div></div></div>';
           }
 
           turnEl._turnData = turn;
           turnEl.dataset.running = String(Boolean(turn.isRunning));
+          turnEl.dataset.error = String(Boolean(turn.hasError));
           turnEl.dataset.turnOpen = String(Boolean(turnOpen));
+
+          const barBtn = turnEl.querySelector('.turn-bar');
+          if (barBtn) barBtn.disabled = !canCollapse;
 
           const promptEl = turnEl.querySelector('.turn-prompt-tag');
           const promptTxt = `第 ${turn.turnIndex} 轮 · ${turn.prompt}`;
@@ -2027,191 +2780,331 @@
             promptEl.textContent = promptTxt;
             promptEl.title = turn.prompt;
           }
-          const hdr = formatTurnHeader(turn, items.length);
+
           const lblEl = turnEl.querySelector('.turn-label');
-          if (lblEl.textContent !== hdr.label) lblEl.textContent = hdr.label;
-          const cntEl = turnEl.querySelector('.turn-counts');
-          if (cntEl.textContent !== hdr.counts) cntEl.textContent = hdr.counts;
-
-          const stepsBox = turnEl.querySelector('.turn-steps');
-          const existingSteps = new Map();
-          for (const sEl of stepsBox.children) existingSteps.set(sEl.dataset.stepKey, sEl);
-
-          const nextStepEls = [];
-          for (const item of items) {
-            let cardEl = existingSteps.get(item.id);
-            if (!cardEl) {
-              cardEl = document.createElement('div');
-              cardEl.className = 'step-card';
-              cardEl.dataset.stepKey = item.id;
-              cardEl.innerHTML =
-                `<button class="step-head" type="button" data-action="toggle-step" data-key="${escapeHtml(item.id)}">` +
-                  '<span class="step-ico"></span>' +
-                  '<span class="step-kind"></span>' +
-                  '<span class="step-sep"></span>' +
-                  '<span class="step-sum"></span>' +
-                  '<span class="step-time"></span>' +
-                  `<span class="step-chev">${ICONS.chev}</span>` +
-                '</button>' +
-                '<div class="step-body-shell"><div class="step-body-inner"><div class="step-body"></div></div></div>';
-            }
-
-            const running = item.status === 'generating' || item.status === 'running';
-            const isStreamingThink = item.kind === 'think' && (running || item.translateStatus === 'translating');
-            const stepOpen = openMap.has(item.id)
-              ? openMap.get(item.id)
-              : (item.kind === 'think' && isStreamingThink && settings.autoExpandRunningThink !== false);
-
-            cardEl.dataset.kind = item.kind;
-            cardEl.dataset.status = item.status || 'done';
-            cardEl.dataset.running = String(running);
-            cardEl.dataset.open = String(Boolean(stepOpen));
-            cardEl.dataset.hideSum = String(hideSum);
-            cardEl.dataset.full = String(expandedFullMap.get(item.id) === true);
-            cardEl._itemData = item;
-
-            const raw = item.kind === 'think' ? (item.thinking || '') : (item.detail || '');
-            const zh = item.kind === 'think' ? (item.translatedThinking || '') : '';
-            const showRawOverride = rawOverrideMap.get(item.id) === true;
-            const effectiveMode = showRawOverride ? (mode === 'raw' ? 'zh' : 'raw') : mode;
-            const targetText = item.kind === 'think' && effectiveMode !== 'raw' && zh ? zh : raw;
-
-            let displayText = targetText;
-            if (item.kind === 'think') {
-              const modeKey = `${effectiveMode}:${zh && effectiveMode !== 'raw' ? 'zh' : 'raw'}`;
-              let rec = streamShownMap.get(item.id);
-              if (!useSmooth) {
-                streamShownMap.delete(item.id);
-                displayText = targetText;
-              } else {
-                if (!rec || rec.modeKey !== modeKey) {
-                  const startLen = isStreamingThink ? 0 : targetText.length;
-                  rec = { text: targetText, shownLen: startLen, modeKey, cardEl, item, effectiveMode, running, isStreamingThink };
-                  streamShownMap.set(item.id, rec);
-                } else {
-                  rec.cardEl = cardEl;
-                  rec.item = item;
-                  rec.effectiveMode = effectiveMode;
-                  rec.running = running;
-                  rec.isStreamingThink = isStreamingThink;
-                  if (isStreamingThink && targetText.length < rec.shownLen) {
-                    rec.text = rec.text.slice(0, rec.shownLen);
-                  } else {
-                    rec.text = targetText;
-                  }
-                }
-                if (rec.shownLen < rec.text.length) needsStreamMore = true;
-                displayText = rec.text.slice(0, Math.min(rec.shownLen, rec.text.length));
-              }
-            }
-
-            const sum = item.kind === 'think' ? thinkSummary(displayText || targetText, isStreamingThink) : (item.summary || '');
-            const tStr = running && item.startedAtMs
-              ? `${Math.max(0, (Date.now() - item.startedAtMs) / 1000).toFixed(1)}s`
-              : (typeof item.durationSec === 'number' ? `${item.durationSec.toFixed(1)}s` : '');
-
-            const headSig = `${item.kind}|${item.label}|${sum}|${running}`;
-            if (cardEl.dataset.headSig !== headSig) {
-              cardEl.dataset.headSig = headSig;
-              cardEl.querySelector('.step-ico').innerHTML = ICONS[item.kind] || ICONS.tool;
-              cardEl.querySelector('.step-kind').textContent = item.label;
-              cardEl.querySelector('.step-sum').textContent = sum;
-            }
-            const timeEl = cardEl.querySelector('.step-time');
-            if (timeEl.textContent !== tStr) timeEl.textContent = tStr;
-
-            const renderBody = () => {
-              const liveRec = item.kind === 'think' ? streamShownMap.get(item.id) : null;
-              const curDisplayText = liveRec
-                ? liveRec.text.slice(0, Math.min(liveRec.shownLen, liveRec.text.length))
-                : targetText;
-              const curStreaming = isStreamingThink || Boolean(liveRec && liveRec.shownLen < liveRec.text.length);
-              const bodySig = `${curDisplayText}|${raw}|${effectiveMode}|${settings.thinkHeightMode || 'md'}|${item.translateStatus || ''}|${item.translateModel || ''}|${item.translateError || ''}|${running}|${curStreaming}|${item.thinkingTokens || 0}`;
-              if (cardEl.dataset.bodySig === bodySig) return;
-              cardEl.dataset.bodySig = bodySig;
-              const bodyEl = cardEl.querySelector('.step-body');
-
-              if (item.kind === 'think') {
-                const cursor = curStreaming ? '<span class="cursor"></span>' : '';
-                const extra = effectiveMode === 'bilingual' && zh && zh !== raw
-                  ? `<div class="bilingual-raw">${renderMarkdown(raw)}</div>`
-                  : '';
-                const mdHtml = `${renderMarkdown(curDisplayText) || '<p>正在酝酿思路…</p>'}${cursor}${extra}`;
-                const chipsHtml = buildChipsHtml(item, running);
-                const langBtn = zh && zh !== raw
-                  ? `<button class="copy-btn" type="button" data-action="toggle-lang" data-key="${escapeHtml(item.id)}">${effectiveMode === 'raw' ? '看中文' : '看原文'}</button>`
-                  : '';
-                const retryBtn = settings.translateEnabled !== false && item.translateStatus !== 'off' && item.translateStatus !== 'no-key' && item.translateModel !== 'native-zh'
-                  ? `<button class="copy-btn" type="button" data-action="retry-one" data-key="${escapeHtml(item.id)}">重译</button>`
-                  : '';
-                const actSig = `${Boolean(langBtn)}:${Boolean(retryBtn)}:${effectiveMode}`;
-
-                const existingMd = bodyEl.querySelector('.think-md');
-                const existingFoot = bodyEl.querySelector('.step-foot');
-                if (existingMd && existingFoot) {
-                  if (existingMd._lastHtml !== mdHtml) {
-                    const nearBottom = existingMd.scrollHeight - existingMd.scrollTop - existingMd.clientHeight < 48;
-                    existingMd._lastHtml = mdHtml;
-                    existingMd.innerHTML = mdHtml;
-                    if (curStreaming && nearBottom && cardEl.dataset.full !== 'true') {
-                      existingMd.scrollTop = existingMd.scrollHeight;
-                    }
-                  }
-                  syncThinkOverflow(cardEl, existingMd);
-                  const metaEl = existingFoot.querySelector('.foot-meta');
-                  if (metaEl && metaEl._lastHtml !== chipsHtml) {
-                    metaEl._lastHtml = chipsHtml;
-                    metaEl.innerHTML = chipsHtml;
-                  }
-                  const actEl = existingFoot.querySelector('.foot-actions');
-                  if (actEl && actEl.dataset.sig !== actSig) {
-                    actEl.dataset.sig = actSig;
-                    actEl.innerHTML = `${langBtn}${retryBtn}<button class="copy-btn" type="button" data-action="copy" data-key="${escapeHtml(item.id)}">复制</button>`;
-                  }
-                } else {
-                  bodyEl.innerHTML =
-                    `<div class="think-md">${mdHtml}</div>` +
-                    `<div class="expand-bar"><button class="expand-full-btn" type="button" data-action="toggle-full" data-key="${escapeHtml(item.id)}">展开全文</button></div>` +
-                    `<div class="step-foot">` +
-                      `<span class="foot-meta">${chipsHtml}</span>` +
-                      `<span class="foot-actions" data-sig="${actSig}">${langBtn}${retryBtn}<button class="copy-btn" type="button" data-action="copy" data-key="${escapeHtml(item.id)}">复制</button></span>` +
-                    `</div>`;
-                  const newMd = bodyEl.querySelector('.think-md');
-                  newMd._lastHtml = mdHtml;
-                  bodyEl.querySelector('.foot-meta')._lastHtml = chipsHtml;
-                  if (curStreaming && cardEl.dataset.full !== 'true') {
-                    newMd.scrollTop = newMd.scrollHeight;
-                  }
-                  syncThinkOverflow(cardEl, newMd);
-                }
-              } else {
-                const pre = bodyEl.querySelector('.detail-pre');
-                const txt = raw || '{}';
-                if (!pre) {
-                  bodyEl.innerHTML =
-                    `<pre class="detail-pre">${escapeHtml(txt)}</pre>` +
-                    `<div class="step-foot"><span class="foot-meta"><span class="chip">${escapeHtml(item.label)}</span></span><span class="foot-actions"><button class="copy-btn" type="button" data-action="copy" data-key="${escapeHtml(item.id)}">复制</button></span></div>`;
-                } else if (pre.textContent !== txt) {
-                  pre.textContent = txt;
-                }
-              }
-            };
-
-            cardEl._renderBody = renderBody;
-            if (stepOpen) renderBody();
-            nextStepEls.push(cardEl);
+          const labelHtml = renderTurnLabelHtml(turn);
+          if (lblEl && lblEl._lastHtml !== labelHtml) {
+            lblEl._lastHtml = labelHtml;
+            lblEl.innerHTML = labelHtml;
           }
 
-          const curStepEls = Array.from(stepsBox.children);
-          const sameSteps = curStepEls.length === nextStepEls.length && curStepEls.every((el, idx) => el === nextStepEls[idx]);
-          if (!sameSteps) stepsBox.replaceChildren(...nextStepEls);
+          const groupsBox = turnEl.querySelector('.turn-groups');
+          const groups = buildProcessGroups(items, turn.isRunning, mode, summaryEnabled);
+
+          const existingGroups = new Map();
+          for (const gEl of groupsBox.children) {
+            if (gEl.dataset.groupOpenKey) existingGroups.set(gEl.dataset.groupOpenKey, gEl);
+          }
+
+          const nextGroupEls = [];
+          for (const group of groups) {
+            const groupOpenKey = `${turnKey}:g:${group.key}`;
+            const isGrouped = !hasSearch && Boolean(group.grouped);
+            let grpEl = existingGroups.get(groupOpenKey);
+            if (!grpEl) {
+              grpEl = document.createElement('div');
+              grpEl.className = 'proc-group';
+              grpEl.dataset.groupOpenKey = groupOpenKey;
+              grpEl.innerHTML =
+                `<button class="proc-group-head" type="button" data-action="toggle-group" data-key="${escapeHtml(groupOpenKey)}">` +
+                  '<span class="lead-box">' +
+                    '<span class="act-ico"></span>' +
+                    `<span class="act-chev">${ICONS.chevDown}</span>` +
+                  '</span>' +
+                  '<span class="proc-group-title"></span>' +
+                '</button>' +
+                '<div class="proc-body-shell"><div class="proc-body-inner"><div class="proc-body"></div></div></div>';
+              const pBody = grpEl.querySelector('.proc-body');
+              pBody.dataset.groupOpenKey = groupOpenKey;
+              pBody.addEventListener('scroll', () => {
+                updateGroupScrollFades(pBody);
+                const atBottom = pBody.scrollHeight - pBody.scrollTop - pBody.clientHeight < 20;
+                if (grpEl.dataset.live === 'true') groupFollowMap.set(groupOpenKey, atBottom);
+              }, { passive: true });
+            }
+
+            const isLiveGroup = !group.closed;
+            const groupOpen = !isGrouped || openMap.get(groupOpenKey) === true;
+            grpEl.dataset.grouped = String(isGrouped);
+            grpEl.dataset.groupOpen = String(groupOpen);
+            grpEl.dataset.live = String(isLiveGroup);
+
+            const rawTitleInfo = formatProcessGroupTitle(group.summary, group.closed, policy.liveProcessDetail);
+            const stableTitle = resolveStableGroupTitle(groupOpenKey, rawTitleInfo, isLiveGroup, () => renderFeed());
+
+            const headBtn = grpEl.querySelector('.proc-group-head');
+            const leadBox = headBtn.querySelector('.lead-box');
+            const headSig = `${stableTitle.iconKey}|${stableTitle.title}|${groupOpen}|${group.hasError}`;
+            if (headBtn.dataset.sig !== headSig) {
+              headBtn.dataset.sig = headSig;
+              leadBox.dataset.ico = stableTitle.iconKey;
+              leadBox.dataset.err = String(Boolean(group.hasError));
+              headBtn.querySelector('.act-ico').innerHTML = ICONS[stableTitle.iconKey] || ICONS.think;
+              headBtn.querySelector('.act-chev').innerHTML = groupOpen ? ICONS.chevUp : ICONS.chevDown;
+              const titleEl = headBtn.querySelector('.proc-group-title');
+              titleEl.textContent = stableTitle.title;
+              titleEl.title = stableTitle.title;
+            }
+
+            const bodyEl = grpEl.querySelector('.proc-body');
+            const renderMembers = () => {
+              const existingSteps = new Map();
+              for (const sEl of bodyEl.children) {
+                if (sEl.dataset.rowOpenKey) existingSteps.set(sEl.dataset.rowOpenKey, sEl);
+              }
+
+              let localNeedsStream = false;
+              const nextStepEls = [];
+              for (const item of group.members) {
+                const rowOpenKey = `${turnKey}:${item.kind === 'think' ? 'th' : 'tl'}:${item.id}`;
+                const icoKey = item.kind === 'think' ? 'think' : activityIconKey(classifyToolActivity(item));
+                let cardEl = existingSteps.get(rowOpenKey);
+                if (!cardEl) {
+                  cardEl = document.createElement('div');
+                  cardEl.className = 'step-card';
+                  cardEl.dataset.rowOpenKey = rowOpenKey;
+                  cardEl.dataset.stepKey = item.id;
+                  cardEl.innerHTML =
+                    `<button class="step-head" type="button" data-action="toggle-step" data-key="${escapeHtml(rowOpenKey)}">` +
+                      '<span class="lead-box">' +
+                        '<span class="act-ico"></span>' +
+                        `<span class="act-chev">${ICONS.chevDown}</span>` +
+                      '</span>' +
+                      '<span class="step-kind"></span>' +
+                      '<span class="step-count-pill"></span>' +
+                      '<span class="step-sep"></span>' +
+                      '<span class="step-sum"></span>' +
+                      '<span class="step-time"></span>' +
+                    '</button>' +
+                    '<div class="step-body-shell"><div class="step-body-inner"><div class="step-body"></div></div></div>';
+                }
+
+                const raw = item.kind === 'think' ? (item.thinking || '') : (item.detail || '');
+                const zh = item.kind === 'think' ? (item.translatedThinking || '') : '';
+                const isStepsStyle = (settings.translateStyle || 'steps') === 'steps';
+                const wantFullDetail = item.kind === 'think' && isStepsStyle && fullDetailMap.get(item.id) === true;
+                const activeZh = wantFullDetail ? (item.fullTranslatedThinking || zh) : zh;
+                const showRawOverride = rawOverrideMap.get(item.id) === true;
+                const effectiveMode = showRawOverride ? (mode === 'raw' ? 'zh' : 'raw') : mode;
+                const targetText = item.kind === 'think' && effectiveMode !== 'raw' && activeZh ? activeZh : raw;
+                const running = item.status === 'generating' || item.status === 'running';
+                const isStreamingThink = item.kind === 'think' && (running || (effectiveMode !== 'raw' && (item.translateStatus === 'translating' || (wantFullDetail && item.fullTranslateStatus === 'translating'))));
+                const isBriefThink = item.kind === 'think' && !isStreamingThink && !wantFullDetail && raw.length < 220 && targetText.length < 180 && !raw.includes('```');
+                const useStepRender = item.kind === 'think' && isStepsStyle && !wantFullDetail && !isStreamingThink && !isBriefThink && effectiveMode !== 'raw' && Boolean(activeZh);
+                let stepOpen;
+                if (userPinnedMap.get(rowOpenKey) || openMap.has(rowOpenKey)) {
+                  stepOpen = openMap.get(rowOpenKey) === true;
+                } else if (item.kind === 'think' && settings.autoExpandRunningThink !== false && isStreamingThink && turn.isRunning) {
+                  openMap.set(rowOpenKey, true);
+                  stepOpen = true;
+                } else {
+                  stepOpen = false;
+                }
+
+                let displayText = targetText;
+                if (item.kind === 'think') {
+                  const modeKey = `${effectiveMode}:${wantFullDetail ? 'full' : (useStepRender ? 'steps' : 'live')}:${activeZh && effectiveMode !== 'raw' ? 'zh' : 'raw'}`;
+                  let rec = streamShownMap.get(item.id);
+                  if (!useSmooth) {
+                    streamShownMap.delete(item.id);
+                    displayText = targetText;
+                  } else {
+                    if (!rec || rec.modeKey !== modeKey) {
+                      const startLen = isStreamingThink ? 0 : targetText.length;
+                      rec = { text: targetText, shownLen: startLen, modeKey, cardEl, item, effectiveMode, running, isStreamingThink, summaryEnabled, policy, useStepRender, wantFullDetail };
+                      streamShownMap.set(item.id, rec);
+                    } else {
+                      rec.cardEl = cardEl;
+                      rec.item = item;
+                      rec.effectiveMode = effectiveMode;
+                      rec.running = running;
+                      rec.isStreamingThink = isStreamingThink;
+                      rec.summaryEnabled = summaryEnabled;
+                      rec.policy = policy;
+                      rec.useStepRender = useStepRender;
+                      rec.wantFullDetail = wantFullDetail;
+                      rec.text = targetText;
+                      if (rec.shownLen > targetText.length) {
+                        rec.shownLen = targetText.length;
+                      }
+                    }
+                    if (!isStreamingThink && !stepOpen && rec.shownLen < rec.text.length) {
+                      rec.shownLen = rec.text.length;
+                    }
+                    if (stepOpen && rec.shownLen < rec.text.length) {
+                      localNeedsStream = true;
+                      needsStreamMore = true;
+                    }
+                    displayText = rec.text.slice(0, Math.min(rec.shownLen, rec.text.length));
+                  }
+                }
+
+                const sum = item.kind === 'think'
+                  ? computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled)
+                  : (item.summary || item.liveDetail || item.toolName || '');
+                const showPreview = item.kind === 'think'
+                  ? (Boolean(sum) && (isStreamingThink || policy.settledReasoningPreview))
+                  : Boolean(sum);
+
+                cardEl.dataset.kind = item.kind;
+                cardEl.dataset.status = item.status || 'done';
+                cardEl.dataset.running = String(running);
+                cardEl.dataset.streaming = String(item.kind === 'think' ? isStreamingThink : running);
+                cardEl.dataset.brief = String(Boolean(isBriefThink));
+                cardEl.dataset.open = String(Boolean(stepOpen));
+                cardEl.dataset.preview = String(showPreview);
+                cardEl.dataset.hideSum = String(hideSum);
+                cardEl.dataset.full = String(expandedFullMap.get(item.id) === true);
+                cardEl._itemData = item;
+
+                const tStr = running && item.startedAtMs
+                  ? `${Math.max(0, (Date.now() - item.startedAtMs) / 1000).toFixed(1)}s`
+                  : (typeof item.durationSec === 'number' ? `${item.durationSec.toFixed(1)}s` : '');
+
+                const stepCount = useStepRender ? countThinkingSteps(activeZh || targetText) : 0;
+                const stepPillText = item.kind === 'think' && item.translatePhase === 'distilling'
+                  ? '整理脉络'
+                  : (stepCount > 1 ? `${stepCount} 步` : '');
+                const headSig = `${icoKey}|${item.label}|${sum}|${stepPillText}|${running}|${stepOpen}|${item.status}`;
+                if (cardEl.dataset.headSig !== headSig) {
+                  cardEl.dataset.headSig = headSig;
+                  const lb = cardEl.querySelector('.step-head .lead-box');
+                  lb.dataset.ico = icoKey;
+                  lb.dataset.err = String(item.status === 'error');
+                  cardEl.querySelector('.step-head .act-ico').innerHTML = ICONS[icoKey] || ICONS.tool;
+                  cardEl.querySelector('.step-head .act-chev').innerHTML = stepOpen ? ICONS.chevUp : ICONS.chevDown;
+                  cardEl.querySelector('.step-kind').textContent = item.kind === 'think' ? '思考' : (item.label || '工具调用');
+                  const pillEl = cardEl.querySelector('.step-count-pill');
+                  if (pillEl) pillEl.textContent = stepPillText;
+                  cardEl.querySelector('.step-sum').textContent = sum;
+                }
+                const timeEl = cardEl.querySelector('.step-time');
+                if (timeEl.textContent !== tStr) timeEl.textContent = tStr;
+
+                const renderBody = () => {
+                  const liveRec = item.kind === 'think' ? streamShownMap.get(item.id) : null;
+                  const curDisplayText = liveRec
+                    ? liveRec.text.slice(0, Math.min(liveRec.shownLen, liveRec.text.length))
+                    : targetText;
+                  const curStreaming = isStreamingThink || Boolean(liveRec && liveRec.shownLen < liveRec.text.length);
+                  const sigPart = (s) => (s ? `${s.length}:${s.slice(0, 12)}:${s.slice(-24)}` : '0');
+                  const bodySig = `${sigPart(curDisplayText)}|${sigPart(raw)}|${effectiveMode}|${wantFullDetail}|${useStepRender}|${isBriefThink}|${settings.thinkHeightMode || 'full'}|${item.translateStatus || ''}|${item.translatePhase || ''}|${item.fullTranslateStatus || ''}|${item.fullTranslateError || ''}|${item.translateModel || ''}|${item.translateError || ''}|${running}|${curStreaming}|${item.thinkingTokens || 0}`;
+                  if (cardEl.dataset.bodySig === bodySig) return;
+                  cardEl.dataset.bodySig = bodySig;
+                  const stepBodyEl = cardEl.querySelector('.step-body');
+
+                  if (item.kind === 'think') {
+                    const cursor = curStreaming ? '<span class="cursor"></span>' : '';
+                    const extra = effectiveMode === 'bilingual' && activeZh && activeZh !== raw
+                      ? `<div class="bilingual-raw">${renderMarkdown(raw)}</div>`
+                      : '';
+                    const rendered = renderThinkingSteps(curDisplayText, useStepRender);
+                    const mdHtml = `${rendered || '<p>正在酝酿思路…</p>'}${cursor}${extra}`;
+                    const chipsHtml = buildChipsHtml(item, running, wantFullDetail);
+                    const detailBtn = !isStreamingThink && isStepsStyle && !isBriefThink && effectiveMode !== 'raw' && zh && item.translateModel !== 'native-zh'
+                      ? `<button class="copy-btn" type="button" data-action="toggle-detail" data-key="${escapeHtml(item.id)}">${wantFullDetail ? '看脉络' : '看完整'}</button>`
+                      : '';
+                    const langBtn = zh && zh !== raw
+                      ? `<button class="copy-btn" type="button" data-action="toggle-lang" data-key="${escapeHtml(item.id)}">${effectiveMode === 'raw' ? '看中文' : '看原文'}</button>`
+                      : '';
+                    const retryBtn = settings.translateEnabled !== false && item.translateStatus !== 'off' && item.translateStatus !== 'no-key' && item.translateModel !== 'native-zh'
+                      ? `<button class="copy-btn" type="button" data-action="retry-one" data-key="${escapeHtml(item.id)}">重译</button>`
+                      : '';
+                    const actSig = `${Boolean(detailBtn)}:${wantFullDetail}:${Boolean(langBtn)}:${Boolean(retryBtn)}:${effectiveMode}`;
+
+                    const existingMd = stepBodyEl.querySelector('.think-md');
+                    const existingFoot = stepBodyEl.querySelector('.step-foot');
+                    if (existingMd && existingFoot) {
+                      if (existingMd._lastHtml !== mdHtml) {
+                        const nearBottom = existingMd.scrollHeight - existingMd.scrollTop - existingMd.clientHeight < 48;
+                        const settledToSteps = Boolean(existingMd._wasStreaming) && !curStreaming && useStepRender;
+                        existingMd._lastHtml = mdHtml;
+                        existingMd.innerHTML = mdHtml;
+                        if (curStreaming && nearBottom && cardEl.dataset.full !== 'true') {
+                          existingMd.scrollTop = existingMd.scrollHeight;
+                        } else if (settledToSteps) {
+                          existingMd.scrollTop = 0;
+                        }
+                      }
+                      existingMd._wasStreaming = curStreaming;
+                      const metaEl = existingFoot.querySelector('.foot-meta');
+                      if (metaEl && metaEl._lastHtml !== chipsHtml) {
+                        metaEl._lastHtml = chipsHtml;
+                        metaEl.innerHTML = chipsHtml;
+                      }
+                      const actEl = existingFoot.querySelector('.foot-actions');
+                      if (actEl && actEl.dataset.sig !== actSig) {
+                        actEl.dataset.sig = actSig;
+                        actEl.innerHTML = `${detailBtn}${langBtn}${retryBtn}<button class="copy-btn" type="button" data-action="copy" data-key="${escapeHtml(item.id)}">复制</button>`;
+                      }
+                      syncThinkOverflow(cardEl, existingMd);
+                    } else {
+                      stepBodyEl.innerHTML =
+                        `<div class="think-md">${mdHtml}</div>` +
+                        `<div class="expand-bar"><button class="expand-full-btn" type="button" data-action="toggle-full" data-key="${escapeHtml(item.id)}">展开全文</button></div>` +
+                        `<div class="step-foot">` +
+                          `<span class="foot-meta">${chipsHtml}</span>` +
+                          `<span class="foot-actions" data-sig="${actSig}">${detailBtn}${langBtn}${retryBtn}<button class="copy-btn" type="button" data-action="copy" data-key="${escapeHtml(item.id)}">复制</button></span>` +
+                        `</div>`;
+                      const newMd = stepBodyEl.querySelector('.think-md');
+                      newMd._lastHtml = mdHtml;
+                      newMd._wasStreaming = curStreaming;
+                      stepBodyEl.querySelector('.foot-meta')._lastHtml = chipsHtml;
+                      if (curStreaming && cardEl.dataset.full !== 'true') {
+                        newMd.scrollTop = newMd.scrollHeight;
+                      }
+                      syncThinkOverflow(cardEl, newMd);
+                    }
+                  } else {
+                    const pre = stepBodyEl.querySelector('.detail-pre');
+                    const txt = raw || item.summary || '{}';
+                    if (!pre) {
+                      stepBodyEl.innerHTML =
+                        `<pre class="detail-pre">${escapeHtml(txt)}</pre>` +
+                        `<div class="step-foot"><span class="foot-meta"><span class="chip">${escapeHtml(item.toolName || item.label)}</span></span><span class="foot-actions"><button class="copy-btn" type="button" data-action="copy" data-key="${escapeHtml(item.id)}">复制</button></span></div>`;
+                    } else if (pre.textContent !== txt) {
+                      pre.textContent = txt;
+                    }
+                  }
+                };
+
+                cardEl._renderBody = renderBody;
+                if (stepOpen) renderBody();
+                nextStepEls.push(cardEl);
+              }
+
+              const curStepEls = Array.from(bodyEl.children);
+              const sameSteps = curStepEls.length === nextStepEls.length && curStepEls.every((el, idx) => el === nextStepEls[idx]);
+              if (!sameSteps) bodyEl.replaceChildren(...nextStepEls);
+
+              const isGroupedNow = grpEl.dataset.grouped === 'true';
+              const isGroupOpenNow = grpEl.dataset.groupOpen === 'true';
+              const isLiveNow = grpEl.dataset.live === 'true';
+              if (isGroupedNow && isGroupOpenNow) {
+                if (isLiveNow && groupFollowMap.get(groupOpenKey) === true) bodyEl.scrollTop = bodyEl.scrollHeight;
+                updateGroupScrollFades(bodyEl);
+              } else {
+                bodyEl.classList.remove('fade-top', 'fade-bottom');
+              }
+              if (localNeedsStream) scheduleStreamTick();
+            };
+
+            grpEl._renderMembers = renderMembers;
+            if (turnOpen && groupOpen) renderMembers();
+            nextGroupEls.push(grpEl);
+          }
+
+          const curGroupEls = Array.from(groupsBox.children);
+          const sameGroups = curGroupEls.length === nextGroupEls.length && curGroupEls.every((el, idx) => el === nextGroupEls[idx]);
+          if (!sameGroups) groupsBox.replaceChildren(...nextGroupEls);
 
           nextTurnEls.push(turnEl);
         }
 
         if (nextTurnEls.length === 0) {
-          feed.innerHTML = '<div class="empty-state">当前筛选条件下没有内容，可切换上方「全部步骤」查看</div>';
+          feed.innerHTML = '<div class="empty-state">当前筛选条件下没有内容，可切换上方「思考 + 工具」查看</div>';
           toggleAllBtn.textContent = '展开';
+          toggleAllBtn.disabled = true;
           return;
         }
 
@@ -2219,7 +3112,15 @@
         const sameTurns = curTurnEls.length === nextTurnEls.length && curTurnEls.every((el, idx) => el === nextTurnEls[idx]);
         if (!sameTurns) feed.replaceChildren(...nextTurnEls);
 
-        toggleAllBtn.textContent = anyRenderedClosed ? '展开' : '收起';
+        if (!anyCollapsible) {
+          toggleAllBtn.disabled = true;
+          toggleAllBtn.textContent = '已展开';
+          toggleAllBtn.title = '当前展示模式或状态下无可收起轮次';
+        } else {
+          toggleAllBtn.disabled = false;
+          toggleAllBtn.textContent = anyRenderedClosed ? '展开' : '收起';
+          toggleAllBtn.title = '展开/收起全部';
+        }
         if (currentState.isGenerating && nearBottom) feed.scrollTop = feed.scrollHeight;
         if (needsStreamMore) scheduleStreamTick();
       }
@@ -2262,6 +3163,19 @@
             render();
           } catch {}
         });
+        es.addEventListener('notice', (ev) => {
+          if (eventSource !== es) return;
+          statusStar.classList.add('error');
+          try {
+            const payload = JSON.parse(ev.data);
+            const msg = payload?.message || '连接本地服务失败';
+            if (!currentState) {
+              feed.innerHTML = `<div class="empty-state">本地思考流连接异常：${escapeHtml(msg)}</div>`;
+            }
+            feedStatsHint.textContent = `异常：${msg}`;
+            feedStatsHint.title = msg;
+          } catch {}
+        });
         es.onerror = () => {
           if (eventSource !== es) return;
           statusStar.classList.add('error');
@@ -2288,18 +3202,31 @@
         btn.addEventListener('click', () => switchTab(btn.dataset.tab));
       }
 
-      bindSegmented('segDisplayMode', (val) => void saveSetting({ displayMode: val }));
-      bindSegmented('segTranslateStyle', (val) => void saveSetting({ translateStyle: val }));
+      function saveQuickSetting(patch) {
+        return saveSetting(patch).catch((err) => {
+          testStatus.className = 'test-status err';
+          testStatus.textContent = `保存设置失败：${err?.message || '请检查本地服务状态'}`;
+        });
+      }
+
+      function applyDisplayLevelSelection(val) {
+        setSegmentedActive('segDisplayLevel', val);
+        if (displayLevelHint) displayLevelHint.textContent = DISPLAY_LEVEL_HINTS[val] || DISPLAY_LEVEL_HINTS.focus;
+        if (currentState?.settings) currentState.settings.displayLevel = val;
+        if (activeTab === 'feed') renderFeed();
+        void saveQuickSetting({ displayLevel: val });
+      }
+
+      bindSegmented('segDisplayLevel', (val) => applyDisplayLevelSelection(val));
+      bindSegmented('segDisplayMode', (val) => void saveQuickSetting({ displayMode: val }));
+      bindSegmented('segTranslateStyle', (val) => {
+        streamShownMap.clear();
+        void saveQuickSetting({ translateStyle: val });
+      });
       bindSegmented('segFontSize', (val) => {
         document.body.dataset.font = val;
-        void saveSetting({ fontSize: val });
+        void saveQuickSetting({ fontSize: val });
       });
-      bindSegmented('segThinkHeight', (val) => {
-        document.body.dataset.thinkHeight = val;
-        void saveSetting({ thinkHeightMode: val });
-        if (activeTab === 'feed') renderFeed();
-      });
-      bindSegmented('segSidebarTab', (val) => void saveSetting({ sidebarDefaultTab: val }));
       bindSegmented('segFeedKind', (val) => {
         feedKindFilter = val;
         renderFeed();
@@ -2309,14 +3236,25 @@
         renderModelList();
       });
 
+      function cancelPendingDiscover() {
+        clearTimeout(autoDetectTimer);
+        discoverReqSeq += 1;
+        detectModelsBtn.disabled = false;
+        detectModelsBtn.textContent = '自动识别模型';
+      }
+
       paneSettings.addEventListener('click', (ev) => {
         const presetBtn = ev.target.closest('[data-preset]');
         if (presetBtn) {
           const p = PRESETS[presetBtn.dataset.preset];
           if (!p) return;
+          cancelPendingDiscover();
+          const urlChanged = normalizeUrl(optBaseUrl.value) !== normalizeUrl(p.baseUrl);
           optBaseUrl.value = p.baseUrl;
           optModels.value = p.models;
+          if (urlChanged) optApiKey.value = '';
           discoveredModels = null;
+          syncApiKeyHint();
           renderModelList();
           testStatus.className = 'test-status';
           testStatus.textContent = p.hint;
@@ -2369,9 +3307,12 @@
       optModels.addEventListener('input', () => renderModelList());
 
       optBaseUrl.addEventListener('change', () => {
+        cancelPendingDiscover();
         discoveredModels = null;
+        syncApiKeyHint();
         renderModelList();
       });
+      optBaseUrl.addEventListener('input', () => syncApiKeyHint());
 
       optApiKey.addEventListener('input', () => {
         clearTimeout(autoDetectTimer);
@@ -2383,13 +3324,14 @@
       detectModelsBtn.addEventListener('click', () => void runDiscoverModels(false));
 
       clearKeyBtn.addEventListener('click', async () => {
+        cancelPendingDiscover();
         testStatus.className = 'test-status';
         testStatus.textContent = '正在清空已保存的 API Key…';
         try {
           const saved = await saveSetting({ translateApiKey: '' });
           optApiKey.value = '';
-          optApiKey.placeholder = '粘贴你的 sk-... 密钥（本地免鉴权可留空）';
-          clearKeyBtn.style.display = saved.hasApiKey ? '' : 'none';
+          if (currentState) currentState.settings = saved;
+          syncApiKeyHint(saved);
           discoveredModels = null;
           renderModelList();
           testStatus.className = 'test-status ok';
@@ -2407,6 +3349,7 @@
       });
 
       async function persistTranslationConfig(runTest) {
+        cancelPendingDiscover();
         const baseUrl = optBaseUrl.value.trim();
         if (!baseUrl) {
           testStatus.className = 'test-status err';
@@ -2419,25 +3362,31 @@
           translateEnabled: optTranslate.checked,
           disableTranslatorThinking: optDisableThink.checked,
           displayMode: activeModeBtn?.dataset.val || 'zh',
-          translateStyle: activeStyleBtn?.dataset.val || 'natural',
+          translateStyle: activeStyleBtn?.dataset.val || 'steps',
           translateBaseUrl: baseUrl,
           translateModels: optModels.value.trim(),
         };
         if (optApiKey.value.trim()) {
           patch.translateApiKey = optApiKey.value.trim();
         }
+        saveTransBtn.disabled = true;
+        testTransBtn.disabled = true;
         testStatus.className = 'test-status';
         testStatus.textContent = runTest ? '正在保存并测试首字延迟与译文质量…' : '正在保存…';
         try {
           const saved = await saveSetting(patch);
           optApiKey.value = '';
-          optApiKey.placeholder = saved.hasApiKey
-            ? `已配置 (${saved.translateApiKey})，留空则保持不变`
-            : '粘贴你的 sk-... 密钥（本地免鉴权可留空）';
-          clearKeyBtn.style.display = saved.hasApiKey ? '' : 'none';
+          if (currentState) currentState.settings = saved;
+          syncApiKeyHint(saved);
+          const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(baseUrl);
           if (!runTest) {
-            testStatus.className = 'test-status ok';
-            testStatus.textContent = '配置已保存！新思考将立即按新模型与风格翻译。';
+            if (!saved.hasApiKey && !isLocal) {
+              testStatus.className = 'test-status err';
+              testStatus.textContent = '配置已保存，但当前服务商尚未设置 API Key（切换服务商时已自动清空旧 Key），请填入 Key 后生效。';
+            } else {
+              testStatus.className = 'test-status ok';
+              testStatus.textContent = '配置已保存！新思考将立即按新模型与风格翻译。';
+            }
             return;
           }
           const data = await postJson('/api/translate/test', {});
@@ -2449,11 +3398,36 @@
         } catch (err) {
           testStatus.className = 'test-status err';
           testStatus.textContent = `连接失败：${err.message}`;
+        } finally {
+          saveTransBtn.disabled = false;
+          testTransBtn.disabled = false;
+        }
+      }
+
+      async function runQuickTestSaved() {
+        const quickBtn = document.getElementById('quickTestBtn');
+        if (quickBtn) quickBtn.disabled = true;
+        testStatus.className = 'test-status';
+        testStatus.textContent = '正在测试已保存配置的首字延迟与译文质量…';
+        try {
+          const data = await postJson('/api/translate/test', {});
+          testStatus.className = 'test-status ok';
+          const timing = typeof data.ttftMs === 'number'
+            ? `｜首字 ${data.ttftMs}ms / 总计 ${data.totalMs}ms`
+            : '';
+          testStatus.textContent = `连通成功！命中：${data.model}${timing}\n试译：「${data.sample}」`;
+        } catch (err) {
+          testStatus.className = 'test-status err';
+          testStatus.textContent = `连接失败：${err.message}`;
+        } finally {
+          if (quickBtn) quickBtn.disabled = false;
         }
       }
 
       saveTransBtn.addEventListener('click', () => void persistTranslationConfig(false));
       testTransBtn.addEventListener('click', () => void persistTranslationConfig(true));
+      document.getElementById('quickTestBtn')?.addEventListener('click', () => void runQuickTestSaved());
+      document.getElementById('quickRetryBtn')?.addEventListener('click', () => retryFailedBtn.click());
 
       retryFailedBtn.addEventListener('click', async () => {
         testStatus.className = 'test-status';
@@ -2473,6 +3447,7 @@
         testStatus.textContent = '正在清空翻译缓存…';
         try {
           await postJson('/api/translate/cache/clear', {});
+          fullDetailMap.clear();
           streamShownMap.clear();
           testStatus.className = 'test-status ok';
           testStatus.textContent = '翻译缓存已清空，将按新模型/风格重新翻译。';
@@ -2488,31 +3463,90 @@
         const action = btn.dataset.action;
         const key = btn.dataset.key;
         if (action === 'toggle-turn') {
+          if (btn.disabled) return;
           const el = btn.closest('.turn-block');
           const next = el.dataset.turnOpen !== 'true';
           openMap.set(key, next);
           userPinnedMap.set(key, true);
           el.dataset.turnOpen = String(next);
+          if (!next) resetTurnInnerDisclosures(key);
           renderFeed();
+          if (next) {
+            setTimeout(() => {
+              if (!el.isConnected || el.dataset.turnOpen !== 'true') return;
+              for (const b of el.querySelectorAll('.proc-body')) updateGroupScrollFades(b);
+              for (const openCard of el.querySelectorAll('.step-card[data-open="true"]')) {
+                syncThinkOverflow(openCard, openCard.querySelector('.think-md'));
+              }
+            }, 210);
+          }
+        } else if (action === 'toggle-group') {
+          const grpEl = btn.closest('.proc-group');
+          if (!grpEl) return;
+          const next = grpEl.dataset.groupOpen !== 'true';
+          openMap.set(key, next);
+          grpEl.dataset.groupOpen = String(next);
+          const chevEl = btn.querySelector('.act-chev');
+          if (chevEl) chevEl.innerHTML = next ? ICONS.chevUp : ICONS.chevDown;
+          const bodyEl = grpEl.querySelector('.proc-body');
+          if (next) {
+            const isLive = grpEl.dataset.live === 'true';
+            groupFollowMap.set(key, isLive);
+            if (grpEl._renderMembers) grpEl._renderMembers();
+            setTimeout(() => {
+              if (!grpEl.isConnected || grpEl.dataset.groupOpen !== 'true' || !bodyEl) return;
+              bodyEl.scrollTop = isLive ? bodyEl.scrollHeight : 0;
+              updateGroupScrollFades(bodyEl);
+            }, 200);
+          } else {
+            groupFollowMap.set(key, false);
+          }
         } else if (action === 'toggle-step') {
           const el = btn.closest('.step-card');
           const next = el.dataset.open !== 'true';
           openMap.set(key, next);
+          userPinnedMap.set(key, true);
           el.dataset.open = String(next);
+          const chevEl = btn.querySelector('.act-chev');
+          if (chevEl) chevEl.innerHTML = next ? ICONS.chevUp : ICONS.chevDown;
           if (next && el._renderBody) {
+            const item = el._itemData;
+            const liveRec = item ? streamShownMap.get(item.id) : null;
+            if (liveRec && liveRec.shownLen < liveRec.text.length) {
+              if (!liveRec.isStreamingThink) liveRec.shownLen = liveRec.text.length;
+              else scheduleStreamTick();
+            }
             el._renderBody();
             setTimeout(() => {
               if (el.isConnected && el.dataset.open === 'true') {
                 syncThinkOverflow(el, el.querySelector('.think-md'));
+                const grpBody = el.closest('.proc-body');
+                if (grpBody) updateGroupScrollFades(grpBody);
               }
             }, 210);
+          } else {
+            const grpBody = el.closest('.proc-body');
+            if (grpBody) updateGroupScrollFades(grpBody);
           }
         } else if (action === 'toggle-full') {
           const el = btn.closest('.step-card');
-          const nextFull = el.dataset.full !== 'true';
-          expandedFullMap.set(key, nextFull);
-          el.dataset.full = String(nextFull);
-          syncThinkOverflow(el, el.querySelector('.think-md'));
+          if (el) {
+            const nextFull = el.dataset.full !== 'true';
+            expandedFullMap.set(key, nextFull);
+            el.dataset.full = String(nextFull);
+            syncThinkOverflow(el, el.querySelector('.think-md'));
+          }
+        } else if (action === 'toggle-detail') {
+          const found = findItemById(key);
+          const nextDetail = fullDetailMap.get(key) !== true;
+          fullDetailMap.set(key, nextDetail);
+          streamShownMap.delete(key);
+          const el = btn.closest('.step-card');
+          if (el) { el.dataset.bodySig = ''; el.dataset.headSig = ''; }
+          if (nextDetail && !found?.fullTranslatedThinking) {
+            void postJson('/api/translate/full', { itemId: key }).catch(() => {});
+          }
+          renderFeed();
         } else if (action === 'toggle-lang') {
           rawOverrideMap.set(key, rawOverrideMap.get(key) !== true);
           streamShownMap.delete(key);
@@ -2524,6 +3558,8 @@
           if (!found) return;
           btn.textContent = '重译中…';
           streamShownMap.delete(key);
+          const el = btn.closest('.step-card');
+          if (el) { el.dataset.bodySig = ''; el.dataset.headSig = ''; }
           try {
             await postJson('/api/translate/retry', { itemId: key, rawText: found.thinking || '' });
           } catch {}
@@ -2533,9 +3569,11 @@
           if (!found) return;
           const mode = currentState?.settings?.displayMode || 'zh';
           const showRaw = rawOverrideMap.get(key) === true ? (mode !== 'raw') : (mode === 'raw');
+          const wantFullDetail = (currentState?.settings?.translateStyle || 'steps') === 'steps' && fullDetailMap.get(key) === true;
+          const activeZh = wantFullDetail ? (found.fullTranslatedThinking || found.translatedThinking) : found.translatedThinking;
           const txt = found.kind === 'think'
-            ? (!showRaw && found.translatedThinking ? found.translatedThinking : found.thinking)
-            : found.detail;
+            ? (!showRaw && activeZh ? activeZh : found.thinking)
+            : (found.detail || found.summary);
           try {
             await navigator.clipboard.writeText(txt || '');
             btn.textContent = '已复制';
@@ -2545,16 +3583,24 @@
       });
 
       toggleAllBtn.addEventListener('click', () => {
-        const turns = (currentState?.turns || []).filter((t) => t.items && t.items.length > 0);
+        const allTurns = (currentState?.turns || []).filter((t) =>
+          t.hasProcess || (Array.isArray(t.items) && t.items.some((it) => it.kind !== 'reply-boundary'))
+        );
+        const visibleEntries = getFilteredTurnEntries(allTurns);
+        if (visibleEntries.length === 0) return;
         const settings = currentState?.settings || {};
-        const anyClosed = turns.some((t, idx) => {
-          const key = `${currentState.activeId}:turn:${t.turnIndex}`;
-          return !isTurnOpen(key, t, idx === turns.length - 1, settings);
+        const anyClosed = visibleEntries.some(({ turn, isLast }) => {
+          const key = `${currentState.activeId}:turn:${turn.turnIndex}`;
+          const st = resolveTurnOpenState(key, turn, isLast, settings);
+          return st.canCollapse && !st.open;
         });
-        for (const t of turns) {
-          const key = `${currentState.activeId}:turn:${t.turnIndex}`;
+        for (const { turn, isLast } of visibleEntries) {
+          const key = `${currentState.activeId}:turn:${turn.turnIndex}`;
+          const st = resolveTurnOpenState(key, turn, isLast, settings);
+          if (!st.canCollapse) continue;
           openMap.set(key, anyClosed);
           userPinnedMap.set(key, true);
+          if (!anyClosed) resetTurnInnerDisclosures(key);
         }
         toggleAllBtn.textContent = anyClosed ? '收起' : '展开';
         renderFeed();
@@ -2576,19 +3622,20 @@
       searchInput.addEventListener('input', () => { searchQuery = searchInput.value; renderFeed(); });
       convSelect.addEventListener('change', () => { selectedConvId = convSelect.value || 'auto'; connectStream(); });
 
-      optInline.addEventListener('change', () => void saveSetting({ inlineEnabled: optInline.checked }));
-      optHideSum.addEventListener('change', () => void saveSetting({ hideSummaryWhenOpen: optHideSum.checked }));
-      optTools.addEventListener('change', () => void saveSetting({ includeTools: optTools.checked }));
-      optAutoExpandTurn.addEventListener('change', () => void saveSetting({ autoExpandRunningTurn: optAutoExpandTurn.checked }));
-      optAutoExpandThink.addEventListener('change', () => void saveSetting({ autoExpandRunningThink: optAutoExpandThink.checked }));
-      optAutoCollapse.addEventListener('change', () => void saveSetting({ autoCollapseDoneTurn: optAutoCollapse.checked }));
-      optSmooth.addEventListener('change', () => void saveSetting({ smoothStream: optSmooth.checked }));
-      optCompact.addEventListener('change', () => {
-        document.body.dataset.compact = String(optCompact.checked);
-        void saveSetting({ compactMode: optCompact.checked });
+      optInline.addEventListener('change', () => {
+        document.getElementById('tileInline')?.classList.toggle('is-on', optInline.checked);
+        void saveQuickSetting({ inlineEnabled: optInline.checked });
       });
-      optTranslate.addEventListener('change', () => void saveSetting({ translateEnabled: optTranslate.checked }));
-      optDisableThink.addEventListener('change', () => void saveSetting({ disableTranslatorThinking: optDisableThink.checked }));
+      optTools.addEventListener('change', () => void saveQuickSetting({ includeTools: optTools.checked }));
+      optAutoExpandThink.addEventListener('change', () => void saveQuickSetting({ autoExpandRunningThink: optAutoExpandThink.checked }));
+      optSmooth.addEventListener('change', () => void saveQuickSetting({ smoothStream: optSmooth.checked }));
+      optTranslate.addEventListener('change', () => {
+        document.getElementById('tileTranslate')?.classList.toggle('is-on', optTranslate.checked);
+        translateSubControls?.classList.toggle('is-off', !optTranslate.checked);
+        translateOffHint?.classList.toggle('show', !optTranslate.checked);
+        void saveQuickSetting({ translateEnabled: optTranslate.checked });
+      });
+      optDisableThink.addEventListener('change', () => void saveQuickSetting({ disableTranslatorThinking: optDisableThink.checked }));
 
       setInterval(() => {
         if (activeTab !== 'feed' || !currentState?.isGenerating || document.visibilityState !== 'visible') return;
@@ -2596,7 +3643,13 @@
           const turn = turnEl._turnData;
           if (!turn) continue;
           const lblEl = turnEl.querySelector('.turn-label');
-          if (lblEl) lblEl.textContent = formatTurnHeader(turn, turn.items?.length || 0).label;
+          if (lblEl) {
+            const nextHtml = renderTurnLabelHtml(turn);
+            if (lblEl._lastHtml !== nextHtml) {
+              lblEl._lastHtml = nextHtml;
+              lblEl.innerHTML = nextHtml;
+            }
+          }
           for (const cardEl of turnEl.querySelectorAll('.step-card[data-running="true"]')) {
             const item = cardEl._itemData;
             if (!item?.startedAtMs) continue;

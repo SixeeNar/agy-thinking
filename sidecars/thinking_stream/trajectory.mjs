@@ -46,17 +46,98 @@ function isRunningStatus(status) {
   );
 }
 
-function fileBasename(uriOrPath) {
+function decodeFilePath(uriOrPath) {
   if (!uriOrPath || typeof uriOrPath !== 'string') return '';
-  const clean = uriOrPath.replace(/^file:\/\//i, '').replace(/\\/g, '/');
+  let clean = uriOrPath;
+  if (/^file:\/\//i.test(clean)) {
+    clean = clean.replace(/^file:\/\//i, '');
+    try {
+      clean = decodeURIComponent(clean);
+    } catch {
+      // 非法百分比编码时保留原文，避免抛错
+    }
+    if (/^\/[A-Za-z]:[\\/]/.test(clean)) clean = clean.slice(1);
+  }
+  return clean;
+}
+
+function fileBasename(uriOrPath) {
+  const clean = decodeFilePath(uriOrPath).replace(/\\/g, '/');
+  if (!clean) return '';
   return basename(clean) || clean;
+}
+
+const LIVE_DETAIL_KEYS = [
+  'toolSummary',
+  'title',
+  'description',
+  'objective',
+  'task',
+  'task_name',
+  'name',
+  'question',
+  'questions',
+  'prompt',
+  'message',
+  'CommandLine',
+  'command',
+  'cmd',
+  'queries',
+  'query',
+  'Query',
+  'pattern',
+  'url',
+  'uri',
+  'Path',
+  'file_path',
+  'path',
+  'target',
+  'action',
+  'status',
+];
+
+function normalizeLiveDetail(val) {
+  let text = '';
+  if (typeof val === 'string') {
+    text = val;
+  } else if (Array.isArray(val) && val.every((v) => typeof v === 'string')) {
+    text = val.join(', ');
+  } else if (Array.isArray(val)) {
+    for (const entry of val) {
+      if (entry && typeof entry === 'object' && typeof entry.question === 'string' && entry.question.trim()) {
+        text = entry.question;
+        break;
+      }
+    }
+  }
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  return clean.length > 160 ? `${clean.slice(0, 159).trimEnd()}…` : clean;
+}
+
+function extractLiveToolDetail(args, toolName, fallbackSummary = '') {
+  if (args && typeof args === 'object' && !Array.isArray(args)) {
+    for (const key of LIVE_DETAIL_KEYS) {
+      if (!(key in args)) continue;
+      let val = args[key];
+      if ((key === 'Path' || key === 'file_path' || key === 'path') && typeof val === 'string') {
+        val = fileBasename(val) || val;
+      }
+      const detail = normalizeLiveDetail(val);
+      if (detail) return detail;
+    }
+  }
+  return normalizeLiveDetail(fallbackSummary) || normalizeLiveDetail(toolName);
 }
 
 function buildToolItem(step, fallbackIdx, activeId, allocId) {
   const meta = step?.metadata || {};
   const toolCall = meta.toolCall || {};
   const stepIdx = meta.sourceTrajectoryStepInfo?.stepIndex ?? fallbackIdx;
-  const args = parseJsonSafe(toolCall.argumentsJson) || step?.generic?.args || {};
+  const parsedArgs = parseJsonSafe(toolCall.argumentsJson);
+  const args = (parsedArgs && typeof parsedArgs === 'object' && !Array.isArray(parsedArgs))
+    ? parsedArgs
+    : (step?.generic?.args && typeof step.generic.args === 'object' ? step.generic.args : {});
   const toolName = toolCall.name || '';
   const type = step?.type || '';
   const running = isRunningStatus(step?.status);
@@ -78,10 +159,12 @@ function buildToolItem(step, fallbackIdx, activeId, allocId) {
     return {
       id: allocId(`${activeId}:s${stepIdx}`, fallbackIdx),
       kind: 'cmd',
+      toolName: toolName || 'run_command',
       stepIndex: stepIdx,
       status,
       label: '运行命令',
       summary,
+      liveDetail: extractLiveToolDetail(args, toolName || 'run_command', summary),
       detail: [cwd ? `# cwd: ${cwd}` : '', cmd].filter(Boolean).join('\n'),
       durationSec,
       startedAtMs,
@@ -105,16 +188,20 @@ function buildToolItem(step, fallbackIdx, activeId, allocId) {
       Boolean(step?.codeAction?.actionSpec?.command?.isEdit) ||
       type === 'CORTEX_STEP_TYPE_CODE_ACTION';
     const label = toolName === 'write_file' ? '写入文件' : isEdit ? '修改文件' : '读取文件';
+    const resolvedToolName = toolName || (isEdit ? 'edit_file' : 'read_file');
     const hasRange = args.StartLine != null || args.EndLine != null;
     const range = hasRange ? ` (${args.StartLine ?? 1}-${args.EndLine ?? ''})` : '';
+    const decodedPath = decodeFilePath(fileUri);
     return {
       id: allocId(`${activeId}:s${stepIdx}`, fallbackIdx),
       kind: 'file',
+      toolName: resolvedToolName,
       stepIndex: stepIdx,
       status,
       label,
       summary: `${name}${range}`,
-      detail: fileUri ? `${fileUri}${range}` : JSON.stringify(args, null, 2),
+      liveDetail: extractLiveToolDetail(args, resolvedToolName, `${name}${range}`),
+      detail: decodedPath ? `${decodedPath}${range}` : JSON.stringify(args, null, 2),
       durationSec,
       startedAtMs,
     };
@@ -125,10 +212,12 @@ function buildToolItem(step, fallbackIdx, activeId, allocId) {
     return {
       id: allocId(`${activeId}:s${stepIdx}`, fallbackIdx),
       kind: 'search',
+      toolName: toolName || 'search_web',
       stepIndex: stepIdx,
       status,
       label: '网页搜索',
       summary: query || '搜索资料',
+      liveDetail: extractLiveToolDetail(args, toolName || 'search_web', query || '搜索资料'),
       detail: query ? `query: ${query}` : JSON.stringify(args, null, 2),
       durationSec,
       startedAtMs,
@@ -139,16 +228,22 @@ function buildToolItem(step, fallbackIdx, activeId, allocId) {
 
   const previewKeys = Object.entries(args)
     .slice(0, 2)
-    .map(([k, v]) => `${k}=${typeof v === 'string' ? v.slice(0, 36) : JSON.stringify(v)}`)
+    .map(([k, v]) => {
+      const rawVal = typeof v === 'string' ? v : JSON.stringify(v);
+      const shortVal = rawVal && rawVal.length > 36 ? `${rawVal.slice(0, 35)}…` : (rawVal || '');
+      return `${k}=${shortVal}`;
+    })
     .join(', ');
 
   return {
     id: allocId(`${activeId}:s${stepIdx}`, fallbackIdx),
     kind: 'tool',
+    toolName,
     stepIndex: stepIdx,
     status,
     label: '工具调用',
     summary: previewKeys ? `${toolName} · ${previewKeys}` : toolName,
+    liveDetail: extractLiveToolDetail(args, toolName, previewKeys),
     detail: Object.keys(args).length ? JSON.stringify(args, null, 2) : '{}',
     durationSec,
     startedAtMs,
@@ -180,6 +275,7 @@ export function buildTurnsPayload(conversations, activeId, trajectoryData, optio
         createdAt,
         startedAtMs: parseIsoMs(createdAt),
         completedAtMs: null,
+        hasGeneratingStep: false,
         items: [],
       };
       turns.push(currentTurn);
@@ -200,6 +296,7 @@ export function buildTurnsPayload(conversations, activeId, trajectoryData, optio
         createdAt,
         startedAtMs: parseIsoMs(createdAt),
         completedAtMs: null,
+        hasGeneratingStep: false,
         items: [],
       };
       turns.push(currentTurn);
@@ -211,42 +308,80 @@ export function buildTurnsPayload(conversations, activeId, trajectoryData, optio
     if (type === 'CORTEX_STEP_TYPE_PLANNER_RESPONSE') {
       const pr = step.plannerResponse || {};
       const thinking = typeof pr.thinking === 'string' ? pr.thinking : '';
+      const hasThinking = Boolean(thinking.trim());
+      const replyText = String(pr.modifiedResponse || pr.response || '').trim();
+      const hasResponse = Boolean(replyText);
       const isGenerating = isRunningStatus(step.status);
       const meta = step.metadata || {};
       const completedMs = parseIsoMs(meta.completedAt || meta.finishedGeneratingAt);
-      const turn = ensureTurn('当前会话', meta.createdAt || '');
-      if (completedMs) turn.completedAtMs = Math.max(turn.completedAtMs || 0, completedMs);
-
-      if (!thinking && !isGenerating) continue;
-
-      const stepIdx = meta.sourceTrajectoryStepInfo?.stepIndex ?? i;
-      const viewableAtMs = parseIsoMs(meta.viewableAt || meta.createdAt);
+      const thinkDurationSec = parseDurationSec(pr.thinkingDuration);
       const toolCalls = Array.isArray(pr.toolCalls)
         ? pr.toolCalls.map((t) => t?.name).filter(Boolean)
         : [];
+      // 只要正文已出、已有工具调用、已带完成时间戳，或思考耗时严格 > 0（防止 protobuf 默认 "0s" 误判），思考阶段即已结束
+      const thinkingDone = Boolean(
+        hasResponse ||
+        toolCalls.length > 0 ||
+        completedMs ||
+        (typeof thinkDurationSec === 'number' && thinkDurationSec > 0)
+      );
+      const isThinkGenerating = isGenerating && !thinkingDone;
+      const turn = ensureTurn('当前会话', meta.createdAt || '');
+      if (isGenerating) turn.hasGeneratingStep = true;
+      if (completedMs) turn.completedAtMs = Math.max(turn.completedAtMs || 0, completedMs);
 
-      turn.items.push({
-        id: allocId(`${activeId}:t${stepIdx}`, i),
-        kind: 'think',
-        stepIndex: stepIdx,
-        status: isGenerating ? 'generating' : 'done',
-        label: '思考',
-        thinking,
-        durationSec: parseDurationSec(pr.thinkingDuration),
-        startedAtMs: viewableAtMs,
-        thinkingTokens: Number(meta.modelUsage?.thinkingOutputTokens || 0),
-        tools: toolCalls,
-        hasResponse: Boolean(pr.response || pr.modifiedResponse),
-      });
+      const stepIdx = meta.sourceTrajectoryStepInfo?.stepIndex ?? i;
+      const viewableAtMs = parseIsoMs(meta.viewableAt || meta.createdAt);
+      if (thinkingDone && !completedMs && viewableAtMs && typeof thinkDurationSec === 'number' && thinkDurationSec > 0) {
+        const estEndMs = viewableAtMs + Math.round(thinkDurationSec * 1000);
+        turn.completedAtMs = Math.max(turn.completedAtMs || 0, estEndMs);
+      }
+
+      if (hasThinking || isThinkGenerating) {
+        turn.items.push({
+          id: allocId(`${activeId}:t${stepIdx}`, i),
+          kind: 'think',
+          stepIndex: stepIdx,
+          status: isThinkGenerating ? 'generating' : 'done',
+          label: '思考',
+          thinking,
+          durationSec: thinkDurationSec,
+          startedAtMs: viewableAtMs,
+          thinkingTokens: Number(meta.modelUsage?.thinkingOutputTokens || 0),
+          tools: toolCalls,
+          hasResponse,
+        });
+      }
+
+      // DSH 分组边界：任何非空助手回复都会截断前一个过程组，使阶段回复前后自然分为 G1 / G2
+      if (hasResponse) {
+        turn.items.push({
+          id: allocId(`${activeId}:rb${stepIdx}`, i),
+          kind: 'reply-boundary',
+          stepIndex: stepIdx,
+          status: isGenerating ? 'generating' : 'done',
+          preview: replyText.replace(/\s+/g, ' ').slice(0, 120),
+        });
+      }
       continue;
+    }
+
+    // 即使隐藏工具胶囊，也需同步追踪在途步骤与完成时间，避免工具执行期间误判整轮已完成
+    const stepIsRunning = isRunningStatus(step?.status);
+    const stepCompletedMs = parseIsoMs(step?.metadata?.completedAt);
+    if (stepIsRunning) {
+      const turn = ensureTurn('当前会话', step?.metadata?.createdAt || '');
+      turn.hasGeneratingStep = true;
+    }
+    if (stepCompletedMs && currentTurn) {
+      currentTurn.completedAtMs = Math.max(currentTurn.completedAtMs || 0, stepCompletedMs);
     }
 
     if (includeTools) {
       const item = buildToolItem(step, i, activeId, allocId);
       if (item) {
         const turn = ensureTurn('当前会话', step?.metadata?.createdAt || '');
-        const completedMs = parseIsoMs(step?.metadata?.completedAt);
-        if (completedMs) turn.completedAtMs = Math.max(turn.completedAtMs || 0, completedMs);
+        if (stepCompletedMs) turn.completedAtMs = Math.max(turn.completedAtMs || 0, stepCompletedMs);
         turn.items.push(item);
       }
     }
@@ -255,21 +390,32 @@ export function buildTurnsPayload(conversations, activeId, trajectoryData, optio
   for (const turn of turns) {
     let thinkCount = 0;
     let toolCount = 0;
-    let running = false;
+    let running = Boolean(turn.hasGeneratingStep);
+    let hasError = false;
+    let firstProcessMs = null;
     for (const item of turn.items) {
+      if (item.kind === 'reply-boundary') {
+        if (item.status === 'generating') running = true;
+        continue;
+      }
+      if (firstProcessMs === null && item.startedAtMs) firstProcessMs = item.startedAtMs;
       if (item.kind === 'think') {
         thinkCount += 1;
         if (item.status === 'generating') running = true;
       } else {
         toolCount += 1;
         if (item.status === 'running') running = true;
+        if (item.status === 'error') hasError = true;
       }
     }
-    const firstMs = turn.items[0]?.startedAtMs ?? turn.startedAtMs;
+    const firstMs = firstProcessMs ?? turn.startedAtMs;
     const endMs = turn.completedAtMs;
     turn.thinkCount = thinkCount;
     turn.toolCount = toolCount;
+    turn.hasProcess = thinkCount > 0 || toolCount > 0;
     turn.isRunning = running;
+    turn.hasError = hasError;
+    turn.endReason = running ? 'running' : hasError ? 'error' : 'done';
     turn.durationSec =
       firstMs && endMs && endMs >= firstMs
         ? Math.round(((endMs - firstMs) / 1000) * 10) / 10

@@ -19,13 +19,19 @@ function sampleTextSig(str) {
 }
 
 function computeSlimSignature(slimData, publicSettings) {
-  let sig = `${slimData.activeId}|${slimData.activeStatus}|${slimData.isGenerating}|${JSON.stringify(publicSettings)}|`;
+  let sig = `${slimData.activeId}|${slimData.activeStatus}|${slimData.isGenerating}|${slimData.cacheEpoch || 0}|${JSON.stringify(publicSettings)}|`;
   for (const turn of slimData.turns || []) {
-    sig += `${turn.turnIndex}:${turn.items.length}:${turn.isRunning}:${turn.durationSec ?? ''}:`;
+    sig += `${turn.turnIndex}:${turn.items.length}:${turn.isRunning}:${turn.hasError ? 1 : 0}:${turn.durationSec ?? ''}:`;
     for (const item of turn.items || []) {
+      if (item.kind === 'reply-boundary') {
+        sig += `rb:${item.id};`;
+        continue;
+      }
       const len = item.kind === 'think' ? (item.thinking?.length || 0) : (item.detail?.length || 0);
       const tSig = sampleTextSig(item.translatedThinking);
-      sig += `${item.id}/${item.status}/${len}/${tSig}/${item.translateStatus || ''}/${item.translateModel || ''}/${item.translateError || ''}/${item.thinkingTokens || 0}/${item.durationSec ?? ''};`;
+      const fSig = sampleTextSig(item.fullTranslatedThinking);
+      const nSig = sampleTextSig(item.narrativeSummary);
+      sig += `${item.id}/${item.status}/${len}/${tSig}/${item.translateStatus || ''}/${item.translatePhase || ''}/${item.translateModel || ''}/${item.translateError || ''}/${fSig}/${item.fullTranslateStatus || ''}/${item.fullTranslateModel || ''}/${item.fullTranslateError || ''}/${nSig}/${item.narrativeStatus || ''}/${item.narrativeModel || ''}/${item.narrativeError || ''}/${item.thinkingTokens || 0}/${item.durationSec ?? ''};`;
     }
   }
   return sig;
@@ -42,27 +48,44 @@ function getClientBundle(owner) {
     }
     globalThis.__agyThinkingInline?.dispose?.();
 
-    const openState = new Map();
-    const userPinnedSet = new Set();
+    const openState = new Map();       // turnKey / turnKey:g:gKey / turnKey:th:id / turnKey:tl:id -> boolean
+    const userPinnedSet = new Set();   // 用户手动点击过的 key
+    const turnAutoFoldedSet = new Set(); // 已触发过自动折叠的 turnKey
+    const groupFollowMap = new Map();  // groupOpenKey -> boolean (运行中组独立跟底开关)
+    const liveTitleCache = new Map();  // groupOpenKey -> { title, iconKey, activity, committedAt, pending, timer }
     const rawOverrideMap = new Map();
+    const fullDetailMap = new Map();
     const expandedFullMap = new Map();
-    const streamShownMap = new Map(); // stepKey -> { text, shownLen, modeKey, stepEl, item, effectiveMode }
-    const turnSettledMap = new Map();
+    const streamShownMap = new Map();  // itemId -> { text, shownLen, modeKey, rowEl, item, effectiveMode, running, isStreamingThink, summaryEnabled }
     const pendingActions = [];
     let lastActiveConvId = '';
+    let lastTranslateStyle = '';
+    let lastCacheEpoch = -1;
     let streamRaf = 0;
     let lastStreamTickAt = 0;
     let timerHandle = null;
     let lastData = null;
     let lastSettings = null;
 
+    const LIVE_TITLE_MIN_MS = 150;
+
     ${SHARED_RENDER_SOURCE}
 
+    function parseOpaqueRgb(bg) {
+      const m = String(bg || '').match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)(?:,\\s*([\\d.]+))?\\)/i);
+      if (!m) return null;
+      if (m[4] !== undefined && Number(m[4]) === 0) return null;
+      return [Number(m[1]), Number(m[2]), Number(m[3])];
+    }
+
     function detectTheme() {
-      const bg = getComputedStyle(document.body).backgroundColor || '';
-      const m = bg.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/i);
-      if (!m) return 'dark';
-      const lum = (0.2126 * Number(m[1]) + 0.7152 * Number(m[2]) + 0.0722 * Number(m[3])) / 255;
+      const rgb =
+        parseOpaqueRgb(getComputedStyle(document.body).backgroundColor) ||
+        parseOpaqueRgb(getComputedStyle(document.documentElement).backgroundColor);
+      if (!rgb) {
+        return window.matchMedia?.('(prefers-color-scheme: light)')?.matches ? 'light' : 'dark';
+      }
+      const lum = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
       return lum < 0.5 ? 'dark' : 'light';
     }
 
@@ -74,292 +97,610 @@ function getClientBundle(owner) {
       return cid || '';
     }
 
+    function resetTurnInnerDisclosures(turnKey) {
+      const prefix = turnKey + ':';
+      for (const k of Array.from(openState.keys())) {
+        if (k.startsWith(prefix)) openState.delete(k);
+      }
+      for (const k of Array.from(userPinnedSet)) {
+        if (k.startsWith(prefix)) userPinnedSet.delete(k);
+      }
+      for (const k of Array.from(groupFollowMap.keys())) {
+        if (k.startsWith(prefix)) groupFollowMap.delete(k);
+      }
+    }
+
+    function clearLiveTitleTimers() {
+      for (const rec of liveTitleCache.values()) {
+        if (rec?.timer) clearTimeout(rec.timer);
+      }
+      liveTitleCache.clear();
+    }
+
     const SHADOW_CSS = \`
       :host {
         display: block;
-        margin: 4px 0 10px;
+        margin: 4px 0 12px;
         font-family: "PingFang SC", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+        --xx-bg-sticky: #0d111b;
         --xx-fg: rgba(240, 244, 255, 0.94);
-        --xx-muted: rgba(182, 196, 224, 0.82);
+        --xx-muted: rgba(182, 196, 224, 0.84);
         --xx-dim: rgba(146, 165, 200, 0.62);
-        --xx-surface: rgba(77, 163, 255, 0.048);
-        --xx-surface-hover: rgba(155, 114, 203, 0.095);
+        --xx-surface: rgba(77, 163, 255, 0.052);
+        --xx-surface-hover: rgba(155, 114, 203, 0.11);
         --xx-card: rgba(14, 19, 34, 0.56);
-        --xx-border: rgba(138, 174, 242, 0.14);
-        --xx-border-strong: rgba(155, 114, 203, 0.42);
+        --xx-border: rgba(138, 174, 242, 0.16);
+        --xx-border-strong: rgba(155, 114, 203, 0.44);
         --xx-line: rgba(138, 174, 242, 0.24);
-        --xx-code-bg: rgba(7, 10, 20, 0.42);
+        --xx-code-bg: rgba(7, 10, 20, 0.44);
         --xx-accent: #4da3ff;
         --xx-accent-mid: #9b72cb;
         --xx-accent-2: #e879a8;
-        --xx-think: #9b72cb;
-        --xx-cmd: #34d399;
+        --xx-grad: linear-gradient(135deg, #4da3ff 0%, #9b72cb 52%, #e879a8 100%);
+        --xx-grad-flow: linear-gradient(90deg, #4da3ff 0%, #9b72cb 36%, #e879a8 68%, #4da3ff 100%);
+        --xx-grad-soft: linear-gradient(135deg, rgba(77, 163, 255, 0.14) 0%, rgba(155, 114, 203, 0.15) 52%, rgba(232, 121, 168, 0.13) 100%);
+        --xx-think: #b392f0;
+        --xx-cmd: #2dd4bf;
         --xx-file: #60a5fa;
+        --xx-edit: #a78bfa;
         --xx-search: #38bdf8;
-        --xx-tool: #f59e0b;
+        --xx-code: #818cf8;
+        --xx-sub: #f472b6;
+        --xx-plan: #34d399;
+        --xx-tool: #e879a8;
         --xx-err: #fb7185;
       }
       .xx-wrap[data-theme="light"] {
+        --xx-bg-sticky: #f6f8fe;
         --xx-fg: rgba(15, 23, 42, 0.92);
         --xx-muted: rgba(68, 84, 116, 0.86);
         --xx-dim: rgba(100, 116, 148, 0.72);
-        --xx-surface: rgba(66, 133, 244, 0.045);
-        --xx-surface-hover: rgba(139, 92, 246, 0.085);
-        --xx-card: rgba(255, 255, 255, 0.82);
-        --xx-border: rgba(66, 133, 244, 0.14);
-        --xx-border-strong: rgba(139, 92, 246, 0.36);
-        --xx-line: rgba(66, 133, 244, 0.2);
-        --xx-code-bg: rgba(66, 133, 244, 0.06);
+        --xx-surface: rgba(66, 133, 244, 0.055);
+        --xx-surface-hover: rgba(139, 92, 246, 0.10);
+        --xx-card: rgba(255, 255, 255, 0.86);
+        --xx-border: rgba(66, 133, 244, 0.16);
+        --xx-border-strong: rgba(139, 92, 246, 0.42);
+        --xx-line: rgba(66, 133, 244, 0.22);
+        --xx-code-bg: rgba(66, 133, 244, 0.07);
         --xx-accent: #4285f4;
         --xx-accent-mid: #8b5cf6;
         --xx-accent-2: #d96570;
+        --xx-grad: linear-gradient(135deg, #4285f4 0%, #8b5cf6 54%, #d96570 100%);
+        --xx-grad-flow: linear-gradient(90deg, #4285f4 0%, #8b5cf6 36%, #d96570 68%, #4285f4 100%);
+        --xx-grad-soft: linear-gradient(135deg, rgba(66, 133, 244, 0.11) 0%, rgba(139, 92, 246, 0.12) 54%, rgba(217, 101, 112, 0.10) 100%);
         --xx-think: #7c3aed;
-        --xx-cmd: #059669;
+        --xx-cmd: #0d9488;
         --xx-file: #2563eb;
+        --xx-edit: #7c3aed;
         --xx-search: #0284c7;
-        --xx-tool: #d97706;
+        --xx-code: #4f46e5;
+        --xx-sub: #db2777;
+        --xx-plan: #059669;
+        --xx-tool: #db2777;
         --xx-err: #e11d48;
       }
       .xx-wrap, .xx-wrap * { box-sizing: border-box; }
       .xx-wrap {
         color: var(--xx-fg);
         font-size: 13px;
-        line-height: 1.58;
+        line-height: 1.56;
       }
       .xx-wrap[data-font="sm"] { font-size: 12px; }
       .xx-wrap[data-font="sm"] .xx-think-md { font-size: 11.8px; line-height: 1.56; }
       .xx-wrap[data-font="lg"] { font-size: 14px; }
-      .xx-wrap[data-font="lg"] .xx-think-md { font-size: 13.5px; line-height: 1.68; }
-      .xx-wrap[data-compact="true"] .xx-steps { gap: 1px; margin: 4px 0 2px 10px; padding-left: 10px; }
-      .xx-wrap[data-compact="true"] .xx-step-head { min-height: 24px; padding: 2px 7px; }
-      .xx-wrap[data-compact="true"] .xx-step-body { padding: 2px 10px 8px 24px; }
+      .xx-wrap[data-font="lg"] .xx-think-md { font-size: 13.6px; line-height: 1.68; }
+
+      /* ─── Layer 1: 整轮折叠控件（保留极光胶囊风格 + DSH 语义状态） ─── */
       .xx-turn-bar {
+        position: relative;
+        overflow: hidden;
         display: inline-flex;
         align-items: center;
         gap: 7px;
         max-width: 100%;
-        padding: 4px 12px 4px 9px;
+        padding: 4.5px 13px 4.5px 10px;
         border-radius: 999px;
-        border: 1px solid var(--xx-border);
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.042), rgba(255, 255, 255, 0.018));
-        color: var(--xx-muted);
-        font: inherit;
-        font-size: 12.2px;
-        cursor: pointer;
-        user-select: none;
-        transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease, transform 0.12s ease;
-      }
-      .xx-wrap[data-theme="light"] .xx-turn-bar {
-        background: linear-gradient(135deg, rgba(15, 23, 42, 0.036), rgba(15, 23, 42, 0.014));
-      }
-      .xx-turn-bar:hover {
-        background: var(--xx-surface-hover);
-        border-color: var(--xx-border-strong);
+        border: 1px solid rgba(155, 114, 203, 0.26);
+        background: linear-gradient(135deg, rgba(77, 163, 255, 0.09), rgba(155, 114, 203, 0.09) 52%, rgba(232, 121, 168, 0.08));
         color: var(--xx-fg);
-      }
-      .xx-turn-bar:active { transform: scale(0.99); }
-      .xx-wrap[data-turn-open="true"] .xx-turn-bar {
-        background: var(--xx-surface);
-        border-color: var(--xx-border);
-        color: var(--xx-fg);
-      }
-      .xx-wrap[data-running="true"] .xx-turn-bar {
-        border-color: var(--xx-border-strong);
-        box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.12), 0 4px 16px -6px rgba(139, 92, 246, 0.25);
-      }
-      .xx-turn-star {
-        width: 12px;
-        height: 12px;
-        flex: 0 0 auto;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        color: #22c55e;
-        opacity: 0.85;
-      }
-      .xx-wrap[data-running="true"] .xx-turn-star {
-        color: var(--xx-think);
-        opacity: 1;
-        animation: xx-star-pulse 1.5s ease-in-out infinite;
-      }
-      @keyframes xx-star-pulse {
-        0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
-        50% { transform: scale(0.84) rotate(45deg); opacity: 0.55; }
-      }
-      .xx-turn-chev {
-        width: 13px;
-        height: 13px;
-        flex: 0 0 auto;
-        transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
-        opacity: 0.72;
-      }
-      .xx-wrap[data-turn-open="true"] .xx-turn-chev { transform: rotate(90deg); }
-      .xx-turn-label { font-weight: 500; white-space: nowrap; }
-      .xx-wrap[data-running="true"] .xx-turn-label {
-        background: linear-gradient(90deg, var(--xx-accent) 0%, var(--xx-accent-mid) 45%, var(--xx-accent-2) 75%, var(--xx-accent) 100%);
-        background-size: 220% auto;
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        animation: xx-shimmer 2.1s linear infinite;
-      }
-      @keyframes xx-shimmer { to { background-position: 220% center; } }
-      .xx-turn-counts { font-size: 11.5px; color: var(--xx-dim); white-space: nowrap; }
-
-      /* 平滑 Grid 折叠容器 */
-      .xx-steps-shell {
-        display: grid;
-        grid-template-rows: 0fr;
-        opacity: 0;
-        transition: grid-template-rows 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
-      }
-      .xx-wrap[data-turn-open="true"] .xx-steps-shell {
-        grid-template-rows: 1fr;
-        opacity: 1;
-      }
-      .xx-steps-inner { overflow: hidden; }
-      .xx-steps {
-        margin: 6px 0 4px 12px;
-        padding: 2px 0 2px 12px;
-        border-left: 1.5px solid var(--xx-line);
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-      }
-
-      .xx-step {
-        border-radius: 10px;
-        border: 1px solid transparent;
-        transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
-      }
-      .xx-step[data-open="true"] {
-        background: linear-gradient(180deg, var(--xx-surface), var(--xx-card));
-        border-color: var(--xx-border);
-        box-shadow: 0 2px 10px -4px rgba(0, 0, 0, 0.22);
-        margin: 3px 0;
-      }
-      .xx-wrap[data-theme="light"] .xx-step[data-open="true"] {
-        box-shadow: 0 2px 10px -6px rgba(15, 23, 42, 0.12);
-      }
-      .xx-step[data-open="true"][data-running="true"] {
-        border-color: var(--xx-border-strong);
-        box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.1), 0 4px 16px -6px rgba(139, 92, 246, 0.24);
-      }
-      .xx-step-head {
-        display: flex;
-        align-items: center;
-        gap: 7px;
-        width: 100%;
-        min-height: 28px;
-        padding: 4px 9px;
-        border: none;
-        border-radius: 9px;
-        background: transparent;
-        color: var(--xx-muted);
         font: inherit;
         font-size: 12.4px;
-        text-align: left;
         cursor: pointer;
         user-select: none;
-        transition: background 0.14s ease, color 0.14s ease;
+        box-shadow: 0 2px 12px -6px rgba(77, 163, 255, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.2s ease, transform 0.12s ease;
       }
-      .xx-step-head:hover { background: var(--xx-surface-hover); color: var(--xx-fg); }
-      .xx-step[data-open="true"] .xx-step-head {
-        padding-bottom: 3px;
+      .xx-wrap[data-theme="light"] .xx-turn-bar {
+        border-color: rgba(139, 92, 246, 0.24);
+        background: linear-gradient(135deg, rgba(66, 133, 244, 0.08), rgba(139, 92, 246, 0.08) 54%, rgba(217, 101, 112, 0.07));
+        box-shadow: 0 2px 10px -6px rgba(139, 92, 246, 0.22);
       }
-      .xx-step[data-kind="think"][data-open="true"][data-hide-sum="true"] .xx-step-sep {
-        display: none;
-      }
-      .xx-step[data-kind="think"][data-open="true"][data-hide-sum="true"] .xx-step-sum {
-        height: 0;
-        overflow: hidden;
-        color: transparent;
-        user-select: none;
+      .xx-turn-bar:disabled { cursor: default; }
+      .xx-turn-bar::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(105deg, transparent 20%, rgba(255, 255, 255, 0.22) 48%, rgba(232, 121, 168, 0.16) 56%, transparent 80%);
+        transform: translateX(-130%);
         pointer-events: none;
       }
-
-      .xx-step-ico {
+      .xx-turn-bar:not(:disabled):hover {
+        background: var(--xx-grad-soft);
+        border-color: var(--xx-border-strong);
+        box-shadow: 0 0 0 1px rgba(155, 114, 203, 0.18), 0 4px 18px -6px rgba(155, 114, 203, 0.42);
+      }
+      .xx-turn-bar:not(:disabled):hover::after { animation: xx-sheen 1.15s cubic-bezier(0.22, 1, 0.36, 1); }
+      .xx-turn-bar:not(:disabled):active { transform: scale(0.988); }
+      .xx-wrap[data-turn-open="true"] .xx-turn-bar {
+        background: var(--xx-grad-soft);
+        border-color: rgba(155, 114, 203, 0.34);
+      }
+      .xx-wrap[data-running="true"] .xx-turn-bar {
+        border-color: rgba(232, 121, 168, 0.48);
+        box-shadow: 0 0 0 1px rgba(155, 114, 203, 0.22), 0 4px 20px -5px rgba(155, 114, 203, 0.48), 0 0 16px -6px rgba(77, 163, 255, 0.38);
+      }
+      .xx-wrap[data-running="true"] .xx-turn-bar::after { animation: xx-sheen 2.4s ease-in-out infinite; }
+      @keyframes xx-sheen {
+        0% { transform: translateX(-130%); }
+        60%, 100% { transform: translateX(130%); }
+      }
+      .xx-turn-star {
+        position: relative;
         width: 14px;
         height: 14px;
         flex: 0 0 auto;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        color: var(--xx-dim);
+        filter: drop-shadow(0 0 5px rgba(155, 114, 203, 0.55));
       }
-      .xx-step[data-kind="think"] .xx-step-ico { color: var(--xx-think); }
-      .xx-step[data-kind="cmd"] .xx-step-ico { color: var(--xx-cmd); }
-      .xx-step[data-kind="file"] .xx-step-ico { color: var(--xx-file); }
-      .xx-step[data-kind="search"] .xx-step-ico { color: var(--xx-search); }
-      .xx-step[data-kind="tool"] .xx-step-ico { color: var(--xx-tool); }
-      .xx-step[data-status="error"] .xx-step-ico { color: var(--xx-err); }
-      .xx-step[data-running="true"] .xx-step-ico { animation: xx-spin 2.2s linear infinite; }
+      .xx-turn-star svg { display: none; }
+      .xx-turn-star::before {
+        content: "";
+        width: 100%;
+        height: 100%;
+        display: block;
+        background: var(--xx-grad-flow);
+        background-size: 220% 220%;
+        background-position: 15% 50%;
+        -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M12 1.5L14.6 9.4L22.5 12L14.6 14.6L12 22.5L9.4 14.6L1.5 12L9.4 9.4Z'/%3E%3C/svg%3E") center/contain no-repeat;
+        mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M12 1.5L14.6 9.4L22.5 12L14.6 14.6L12 22.5L9.4 14.6L1.5 12L9.4 9.4Z'/%3E%3C/svg%3E") center/contain no-repeat;
+      }
+      .xx-wrap[data-running="true"] .xx-turn-star {
+        filter: drop-shadow(0 0 8px rgba(232, 121, 168, 0.78));
+        animation: xx-star-pulse 1.6s ease-in-out infinite;
+      }
+      .xx-wrap[data-running="true"] .xx-turn-star::before { animation: xx-aurora-shift 2.2s linear infinite; }
+      @keyframes xx-aurora-shift {
+        0% { background-position: 0% 50%; }
+        100% { background-position: 220% 50%; }
+      }
+      @keyframes xx-star-pulse {
+        0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        50% { transform: scale(0.84) rotate(45deg); opacity: 0.72; }
+      }
+      .xx-turn-label { font-weight: 550; white-space: nowrap; }
+      .xx-turn-num {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      .xx-wrap:not([data-running="true"]) .xx-turn-label {
+        background: linear-gradient(90deg, var(--xx-fg) 0%, #c8dcff 58%, #e4c6ff 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .xx-wrap[data-theme="light"]:not([data-running="true"]) .xx-turn-label {
+        background: linear-gradient(90deg, #1e293b 0%, #4285f4 62%, #8b5cf6 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .xx-wrap[data-running="true"] .xx-turn-label {
+        background: var(--xx-grad-flow);
+        background-size: 220% auto;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: xx-shimmer 2.1s linear infinite;
+      }
+      .xx-wrap[data-error="true"]:not([data-running="true"]) .xx-turn-label {
+        background: none;
+        color: var(--xx-err);
+      }
+      @keyframes xx-shimmer { to { background-position: 220% center; } }
+      .xx-turn-chev {
+        width: 13px;
+        height: 13px;
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--xx-muted);
+        opacity: 0.76;
+        transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .xx-turn-chev svg { width: 13px; height: 13px; display: block; }
+      .xx-wrap[data-turn-open="true"] .xx-turn-chev { transform: rotate(180deg); }
+      .xx-turn-bar:disabled .xx-turn-chev { display: none; }
+
+      /* 整轮展开壳层 + 极光星轨 */
+      .xx-turn-shell {
+        display: grid;
+        grid-template-rows: 0fr;
+        opacity: 0;
+        transition: grid-template-rows 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.16s ease;
+      }
+      .xx-wrap[data-turn-open="true"] .xx-turn-shell {
+        grid-template-rows: 1fr;
+        opacity: 1;
+      }
+      .xx-turn-inner { overflow: hidden; }
+      .xx-groups {
+        position: relative;
+        margin: 8px 0 4px 0;
+        padding: 4px 0 4px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .xx-wrap[data-compact="true"] .xx-groups { gap: 5px; padding: 3px 0 2px 26px; }
+      .xx-groups::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 8px;
+        left: 16px;
+        width: 1.5px;
+        border-radius: 999px;
+        background: linear-gradient(180deg, rgba(77, 163, 255, 0.46) 0%, rgba(155, 114, 203, 0.36) 55%, rgba(232, 121, 168, 0.2) 88%, transparent 100%);
+      }
+      .xx-groups::after {
+        content: "";
+        display: none;
+        position: absolute;
+        top: 0;
+        bottom: 8px;
+        left: 16px;
+        width: 1.5px;
+        border-radius: 999px;
+        background: linear-gradient(
+          180deg,
+          transparent 0%,
+          transparent 36%,
+          rgba(77, 163, 255, 0.95) 45%,
+          rgba(155, 114, 203, 1) 50%,
+          rgba(232, 121, 168, 0.95) 55%,
+          transparent 64%,
+          transparent 100%
+        );
+        background-size: 100% 260%;
+        background-repeat: no-repeat;
+        filter: drop-shadow(0 0 2.5px rgba(155, 114, 203, 0.58));
+        pointer-events: none;
+      }
+      .xx-wrap[data-running="true"] .xx-groups::after {
+        display: block;
+        animation: xx-rail-beam 1.95s linear infinite;
+      }
+      @keyframes xx-rail-beam {
+        0% { background-position: 0 100%; opacity: 0.25; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { background-position: 0 0%; opacity: 0.25; }
+      }
+
+      /* ─── Layer 2: 二级过程组（DSH 分组头 + 图标↔箭头淡切 + 400px 限高渐隐） ─── */
+      .xx-group {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .xx-group-head {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 100%;
+        min-height: 24px;
+        padding: 2px 10px 2px 6px;
+        margin-left: 0;
+        border: 1px solid var(--xx-border);
+        border-radius: 999px;
+        background: var(--xx-surface);
+        color: var(--xx-muted);
+        font: inherit;
+        font-size: 11.8px;
+        line-height: 1.4;
+        text-align: left;
+        cursor: pointer;
+        user-select: none;
+        transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
+      }
+      .xx-group-head:hover {
+        color: var(--xx-fg);
+        background: var(--xx-surface-hover);
+        border-color: var(--xx-border-strong);
+      }
+      .xx-group[data-grouped="false"] > .xx-group-head { display: none; }
+
+      .xx-lead {
+        position: relative;
+        flex: 0 0 auto;
+        width: 18px;
+        height: 18px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--xx-think);
+      }
+      .xx-lead[data-ico="read"], .xx-lead[data-ico="file"] { color: var(--xx-file); }
+      .xx-lead[data-ico="edit"] { color: var(--xx-edit); }
+      .xx-lead[data-ico="search"], .xx-lead[data-ico="webSearch"], .xx-lead[data-ico="webFetch"] { color: var(--xx-search); }
+      .xx-lead[data-ico="cmd"] { color: var(--xx-cmd); }
+      .xx-lead[data-ico="code"] { color: var(--xx-code); }
+      .xx-lead[data-ico="subagents"] { color: var(--xx-sub); }
+      .xx-lead[data-ico="plan"] { color: var(--xx-plan); }
+      .xx-lead[data-ico="questions"], .xx-lead[data-ico="tool"] { color: var(--xx-tool); }
+      .xx-lead[data-err="true"] { color: var(--xx-err); }
+
+      .xx-act-ico, .xx-act-chev {
+        position: absolute;
+        inset: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.1s ease;
+      }
+      .xx-act-ico svg, .xx-act-chev svg { width: 14px; height: 14px; display: block; }
+      .xx-act-ico { opacity: 1; }
+      .xx-act-chev { opacity: 0; color: var(--xx-accent-mid); }
+      .xx-group-head:hover .xx-act-ico,
+      .xx-group-head:focus-visible .xx-act-ico,
+      .xx-group[data-group-open="true"] > .xx-group-head .xx-act-ico { opacity: 0; }
+      .xx-group-head:hover .xx-act-chev,
+      .xx-group-head:focus-visible .xx-act-chev,
+      .xx-group[data-group-open="true"] > .xx-group-head .xx-act-chev { opacity: 1; }
+
+      .xx-group[data-live="true"] > .xx-group-head .xx-act-ico svg {
+        animation: xx-spin 2.2s linear infinite;
+      }
       @keyframes xx-spin { to { transform: rotate(360deg); } }
 
-      .xx-step-kind {
+      .xx-group-title {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 520;
+      }
+      .xx-group[data-live="true"] > .xx-group-head .xx-group-title {
+        background: var(--xx-grad-flow);
+        background-size: 220% auto;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: xx-shimmer 2.1s linear infinite;
+      }
+
+      /* 组正文：手动展开时限高 min(400px, 50vh) + 24px 渐隐；平铺模式无组级限高 */
+      .xx-group-body-shell {
+        display: grid;
+        grid-template-rows: 0fr;
+        opacity: 0;
+        transition: grid-template-rows 0.18s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.15s ease;
+      }
+      .xx-group[data-group-open="true"] > .xx-group-body-shell,
+      .xx-group[data-grouped="false"] > .xx-group-body-shell {
+        grid-template-rows: 1fr;
+        opacity: 1;
+      }
+      .xx-group-body-inner { overflow: hidden; }
+      .xx-group-body {
+        margin-top: 6px;
+        padding: 0 4px 4px 2px;
+        max-height: min(400px, 50vh);
+        overflow-y: auto;
+        overscroll-behavior-y: auto;
+        scrollbar-gutter: stable;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .xx-group[data-grouped="false"] > .xx-group-body-shell > .xx-group-body-inner > .xx-group-body {
+        margin-top: 0;
+        padding: 0;
+        max-height: none;
+        overflow: visible;
+        scrollbar-gutter: auto;
+      }
+      .xx-wrap[data-compact="true"] .xx-group-body { gap: 2px; }
+      .xx-group-body::-webkit-scrollbar { width: 4px; }
+      .xx-group-body::-webkit-scrollbar-thumb { background: rgba(138, 174, 242, 0.28); border-radius: 999px; }
+      .xx-group-body::-webkit-scrollbar-track { background: transparent; }
+
+      .xx-group-body.xx-fade-top {
+        -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 100%);
+        mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 100%);
+      }
+      .xx-group-body.xx-fade-bottom {
+        -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 24px), transparent 100%);
+        mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 24px), transparent 100%);
+      }
+      .xx-group-body.xx-fade-top.xx-fade-bottom {
+        -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+        mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+      }
+
+      /* ─── Layer 3: 单条思考行 & 单条工具行（DSH 默认收起 + 吸顶展开） ─── */
+      .xx-row {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        border-radius: 9px;
+        border: 1px solid transparent;
+        transition: background 0.14s ease, border-color 0.14s ease;
+      }
+      .xx-row[data-open="true"] {
+        background: linear-gradient(180deg, var(--xx-surface), var(--xx-card));
+        border-color: var(--xx-border);
+        margin: 0;
+        overflow: clip;
+      }
+      .xx-row[data-open="true"][data-running="true"] {
+        border-color: var(--xx-border-strong);
+      }
+
+      .xx-row-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        min-height: 26px;
+        padding: 3px 8px;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--xx-muted);
+        font: inherit;
+        font-size: 12.2px;
+        text-align: left;
+        cursor: pointer;
+        user-select: none;
+        transition: background 0.12s ease, color 0.12s ease;
+      }
+      .xx-wrap[data-compact="true"] .xx-row-head { min-height: 23px; padding: 2px 7px; }
+      .xx-row-head:hover { background: var(--xx-surface-hover); color: var(--xx-fg); }
+
+      /* DSH 精髓：展开后的思考行头在滚动容器内无缝吸顶，避免顶部露缝穿帮 */
+      .xx-think-row[data-open="true"] > .xx-row-head {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        background: var(--xx-bg-sticky);
+        border-bottom: 1px solid rgba(138, 174, 242, 0.14);
+        border-radius: 0;
+      }
+
+      .xx-row-head:hover .xx-act-ico,
+      .xx-row-head:focus-visible .xx-act-ico,
+      .xx-row[data-open="true"] > .xx-row-head .xx-act-ico { opacity: 0; }
+      .xx-row-head:hover .xx-act-chev,
+      .xx-row-head:focus-visible .xx-act-chev,
+      .xx-row[data-open="true"] > .xx-row-head .xx-act-chev { opacity: 1; }
+      .xx-row[data-running="true"] > .xx-row-head .xx-act-ico svg {
+        animation: xx-spin 2.2s linear infinite;
+      }
+
+      .xx-row-title {
         flex: 0 0 auto;
         font-weight: 500;
         color: var(--xx-fg);
-        opacity: 0.92;
+        opacity: 0.9;
         white-space: nowrap;
       }
-      .xx-step-sep { width: 2.5px; height: 2.5px; border-radius: 50%; background: var(--xx-dim); flex: 0 0 auto; }
-      .xx-step-sum {
+      .xx-row-sep {
+        flex: 0 0 auto;
+        width: 2.5px;
+        height: 2.5px;
+        border-radius: 50%;
+        background: var(--xx-dim);
+      }
+      .xx-row-sum {
         flex: 1 1 auto;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        font-size: 12px;
+        font-size: 11.9px;
         color: var(--xx-muted);
       }
-      .xx-step[data-running="true"] .xx-step-sum {
+      /* DSH 流式思考右侧 48px 渐隐遮罩 + 极光流光 */
+      .xx-row[data-streaming="true"] .xx-row-sum {
         text-overflow: clip;
-        -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
-        mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+        -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent);
+        mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent);
+        background: var(--xx-grad-flow);
+        background-size: 220% auto;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: xx-shimmer 2.2s linear infinite;
       }
-      .xx-step-time {
+      .xx-row[data-preview="false"] .xx-row-sep,
+      .xx-row[data-preview="false"] .xx-row-sum { display: none; }
+      .xx-think-row[data-open="true"][data-hide-sum="true"] .xx-row-sep,
+      .xx-think-row[data-open="true"][data-hide-sum="true"] .xx-row-sum { display: none; }
+
+      .xx-row-time {
         flex: 0 0 auto;
-        font-size: 11px;
+        margin-left: auto;
+        font-size: 10.8px;
         color: var(--xx-dim);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
       }
-      .xx-step-chev {
-        width: 12px;
-        height: 12px;
-        flex: 0 0 auto;
-        color: var(--xx-dim);
-        transition: transform 0.16s ease;
-      }
-      .xx-step[data-open="true"] .xx-step-chev { transform: rotate(90deg); }
+      .xx-row-err { color: var(--xx-err); }
 
-      .xx-step-body-shell {
+      .xx-row-body-shell {
         display: grid;
         grid-template-rows: 0fr;
         transition: grid-template-rows 0.18s cubic-bezier(0.22, 1, 0.36, 1);
       }
-      .xx-step[data-open="true"] .xx-step-body-shell { grid-template-rows: 1fr; }
-      .xx-step-body-inner { overflow: hidden; }
-      .xx-step-body { padding: 4px 12px 10px 28px; }
+      .xx-row[data-open="true"] > .xx-row-body-shell { grid-template-rows: 1fr; }
+      .xx-row-body-inner { overflow: hidden; }
+      .xx-row-body { padding: 8px 12px 10px 30px; }
+      .xx-wrap[data-compact="true"] .xx-row-body { padding: 6px 10px 8px 26px; }
+      .xx-think-row[data-brief="true"] > .xx-row-body-shell .xx-row-body { padding: 5px 11px 7px 28px; }
+      .xx-think-row[data-brief="true"] .xx-think-md {
+        border-left: 1.5px dashed var(--xx-border);
+        font-size: 12.1px;
+        line-height: 1.58;
+        opacity: 0.86;
+      }
 
       .xx-think-md {
-        padding-left: 12px;
+        width: 100%;
+        padding-left: 11px;
         border-left: 2px solid var(--xx-line);
         color: var(--xx-fg);
-        opacity: 0.9;
-        font-size: 12.6px;
-        line-height: 1.66;
+        opacity: 0.92;
+        font-size: 12.5px;
+        line-height: 1.68;
         word-break: break-word;
         user-select: text;
       }
-      .xx-wrap[data-think-height="sm"] .xx-step:not([data-full="true"]) .xx-think-md {
+      .xx-think-row[data-running="true"] .xx-think-md {
+        border-left-color: transparent;
+        border-image: linear-gradient(180deg, var(--xx-accent), var(--xx-accent-mid), var(--xx-accent-2)) 1;
+      }
+      /* 统一 260px 限高视口 + 上下柔和渐隐（短内容自然撑开无滚动条，长内容结束不炸屏，点「展开全文」可解除） */
+      .xx-think-row:not([data-full="true"]) .xx-think-md {
+        max-height: 260px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding-right: 6px;
+      }
+      .xx-think-row:not([data-full="true"]) .xx-think-md.xx-live-fade-top {
+        -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 100%);
+        mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 100%);
+      }
+      .xx-think-row:not([data-full="true"]) .xx-think-md.xx-live-fade-bottom {
+        -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 22px), transparent 100%);
+        mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 22px), transparent 100%);
+      }
+      .xx-think-row:not([data-full="true"]) .xx-think-md.xx-live-fade-top.xx-live-fade-bottom {
+        -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%);
+        mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%);
+      }
+      .xx-wrap[data-think-height="sm"] .xx-think-row:not([data-full="true"]) .xx-think-md {
         max-height: 220px;
         overflow-y: auto;
         overscroll-behavior: contain;
         padding-right: 6px;
       }
-      .xx-wrap[data-think-height="md"] .xx-step:not([data-full="true"]) .xx-think-md {
+      .xx-wrap[data-think-height="md"] .xx-think-row:not([data-full="true"]) .xx-think-md {
         max-height: 360px;
         overflow-y: auto;
         overscroll-behavior: contain;
@@ -367,49 +708,15 @@ function getClientBundle(owner) {
       }
       .xx-think-md::-webkit-scrollbar { width: 4px; }
       .xx-think-md::-webkit-scrollbar-thumb { background: rgba(138, 174, 242, 0.28); border-radius: 999px; }
-      .xx-think-md::-webkit-scrollbar-track { background: transparent; }
-      .xx-step[data-running="true"] .xx-think-md {
-        border-left-color: transparent;
-        border-image: linear-gradient(180deg, var(--xx-accent), var(--xx-accent-mid), var(--xx-accent-2)) 1;
-      }
-      .xx-think-md p { margin: 0 0 9px; }
+      .xx-think-md p { margin: 0 0 10px; }
       .xx-think-md p:last-child { margin-bottom: 0; }
-      .xx-expand-bar {
-        display: none;
-        align-items: center;
-        justify-content: center;
-        margin-top: 6px;
-      }
-      .xx-wrap:not([data-think-height="full"]) .xx-step[data-overflow="true"] .xx-expand-bar,
-      .xx-wrap:not([data-think-height="full"]) .xx-step[data-full="true"] .xx-expand-bar {
-        display: flex;
-      }
-      .xx-expand-full-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 2px 11px;
-        border-radius: 999px;
-        border: 1px solid var(--xx-border);
-        background: var(--xx-surface);
-        color: var(--xx-muted);
-        font: inherit;
-        font-size: 11px;
-        cursor: pointer;
-        transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
-      }
-      .xx-expand-full-btn:hover {
-        background: var(--xx-surface-hover);
-        border-color: var(--xx-border-strong);
-        color: var(--xx-fg);
-      }
       .xx-think-md .md-h { margin: 8px 0 4px; font-size: 12.5px; font-weight: 600; color: var(--xx-fg); }
       .xx-think-md .md-h:first-child { margin-top: 0; }
       .xx-think-md hr { border: none; border-top: 1px solid var(--xx-border); margin: 7px 0; }
       .xx-think-md strong { color: var(--xx-fg); font-weight: 600; }
       .xx-think-md code {
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: 11.5px;
+        font-size: 11.4px;
         padding: 1px 5px;
         border-radius: 4px;
         background: var(--xx-code-bg);
@@ -422,7 +729,7 @@ function getClientBundle(owner) {
         background: var(--xx-code-bg);
         overflow-x: auto;
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: 11.5px;
+        font-size: 11.4px;
         line-height: 1.5;
         color: var(--xx-fg);
         user-select: text;
@@ -432,6 +739,77 @@ function getClientBundle(owner) {
       .xx-think-md ul, .xx-think-md ol { margin: 4px 0 7px; padding-left: 18px; }
       .xx-think-md li { margin-bottom: 2px; }
       .xx-think-md blockquote { margin: 5px 0; padding-left: 9px; border-left: 2px solid var(--xx-border); opacity: 0.88; }
+
+      /* 分步思路脉络迷你时间轴 */
+      .xx-think-md .tstep-list {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+      .xx-wrap[data-compact="true"] .xx-think-md .tstep-list { gap: 6px; }
+      .xx-think-md .tstep-node {
+        position: relative;
+        display: flex;
+        align-items: flex-start;
+        gap: 9px;
+      }
+      .xx-think-md .tstep-node:not(:last-child)::before {
+        content: "";
+        position: absolute;
+        left: 8.5px;
+        top: 20px;
+        bottom: -9px;
+        width: 1px;
+        background: linear-gradient(180deg, rgba(155, 114, 203, 0.36), rgba(77, 163, 255, 0.14));
+      }
+      .xx-think-md .tstep-idx {
+        flex: 0 0 auto;
+        width: 18px;
+        height: 18px;
+        margin-top: 1px;
+        border-radius: 999px;
+        border: 1px solid rgba(155, 114, 203, 0.42);
+        background: var(--xx-grad-soft);
+        color: var(--xx-fg);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 10.2px;
+        font-weight: 650;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .xx-think-md .tstep-body {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .xx-think-md .tstep-title {
+        font-size: 12.4px;
+        font-weight: 600;
+        color: var(--xx-fg);
+        line-height: 1.45;
+      }
+      .xx-think-md .tstep-desc {
+        margin-top: 2px;
+        color: var(--xx-muted);
+        font-size: 12.1px;
+        line-height: 1.6;
+      }
+      .xx-think-md .tstep-desc p { margin: 0 0 6px; }
+      .xx-think-md .tstep-desc p:last-child { margin-bottom: 0; }
+      .xx-row-steps-pill {
+        flex: 0 0 auto;
+        padding: 0 5px;
+        height: 16px;
+        line-height: 16px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 550;
+        color: var(--xx-think);
+        background: var(--xx-surface);
+        border: 1px solid var(--xx-border);
+        white-space: nowrap;
+      }
+      .xx-row-steps-pill:empty { display: none; }
 
       .xx-cursor {
         display: inline-block;
@@ -445,17 +823,27 @@ function getClientBundle(owner) {
       }
       @keyframes xx-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.15; } }
 
-      .xx-step-foot {
+      .xx-bilingual-raw {
+        margin-top: 8px;
+        padding-top: 7px;
+        border-top: 1px dashed var(--xx-border);
+        font-size: 11.5px;
+        opacity: 0.72;
+      }
+      .xx-row-foot {
         display: flex;
         align-items: center;
         justify-content: space-between;
         flex-wrap: wrap;
         gap: 6px;
         margin-top: 7px;
-        font-size: 11px;
+        padding-top: 5px;
+        box-shadow: inset 0 1px 0 rgba(138, 174, 242, 0.08);
+        font-size: 10.8px;
         color: var(--xx-dim);
       }
       .xx-foot-meta { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+      .xx-foot-actions { display: inline-flex; align-items: center; gap: 5px; }
       .xx-chip {
         display: inline-flex;
         align-items: center;
@@ -464,58 +852,24 @@ function getClientBundle(owner) {
         border-radius: 999px;
         background: var(--xx-surface);
         border: 1px solid var(--xx-border);
-        font-size: 10.5px;
+        font-size: 10.4px;
         color: var(--xx-muted);
       }
       .xx-chip.live { color: var(--xx-think); border-color: var(--xx-border-strong); }
       .xx-chip.err { color: var(--xx-err); border-color: rgba(248, 113, 113, 0.35); }
-      .xx-foot-actions { display: inline-flex; align-items: center; gap: 5px; }
-      .xx-bilingual-raw {
-        margin-top: 8px;
-        padding-top: 7px;
-        border-top: 1px dashed var(--xx-border);
-        font-size: 11.5px;
-        opacity: 0.72;
-      }
       .xx-btn {
         padding: 1px 7px;
         border-radius: 5px;
         border: 1px solid var(--xx-border);
         background: transparent;
         color: var(--xx-muted);
+        font: inherit;
         font-size: 11px;
         cursor: pointer;
-        transition: background 0.14s ease, color 0.14s ease;
+        transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
       }
-      .xx-btn:hover { background: var(--xx-surface-hover); color: var(--xx-fg); }
+      .xx-btn:hover { background: var(--xx-surface-hover); color: var(--xx-fg); border-color: var(--xx-border-strong); }
     \`;
-
-    function getTurnOpen(turnKey, turn, isLastTurn, settings) {
-      if (openState.has(turnKey)) return openState.get(turnKey);
-      if (turn.isRunning && settings.autoExpandRunningTurn !== false) {
-        openState.set(turnKey, true);
-        return true;
-      }
-      if (isLastTurn) {
-        openState.set(turnKey, true);
-        return true;
-      }
-      if (!turn.isRunning && settings.autoCollapseDoneTurn) return false;
-      return false;
-    }
-
-    function getStepOpen(stepKey, item, settings) {
-      if (openState.has(stepKey)) return openState.get(stepKey);
-      const isLiveThink =
-        item.kind === 'think' &&
-        (item.status === 'generating' || item.translateStatus === 'translating') &&
-        settings.autoExpandRunningThink !== false;
-      if (isLiveThink) {
-        openState.set(stepKey, true);
-        return true;
-      }
-      return false;
-    }
 
     function getBubblePromptForResponse(resp) {
       const turnEl = resp.closest('[data-turn-content]') || resp.parentElement?.parentElement;
@@ -525,57 +879,113 @@ function getClientBundle(owner) {
       return (bubble?.innerText || '').replace(/\\s+/g, ' ').trim();
     }
 
+    function isPromptMatch(turnPrompt, bubbleTxt) {
+      const p = String(turnPrompt || '').replace(/\\s+/g, ' ').trim();
+      const b = String(bubbleTxt || '').replace(/\\s+/g, ' ').trim();
+      if (!p || !b) return false;
+      if (p === b) return true;
+      if (p.length < 6 || b.length < 6) return false;
+      const prefixLen = Math.min(22, p.length, b.length);
+      return p.startsWith(b.slice(0, prefixLen)) || b.startsWith(p.slice(0, prefixLen));
+    }
+
     function pairResponsesToTurns(responses, turns) {
-      if (responses.length === turns.length) {
-        return responses.map((resp, i) => ({ resp, turn: turns[i] }));
-      }
       const paired = new Array(responses.length);
+      const usedTurnIdx = new Set();
+      const activePrefix = (lastData?.activeId || 'conv') + ':turn:';
+
+      // Pass 1: 优先锁死已挂载过同会话思考卡片的节点（按原 turnIndex 锚定），
+      // 防止新发重复短句（如「继续」「好」）时，底部新占位节点抢走上一轮的思考卡
+      for (let i = 0; i < responses.length; i++) {
+        const existingHost = responses[i].querySelector(':scope > .agy-thinking-inline-host');
+        const key = existingHost?.dataset?.turnKey || '';
+        if (!key.startsWith(activePrefix)) continue;
+        const tIdxNum = Number(key.slice(activePrefix.length));
+        const j = turns.findIndex((t, idx) => !usedTurnIdx.has(idx) && t.turnIndex === tIdxNum);
+        if (j !== -1) {
+          usedTurnIdx.add(j);
+          paired[i] = { resp: responses[i], turn: turns[j] };
+        }
+      }
+
+      // Pass 2: 对尚未锚定的节点，通过相邻用户气泡文案匹配（自底向上，跳过已锁死的轮次）
       let cursor = turns.length - 1;
       for (let i = responses.length - 1; i >= 0; i--) {
+        if (paired[i]) continue;
         const bubbleTxt = getBubblePromptForResponse(responses[i]);
-        let matched = null;
+        let matchedIdx = -1;
         if (bubbleTxt) {
-          const prefix = bubbleTxt.slice(0, 22);
           for (let j = cursor; j >= 0; j--) {
-            const p = (turns[j].prompt || '').replace(/\\s+/g, ' ').trim();
-            if (p && (p.startsWith(prefix) || bubbleTxt.startsWith(p.slice(0, 22)))) {
-              matched = turns[j];
+            if (usedTurnIdx.has(j)) continue;
+            if (isPromptMatch(turns[j].prompt, bubbleTxt)) {
+              matchedIdx = j;
               cursor = j - 1;
               break;
             }
           }
         }
-        if (!matched && cursor >= 0) matched = turns[cursor--];
-        paired[i] = { resp: responses[i], turn: matched };
+        if (matchedIdx !== -1) {
+          usedTurnIdx.add(matchedIdx);
+          paired[i] = { resp: responses[i], turn: turns[matchedIdx] };
+        }
+      }
+
+      // Pass 3: 剩余未匹配槽位一律「从前往后」顺序对齐；
+      // 新发消息瞬间常出现 responses.length > turns.length（新回复占位已挂载，LS 轨迹尚未落盘），
+      // 严禁倒序把上一轮思考塞到最新的空白回复位上造成闪现！
+      let fwdCursor = 0;
+      for (let i = 0; i < responses.length; i++) {
+        if (paired[i]) continue;
+        if (responses.length > turns.length && i >= turns.length) {
+          paired[i] = { resp: responses[i], turn: null };
+          continue;
+        }
+        let fallbackIdx = !usedTurnIdx.has(i) && i < turns.length ? i : -1;
+        if (fallbackIdx === -1) {
+          while (fwdCursor < turns.length && usedTurnIdx.has(fwdCursor)) fwdCursor++;
+          if (fwdCursor < turns.length) fallbackIdx = fwdCursor++;
+        }
+        if (fallbackIdx !== -1) usedTurnIdx.add(fallbackIdx);
+        paired[i] = { resp: responses[i], turn: fallbackIdx !== -1 ? turns[fallbackIdx] : null };
       }
       return paired;
     }
 
-    function formatTurnHeader(turn) {
-      let dur = turn.durationSec;
+    function renderTurnLabelHtml(turn) {
+      let durNum = turn.durationSec;
       if (turn.isRunning && turn.startedAtMs) {
-        dur = Math.max(0, (Date.now() - turn.startedAtMs) / 1000).toFixed(1);
-      } else if (typeof dur === 'number') {
-        dur = dur.toFixed(1);
+        durNum = Math.max(1, (Date.now() - turn.startedAtMs) / 1000);
       }
-      const label = turn.isRunning
-        ? (dur != null ? '实时思考中 · ' + dur + 's' : '实时思考中…')
-        : (dur != null ? '思考完成 · ' + dur + 's' : '思考完成');
-      const parts = [];
-      if (turn.thinkCount > 0) parts.push(turn.thinkCount + ' 思考');
-      if (turn.toolCount > 0) parts.push(turn.toolCount + ' 步骤');
-      return { label, counts: parts.join(' · ') };
+      const parts = typeof durNum === 'number' ? formatDurationParts(durNum, turn.isRunning) : [];
+      const durHtml = parts.map((p) =>
+        p.numeric ? '<span class="xx-turn-num">' + escapeHtml(p.text) + '</span>' : escapeHtml(p.text)
+      ).join('');
+      if (turn.isRunning) {
+        return durHtml ? ('正在深度思考，已用时 ' + durHtml + ' ···') : '正在深度思考 ···';
+      }
+      if (turn.hasError) {
+        return durHtml ? ('处理异常，用时 ' + durHtml) : '处理异常';
+      }
+      return durHtml ? ('已完成，用时 ' + durHtml) : '已完成';
     }
 
-    function buildFootChips(item, running) {
+    function buildFootChips(item, running, wantFullDetail) {
       const chips = [];
       if (item.thinkingTokens > 0) {
         chips.push('<span class="xx-chip">' + item.thinkingTokens + ' tok</span>');
       } else if (running) {
         chips.push('<span class="xx-chip live">流式思考中</span>');
       }
+      if (wantFullDetail && item.fullTranslateStatus === 'translating') {
+        chips.push('<span class="xx-chip live">完整译中</span>');
+      } else if (wantFullDetail && item.fullTranslateStatus === 'error') {
+        chips.push('<span class="xx-chip err" title="' + escapeHtml(item.fullTranslateError || '') + '">完整译失败</span>');
+      } else if (wantFullDetail && item.fullTranslatedThinking) {
+        chips.push('<span class="xx-chip">完整思考</span>');
+      }
       if (item.translateStatus === 'translating') {
-        chips.push('<span class="xx-chip live">实时译中</span>');
+        const liveTxt = item.translatePhase === 'distilling' ? '整理脉络中' : '实时译中';
+        chips.push('<span class="xx-chip live">' + liveTxt + '</span>');
       } else if (item.translateStatus === 'no-key') {
         chips.push('<span class="xx-chip">待填翻译 Key</span>');
       } else if (item.translateStatus === 'error') {
@@ -586,41 +996,137 @@ function getClientBundle(owner) {
       return chips.join('');
     }
 
-    function syncThinkOverflow(stepEl, mdEl) {
-      if (!stepEl || !mdEl) return;
-      const isFull = stepEl.dataset.full === 'true';
-      const hasOverflow = !isFull && mdEl.scrollHeight > mdEl.clientHeight + 8;
-      stepEl.dataset.overflow = String(hasOverflow);
-      const btn = stepEl.querySelector('.xx-expand-full-btn');
-      if (btn) btn.textContent = isFull ? '收起高度' : '展开全文';
+    function updateGroupScrollFades(bodyEl) {
+      if (!bodyEl) return;
+      // 展开中的思考行头会 sticky 吸顶，避免被顶部 24px 渐隐遮罩淡化
+      const hasOpenThink = Boolean(bodyEl.querySelector('.xx-think-row[data-open="true"]'));
+      const canUp = !hasOpenThink && bodyEl.scrollTop > 2;
+      const canDown = bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight > 2;
+      bodyEl.classList.toggle('xx-fade-top', canUp);
+      bodyEl.classList.toggle('xx-fade-bottom', canDown);
     }
 
-    function updateStepThinkDisplay(stepEl, displayText, item, effectiveMode, running, isStreamingThink) {
-      const sumEl = stepEl.querySelector('.xx-step-sum');
-      const nextSum = thinkSummary(displayText || item.translatedThinking || item.thinking || '', isStreamingThink);
-      if (sumEl && sumEl.textContent !== nextSum) sumEl.textContent = nextSum;
+    function updateThinkLiveFade(rowEl, mdEl) {
+      if (!rowEl || !mdEl) return;
+      const constrained = rowEl.dataset.full !== 'true';
+      const showTopFade = constrained && mdEl.scrollTop > 4;
+      const showBottomFade = constrained && mdEl.scrollHeight - mdEl.scrollTop - mdEl.clientHeight > 6;
+      mdEl.classList.toggle('xx-live-fade-top', showTopFade);
+      mdEl.classList.toggle('xx-live-fade-bottom', showBottomFade);
+    }
 
-      if (stepEl.dataset.open !== 'true') return;
-      const mdEl = stepEl.querySelector('.xx-think-md');
+    function bindThinkMdScroll(rowEl, mdEl) {
+      if (!mdEl || mdEl._liveScrollBound) return;
+      mdEl._liveScrollBound = true;
+      mdEl.addEventListener('scroll', () => updateThinkLiveFade(rowEl, mdEl), { passive: true });
+    }
+
+    function syncThinkOverflow(rowEl, mdEl) {
+      if (!rowEl || !mdEl) return;
+      bindThinkMdScroll(rowEl, mdEl);
+      const isFull = rowEl.dataset.full === 'true';
+      const hasOverflow = !isFull && mdEl.clientHeight >= 40 && mdEl.scrollHeight > mdEl.clientHeight + 8;
+      rowEl.dataset.overflow = String(hasOverflow);
+      updateThinkLiveFade(rowEl, mdEl);
+      const btn = rowEl.querySelector('.xx-expand-full-btn');
+      if (btn) {
+        btn.textContent = isFull ? '收起高度' : '展开全文';
+        btn.style.display = (hasOverflow || isFull) ? '' : 'none';
+      }
+    }
+
+    function computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled) {
+      if (effectiveMode !== 'raw' && summaryEnabled && item.narrativeSummary) {
+        return item.narrativeSummary.replace(/\\*\\*/g, '').replace(/\\s+/g, ' ').trim();
+      }
+      return thinkSummary(displayText || item.translatedThinking || item.thinking || '', isStreamingThink);
+    }
+
+    function updateThinkRowStreamDom(rowEl, displayText, item, effectiveMode, running, isStreamingThink, summaryEnabled, policy, useStepRender, wantFullDetail) {
+      const sumText = computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled);
+      const showPreview = Boolean(sumText) && (isStreamingThink || policy.settledReasoningPreview);
+      rowEl.dataset.preview = String(showPreview);
+      const sumEl = rowEl.querySelector('.xx-row-sum');
+      if (sumEl && sumEl.textContent !== sumText) sumEl.textContent = sumText;
+
+      if (rowEl.dataset.open !== 'true') return;
+      const mdEl = rowEl.querySelector('.xx-think-md');
       if (!mdEl) return;
 
       const rawText = item.thinking || '';
-      const zhText = item.translatedThinking || '';
+      const zhText = wantFullDetail ? (item.fullTranslatedThinking || item.translatedThinking || '') : (item.translatedThinking || '');
       const cursor = isStreamingThink ? '<span class="xx-cursor"></span>' : '';
       const bilingualExtra =
         effectiveMode === 'bilingual' && zhText && zhText !== rawText
           ? '<div class="xx-bilingual-raw">' + renderMarkdown(rawText) + '</div>'
           : '';
-      const mdHtml = (renderMarkdown(displayText) || '<p>正在酝酿思路…</p>') + cursor + bilingualExtra;
+      const rendered = renderThinkingSteps(displayText, useStepRender !== false && effectiveMode !== 'raw');
+      const mdHtml = (rendered || '<p>正在酝酿思路…</p>') + cursor + bilingualExtra;
       if (mdEl._lastHtml !== mdHtml) {
         const nearBottom = mdEl.scrollHeight - mdEl.scrollTop - mdEl.clientHeight < 48;
         mdEl._lastHtml = mdHtml;
         mdEl.innerHTML = mdHtml;
-        if (isStreamingThink && nearBottom && stepEl.dataset.full !== 'true') {
+        if (isStreamingThink && nearBottom && rowEl.dataset.full !== 'true') {
           mdEl.scrollTop = mdEl.scrollHeight;
         }
-        syncThinkOverflow(stepEl, mdEl);
+        syncThinkOverflow(rowEl, mdEl);
+        const grpBody = rowEl.closest('.xx-group-body');
+        if (grpBody) {
+          const gKey = grpBody.dataset.groupOpenKey;
+          if (gKey && groupFollowMap.get(gKey) === true) {
+            grpBody.scrollTop = grpBody.scrollHeight;
+          }
+          updateGroupScrollFades(grpBody);
+        }
       }
+    }
+
+    /**
+     * DSH 150ms 实时组标题防抖：运行中标题变化最少保留 150ms，组结束立刻切完成态不延迟。
+     */
+    function resolveStableGroupTitle(groupOpenKey, desired, isLive, onCommit) {
+      if (!isLive) {
+        const prev = liveTitleCache.get(groupOpenKey);
+        if (prev?.timer) clearTimeout(prev.timer);
+        liveTitleCache.delete(groupOpenKey);
+        return desired;
+      }
+      const now = Date.now();
+      const rec = liveTitleCache.get(groupOpenKey);
+      if (!rec) {
+        const fresh = { ...desired, committedAt: now, pending: null, timer: null };
+        liveTitleCache.set(groupOpenKey, fresh);
+        return desired;
+      }
+      if (rec.title === desired.title && rec.iconKey === desired.iconKey) {
+        return rec;
+      }
+      const remaining = LIVE_TITLE_MIN_MS - (now - rec.committedAt);
+      if (remaining <= 0) {
+        if (rec.timer) clearTimeout(rec.timer);
+        rec.title = desired.title;
+        rec.iconKey = desired.iconKey;
+        rec.activity = desired.activity;
+        rec.committedAt = now;
+        rec.pending = null;
+        rec.timer = null;
+        return rec;
+      }
+      rec.pending = desired;
+      if (!rec.timer) {
+        rec.timer = setTimeout(() => {
+          rec.timer = null;
+          if (rec.pending) {
+            rec.title = rec.pending.title;
+            rec.iconKey = rec.pending.iconKey;
+            rec.activity = rec.pending.activity;
+            rec.committedAt = Date.now();
+            rec.pending = null;
+            onCommit?.();
+          }
+        }, remaining);
+      }
+      return rec;
     }
 
     function renderTurnIntoHost(host, turn, isLastTurn, settings, theme) {
@@ -630,60 +1136,192 @@ function getClientBundle(owner) {
         shadow.innerHTML =
           '<style>' + SHADOW_CSS + '</style>' +
           '<div class="xx-wrap">' +
-            '<button class="xx-turn-bar" type="button"></button>' +
-            '<div class="xx-steps-shell"><div class="xx-steps-inner"><div class="xx-steps"></div></div></div>' +
+            '<button class="xx-turn-bar" type="button">' +
+              '<span class="xx-turn-star">' + ICONS.star + '</span>' +
+              '<span class="xx-turn-label"></span>' +
+              '<span class="xx-turn-chev">' + ICONS.chevDown + '</span>' +
+            '</button>' +
+            '<div class="xx-turn-shell"><div class="xx-turn-inner"><div class="xx-groups"></div></div></div>' +
           '</div>';
+
         const wrap = shadow.querySelector('.xx-wrap');
         const bar = shadow.querySelector('.xx-turn-bar');
-        const stepsBox = shadow.querySelector('.xx-steps');
+        const groupsBox = shadow.querySelector('.xx-groups');
 
         bar.addEventListener('click', () => {
+          if (bar.disabled) return;
           const key = host.dataset.turnKey;
           const next = wrap.dataset.turnOpen !== 'true';
           openState.set(key, next);
           userPinnedSet.add(key);
           wrap.dataset.turnOpen = String(next);
+          if (!next) {
+            // DSH 铁律：收起整轮时重置内部所有组、思考和工具的开合状态
+            resetTurnInnerDisclosures(key);
+          }
+          // 无论展开还是收起都立即同步渲染，避免懒渲染的折叠轮展开后组体为空
+          renderAll();
+          if (next) {
+            setTimeout(() => {
+              if (!host.isConnected || wrap.dataset.turnOpen !== 'true') return;
+              for (const b of groupsBox.querySelectorAll('.xx-group-body')) updateGroupScrollFades(b);
+              for (const r of groupsBox.querySelectorAll('.xx-think-row[data-open="true"]')) {
+                syncThinkOverflow(r, r.querySelector('.xx-think-md'));
+              }
+            }, 210);
+          }
         });
 
-        stepsBox.addEventListener('click', async (ev) => {
-          const retryBtn = ev.target.closest('.xx-retry-btn');
-          if (retryBtn) {
-            const stepEl = retryBtn.closest('.xx-step');
-            const item = stepEl?._itemData;
-            if (item) {
-              pendingActions.push({ type: 'retry', itemId: item.id, rawText: item.thinking || '' });
-              retryBtn.textContent = '重译中…';
-              setTimeout(() => { if (retryBtn.isConnected) retryBtn.textContent = '重译'; }, 1200);
+        groupsBox.addEventListener('click', async (ev) => {
+          const groupHead = ev.target.closest('.xx-group-head');
+          if (groupHead) {
+            const grpEl = groupHead.closest('.xx-group');
+            const gKey = grpEl?.dataset.groupOpenKey;
+            if (gKey) {
+              const next = grpEl.dataset.groupOpen !== 'true';
+              openState.set(gKey, next);
+              grpEl.dataset.groupOpen = String(next);
+              const chevEl = groupHead.querySelector('.xx-act-chev');
+              if (chevEl) chevEl.innerHTML = next ? ICONS.chevUp : ICONS.chevDown;
+              const bodyEl = grpEl.querySelector('.xx-group-body');
+              if (next) {
+                const isLive = grpEl.dataset.live === 'true';
+                groupFollowMap.set(gKey, isLive);
+                if (grpEl._renderMembers) grpEl._renderMembers();
+                setTimeout(() => {
+                  if (!grpEl.isConnected || grpEl.dataset.groupOpen !== 'true' || !bodyEl) return;
+                  bodyEl.scrollTop = isLive ? bodyEl.scrollHeight : 0;
+                  updateGroupScrollFades(bodyEl);
+                }, 200);
+              } else {
+                groupFollowMap.set(gKey, false);
+              }
             }
             return;
           }
+
+          const thinkHead = ev.target.closest('.xx-think-head');
+          if (thinkHead) {
+            const rowEl = thinkHead.closest('.xx-think-row');
+            const rKey = rowEl?.dataset.rowOpenKey;
+            if (rKey) {
+              const next = rowEl.dataset.open !== 'true';
+              openState.set(rKey, next);
+              userPinnedSet.add(rKey);
+              rowEl.dataset.open = String(next);
+              const chevEl = thinkHead.querySelector('.xx-act-chev');
+              const wantChev = next ? ICONS.chevUp : ICONS.chevDown;
+              if (chevEl) {
+                chevEl._lastHtml = wantChev;
+                chevEl.innerHTML = wantChev;
+              }
+              if (next && rowEl._renderThinkBody) {
+                const liveRec = rowEl._thinkItem ? streamShownMap.get(rowEl._thinkItem.id) : null;
+                if (liveRec && liveRec.shownLen < liveRec.text.length) {
+                  if (!liveRec.isStreamingThink) {
+                    liveRec.shownLen = liveRec.text.length;
+                  } else {
+                    scheduleStreamTick();
+                  }
+                }
+                rowEl._renderThinkBody();
+                setTimeout(() => {
+                  if (!rowEl.isConnected || rowEl.dataset.open !== 'true') return;
+                  syncThinkOverflow(rowEl, rowEl.querySelector('.xx-think-md'));
+                  const grpBody = rowEl.closest('.xx-group-body');
+                  if (grpBody) updateGroupScrollFades(grpBody);
+                }, 210);
+              } else {
+                const grpBody = rowEl.closest('.xx-group-body');
+                if (grpBody) updateGroupScrollFades(grpBody);
+              }
+            }
+            return;
+          }
+
+          const toolHead = ev.target.closest('.xx-tool-head');
+          if (toolHead) {
+            const rowEl = toolHead.closest('.xx-tool-row');
+            const rKey = rowEl?.dataset.rowOpenKey;
+            if (rKey) {
+              const next = rowEl.dataset.open !== 'true';
+              openState.set(rKey, next);
+              rowEl.dataset.open = String(next);
+              const chevEl = toolHead.querySelector('.xx-act-chev');
+              if (chevEl) chevEl.innerHTML = next ? ICONS.chevUp : ICONS.chevDown;
+              if (next && rowEl._renderToolBody) {
+                rowEl._renderToolBody();
+                setTimeout(() => {
+                  const grpBody = rowEl.closest('.xx-group-body');
+                  if (grpBody) updateGroupScrollFades(grpBody);
+                }, 200);
+              }
+            }
+            return;
+          }
+
+          const retryBtn = ev.target.closest('.xx-retry-btn');
+          if (retryBtn) {
+            const rowEl = retryBtn.closest('.xx-think-row');
+            const item = rowEl?._thinkItem;
+            if (item) {
+              streamShownMap.delete(item.id);
+              rowEl.dataset.bodySig = '';
+              pendingActions.push({ type: 'retry', itemId: item.id, rawText: item.thinking || '' });
+              retryBtn.textContent = '重译中…';
+              setTimeout(() => { if (retryBtn.isConnected) retryBtn.textContent = '重译'; }, 3500);
+            }
+            return;
+          }
+
+          const toggleDetailBtn = ev.target.closest('.xx-toggle-detail');
+          if (toggleDetailBtn) {
+            const rowEl = toggleDetailBtn.closest('.xx-think-row');
+            const item = rowEl?._thinkItem;
+            const key = item?.id;
+            if (key) {
+              const nextDetail = fullDetailMap.get(key) !== true;
+              fullDetailMap.set(key, nextDetail);
+              if (nextDetail && !item.fullTranslatedThinking) {
+                pendingActions.push({ type: 'translate-full', itemId: key });
+              }
+              streamShownMap.delete(key);
+              rowEl.dataset.bodySig = '';
+              renderAll();
+            }
+            return;
+          }
+
           const toggleLangBtn = ev.target.closest('.xx-toggle-lang');
           if (toggleLangBtn) {
-            const stepEl = toggleLangBtn.closest('.xx-step');
-            const key = stepEl.dataset.stepKey;
-            const cur = rawOverrideMap.get(key) === true;
-            rawOverrideMap.set(key, !cur);
-            streamShownMap.delete(key);
-            stepEl.dataset.bodySig = '';
-            stepEl.dataset.headSig = '';
-            renderAll();
+            const rowEl = toggleLangBtn.closest('.xx-think-row');
+            const key = rowEl?._thinkItem?.id;
+            if (key) {
+              rawOverrideMap.set(key, rawOverrideMap.get(key) !== true);
+              streamShownMap.delete(key);
+              rowEl.dataset.bodySig = '';
+              renderAll();
+            }
             return;
           }
+
           const expandBtn = ev.target.closest('.xx-expand-full-btn');
           if (expandBtn) {
-            const stepEl = expandBtn.closest('.xx-step');
-            const key = stepEl.dataset.stepKey;
-            const nextFull = stepEl.dataset.full !== 'true';
-            expandedFullMap.set(key, nextFull);
-            stepEl.dataset.full = String(nextFull);
-            const mdEl = stepEl.querySelector('.xx-think-md');
-            syncThinkOverflow(stepEl, mdEl);
+            const rowEl = expandBtn.closest('.xx-think-row');
+            const key = rowEl?._thinkItem?.id;
+            if (key) {
+              const nextFull = rowEl.dataset.full !== 'true';
+              expandedFullMap.set(key, nextFull);
+              rowEl.dataset.full = String(nextFull);
+              syncThinkOverflow(rowEl, rowEl.querySelector('.xx-think-md'));
+            }
             return;
           }
+
           const copyBtn = ev.target.closest('.xx-copy-btn');
           if (copyBtn) {
-            const stepEl = copyBtn.closest('.xx-step');
-            const raw = stepEl?._copyText || '';
+            const rowEl = copyBtn.closest('.xx-row');
+            const raw = rowEl?._copyText || '';
             try {
               await navigator.clipboard.writeText(raw);
               copyBtn.textContent = '已复制';
@@ -691,268 +1329,452 @@ function getClientBundle(owner) {
             } catch {}
             return;
           }
-          const head = ev.target.closest('.xx-step-head');
-          if (!head) return;
-          const stepEl = head.closest('.xx-step');
-          const key = stepEl.dataset.stepKey;
-          const next = stepEl.dataset.open !== 'true';
-          openState.set(key, next);
-          stepEl.dataset.open = String(next);
-          if (next && stepEl._renderBody) {
-            stepEl._renderBody();
-            setTimeout(() => {
-              if (stepEl.isConnected && stepEl.dataset.open === 'true') {
-                syncThinkOverflow(stepEl, stepEl.querySelector('.xx-think-md'));
-              }
-            }, 210);
-          }
         });
       }
 
+      const policy = getPresentationPolicy(settings);
       const turnKey = (lastData?.activeId || 'conv') + ':turn:' + turn.turnIndex;
       host.dataset.turnKey = turnKey;
       host._turnData = turn;
 
       const wrap = shadow.querySelector('.xx-wrap');
       const bar = shadow.querySelector('.xx-turn-bar');
-      const stepsBox = shadow.querySelector('.xx-steps');
+      const groupsBox = shadow.querySelector('.xx-groups');
 
       wrap.dataset.theme = theme;
       wrap.dataset.running = String(Boolean(turn.isRunning));
-      wrap.dataset.compact = String(Boolean(settings.compactMode));
+      wrap.dataset.error = String(Boolean(turn.hasError));
+      wrap.dataset.compact = 'false';
       wrap.dataset.font = settings.fontSize || 'md';
-      wrap.dataset.thinkHeight = settings.thinkHeightMode || 'md';
+      wrap.dataset.thinkHeight = 'full';
 
-      if (
-        settings.autoCollapseDoneTurn &&
-        !turn.isRunning &&
-        !isLastTurn &&
-        !userPinnedSet.has(turnKey) &&
-        !turnSettledMap.has(turnKey)
-      ) {
-        turnSettledMap.set(turnKey, true);
-        openState.set(turnKey, false);
+      // 极简 2 档整轮开合：进行中强制展开；结束后 focus 自动折起、expanded 或有异常默认展开（均支持手动点击开合）
+      const forceOpen = Boolean(turn.isRunning);
+      const canCollapse = !forceOpen && Boolean(turn.hasProcess !== false);
+
+      let turnOpen;
+      if (forceOpen) {
+        turnOpen = true;
+        turnAutoFoldedSet.delete(turnKey);
+      } else if (userPinnedSet.has(turnKey)) {
+        turnOpen = openState.get(turnKey) === true;
+      } else if (!policy.foldCompletedTurns || turn.hasError) {
+        turnOpen = true;
+        openState.set(turnKey, true);
+        turnAutoFoldedSet.delete(turnKey);
+      } else {
+        if (!turnAutoFoldedSet.has(turnKey)) {
+          turnAutoFoldedSet.add(turnKey);
+          openState.set(turnKey, false);
+          resetTurnInnerDisclosures(turnKey);
+        }
+        turnOpen = openState.get(turnKey) === true;
       }
 
-      wrap.dataset.turnOpen = String(Boolean(getTurnOpen(turnKey, turn, isLastTurn, settings)));
+      bar.disabled = !canCollapse;
+      wrap.dataset.turnOpen = String(Boolean(turnOpen));
 
-      const hdr = formatTurnHeader(turn);
-      const barSig = hdr.counts;
-      if (bar.dataset.sig !== barSig) {
-        bar.dataset.sig = barSig;
-        bar.innerHTML =
-          '<span class="xx-turn-star">' + ICONS.star + '</span>' +
-          '<span class="xx-turn-label"></span>' +
-          (hdr.counts ? '<span class="xx-turn-counts">· ' + escapeHtml(hdr.counts) + '</span>' : '') +
-          '<span class="xx-turn-chev">' + ICONS.chev + '</span>';
-      }
       const labelEl = bar.querySelector('.xx-turn-label');
-      if (labelEl && labelEl.textContent !== hdr.label) labelEl.textContent = hdr.label;
+      const nextLabelHtml = renderTurnLabelHtml(turn);
+      if (labelEl && labelEl._lastHtml !== nextLabelHtml) {
+        labelEl._lastHtml = nextLabelHtml;
+        labelEl.innerHTML = nextLabelHtml;
+      }
 
-      const existingById = new Map();
-      for (const el of stepsBox.children) existingById.set(el.dataset.stepKey, el);
-
-      const nextChildren = [];
-      let needsStreamMore = false;
+      const mode = settings.displayMode || 'zh';
+      const summaryEnabled = settings.summaryEnabled === true;
       const useSmooth = settings.smoothStream !== false;
+      const hideSum = settings.hideSummaryWhenOpen !== false;
 
-      for (const item of turn.items) {
-        let stepEl = existingById.get(item.id);
-        if (!stepEl) {
-          stepEl = document.createElement('div');
-          stepEl.className = 'xx-step';
-          stepEl.dataset.stepKey = item.id;
-          stepEl.innerHTML =
-            '<button class="xx-step-head" type="button">' +
-              '<span class="xx-step-ico"></span>' +
-              '<span class="xx-step-kind"></span>' +
-              '<span class="xx-step-sep"></span>' +
-              '<span class="xx-step-sum"></span>' +
-              '<span class="xx-step-time"></span>' +
-              '<span class="xx-step-chev">' + ICONS.chev + '</span>' +
+      // 思考直出主时间线 + 连续多条工具自动收成轻量胶囊
+      const groups = buildProcessGroups(turn.items, turn.isRunning, mode, summaryEnabled);
+
+      const existingGroups = new Map();
+      for (const el of groupsBox.children) {
+        if (el.dataset.groupOpenKey) existingGroups.set(el.dataset.groupOpenKey, el);
+      }
+
+      const nextGroupEls = [];
+      let needsStreamMore = false;
+
+      for (const group of groups) {
+        const groupOpenKey = turnKey + ':g:' + group.key;
+        const isGrouped = Boolean(group.grouped);
+        let grpEl = existingGroups.get(groupOpenKey);
+        if (!grpEl) {
+          grpEl = document.createElement('div');
+          grpEl.className = 'xx-group';
+          grpEl.dataset.groupOpenKey = groupOpenKey;
+          grpEl.innerHTML =
+            '<button class="xx-group-head" type="button">' +
+              '<span class="xx-lead">' +
+                '<span class="xx-act-ico"></span>' +
+                '<span class="xx-act-chev">' + ICONS.chevDown + '</span>' +
+              '</span>' +
+              '<span class="xx-group-title"></span>' +
             '</button>' +
-            '<div class="xx-step-body-shell"><div class="xx-step-body-inner"><div class="xx-step-body"></div></div></div>';
+            '<div class="xx-group-body-shell"><div class="xx-group-body-inner"><div class="xx-group-body"></div></div></div>';
+          const bodyEl = grpEl.querySelector('.xx-group-body');
+          bodyEl.dataset.groupOpenKey = groupOpenKey;
+          bodyEl.addEventListener('scroll', () => {
+            updateGroupScrollFades(bodyEl);
+            const atBottom = bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight < 20;
+            if (grpEl.dataset.live === 'true') {
+              groupFollowMap.set(groupOpenKey, atBottom);
+            }
+          }, { passive: true });
         }
 
-        const running = item.status === 'generating' || item.status === 'running';
-        const isStreamingThink = item.kind === 'think' && (running || item.translateStatus === 'translating');
-        const stepOpen = getStepOpen(item.id, item, settings);
-        stepEl.dataset.kind = item.kind;
-        stepEl.dataset.status = item.status || 'done';
-        stepEl.dataset.running = String(running);
-        stepEl.dataset.open = String(stepOpen);
-        stepEl.dataset.hideSum = String(settings.hideSummaryWhenOpen !== false);
-        stepEl.dataset.full = String(expandedFullMap.get(item.id) === true);
-        stepEl._itemData = item;
+        const isLiveGroup = !group.closed;
+        const groupOpen = !isGrouped || openState.get(groupOpenKey) === true;
+        grpEl.dataset.grouped = String(isGrouped);
+        grpEl.dataset.groupOpen = String(groupOpen);
+        grpEl.dataset.live = String(isLiveGroup);
 
-        const rawText = item.kind === 'think' ? (item.thinking || '') : (item.detail || '');
-        const zhText = item.kind === 'think' ? (item.translatedThinking || '') : '';
-        const mode = settings.displayMode || 'zh';
-        const showRawOverride = rawOverrideMap.get(item.id) === true;
-        const effectiveMode = showRawOverride ? (mode === 'raw' ? 'zh' : 'raw') : mode;
-        const targetText =
-          item.kind === 'think' && effectiveMode !== 'raw' && zhText ? zhText : rawText;
+        const rawTitleInfo = formatProcessGroupTitle(group.summary, group.closed, policy.liveProcessDetail);
+        const stableTitle = resolveStableGroupTitle(groupOpenKey, rawTitleInfo, isLiveGroup, () => renderAll());
 
-        let displayText = targetText;
-        if (item.kind === 'think') {
-          const modeKey = effectiveMode + ':' + (zhText && effectiveMode !== 'raw' ? 'zh' : 'raw');
-          let rec = streamShownMap.get(item.id);
-          if (!useSmooth) {
-            streamShownMap.delete(item.id);
-            displayText = targetText;
-          } else {
-            if (!rec || rec.modeKey !== modeKey) {
-              const startLen = isStreamingThink ? 0 : targetText.length;
-              rec = { text: targetText, shownLen: startLen, modeKey, stepEl, item, effectiveMode, running, isStreamingThink };
-              streamShownMap.set(item.id, rec);
-            } else {
-              rec.stepEl = stepEl;
-              rec.item = item;
-              rec.effectiveMode = effectiveMode;
-              rec.running = running;
-              rec.isStreamingThink = isStreamingThink;
-              if (isStreamingThink && targetText.length < rec.shownLen) {
-                rec.text = rec.text.slice(0, rec.shownLen);
+        const headEl = grpEl.querySelector('.xx-group-head');
+        const leadEl = headEl.querySelector('.xx-lead');
+        const icoEl = headEl.querySelector('.xx-act-ico');
+        const chevEl = headEl.querySelector('.xx-act-chev');
+        const titleEl = headEl.querySelector('.xx-group-title');
+
+        const headSig = stableTitle.iconKey + '|' + stableTitle.title + '|' + groupOpen + '|' + group.hasError;
+        if (headEl.dataset.sig !== headSig) {
+          headEl.dataset.sig = headSig;
+          leadEl.dataset.ico = stableTitle.iconKey;
+          leadEl.dataset.err = String(Boolean(group.hasError));
+          icoEl.innerHTML = ICONS[stableTitle.iconKey] || ICONS.think;
+          chevEl.innerHTML = groupOpen ? ICONS.chevUp : ICONS.chevDown;
+          titleEl.textContent = stableTitle.title;
+          titleEl.title = stableTitle.title;
+        }
+
+        const bodyEl = grpEl.querySelector('.xx-group-body');
+        const renderMembers = () => {
+          const existingRows = new Map();
+          for (const rEl of bodyEl.children) {
+            if (rEl.dataset.rowOpenKey) existingRows.set(rEl.dataset.rowOpenKey, rEl);
+          }
+
+          let localNeedsStream = false;
+          const nextRowEls = [];
+          for (const item of group.members) {
+            if (item.kind === 'think') {
+              const rowOpenKey = turnKey + ':th:' + item.id;
+              let rowEl = existingRows.get(rowOpenKey);
+              if (!rowEl) {
+                rowEl = document.createElement('div');
+                rowEl.className = 'xx-row xx-think-row';
+                rowEl.dataset.rowOpenKey = rowOpenKey;
+                rowEl.innerHTML =
+                  '<button class="xx-row-head xx-think-head" type="button">' +
+                    '<span class="xx-lead" data-ico="think">' +
+                      '<span class="xx-act-ico">' + ICONS.think + '</span>' +
+                      '<span class="xx-act-chev">' + ICONS.chevDown + '</span>' +
+                    '</span>' +
+                    '<span class="xx-row-title">思考</span>' +
+                    '<span class="xx-row-steps-pill"></span>' +
+                    '<span class="xx-row-sep"></span>' +
+                    '<span class="xx-row-sum"></span>' +
+                    '<span class="xx-row-time"></span>' +
+                  '</button>' +
+                  '<div class="xx-row-body-shell"><div class="xx-row-body-inner"><div class="xx-row-body">' +
+                    '<div class="xx-think-md"></div>' +
+                    '<div class="xx-row-foot">' +
+                      '<span class="xx-foot-meta"></span>' +
+                      '<span class="xx-foot-actions"></span>' +
+                    '</div>' +
+                  '</div></div></div>';
+              }
+
+              const rawText = item.thinking || '';
+              const zhFull = item.translatedThinking || '';
+              const isStepsStyle = (settings.translateStyle || 'steps') === 'steps';
+              const wantFullDetail = isStepsStyle && fullDetailMap.get(item.id) === true;
+              const showRawOverride = rawOverrideMap.get(item.id) === true;
+              const effectiveMode = showRawOverride ? (mode === 'raw' ? 'zh' : 'raw') : mode;
+              const running = item.status === 'generating';
+              const isStreamingThink = running || (effectiveMode !== 'raw' && (item.translateStatus === 'translating' || (wantFullDetail && item.fullTranslateStatus === 'translating')));
+
+              // 默认开启进行中自动展开当前思考行；关闭后单条思考默认收起、按需点开
+              let rowOpen;
+              if (userPinnedSet.has(rowOpenKey)) {
+                rowOpen = openState.get(rowOpenKey) === true;
+              } else if (openState.has(rowOpenKey)) {
+                rowOpen = openState.get(rowOpenKey) === true;
+              } else if (settings.autoExpandRunningThink !== false && isStreamingThink && turn.isRunning) {
+                rowOpen = true;
+                openState.set(rowOpenKey, true);
               } else {
-                rec.text = targetText;
+                rowOpen = false;
               }
-            }
-            if (rec.shownLen < rec.text.length) needsStreamMore = true;
-            displayText = rec.text.slice(0, Math.min(rec.shownLen, rec.text.length));
-          }
-        }
 
-        stepEl._copyText = targetText;
+              const activeZh = wantFullDetail ? (item.fullTranslatedThinking || zhFull) : zhFull;
+              const targetText = effectiveMode !== 'raw' && activeZh ? activeZh : rawText;
+              const isBriefThink = !isStreamingThink && !wantFullDetail && rawText.length < 220 && targetText.length < 180 && !rawText.includes('\`\`\`');
+              const useStepRender = isStepsStyle && !wantFullDetail && !isStreamingThink && !isBriefThink && effectiveMode !== 'raw' && Boolean(activeZh);
 
-        const sumText = item.kind === 'think'
-          ? thinkSummary(displayText || targetText, isStreamingThink)
-          : (item.summary || '');
-
-        let timeText = '';
-        if (running && item.startedAtMs) {
-          timeText = Math.max(0, (Date.now() - item.startedAtMs) / 1000).toFixed(1) + 's';
-        } else if (typeof item.durationSec === 'number') {
-          timeText = item.durationSec.toFixed(1) + 's';
-        }
-
-        const headSig = item.kind + '|' + item.label + '|' + sumText + '|' + running;
-        if (stepEl.dataset.headSig !== headSig) {
-          stepEl.dataset.headSig = headSig;
-          stepEl.querySelector('.xx-step-ico').innerHTML = ICONS[item.kind] || ICONS.tool;
-          stepEl.querySelector('.xx-step-kind').textContent = item.label;
-          stepEl.querySelector('.xx-step-sum').textContent = sumText;
-        }
-        const timeEl = stepEl.querySelector('.xx-step-time');
-        if (timeEl && timeEl.textContent !== timeText) timeEl.textContent = timeText;
-
-        const renderBody = () => {
-          const liveRec = item.kind === 'think' ? streamShownMap.get(item.id) : null;
-          const curDisplayText = liveRec
-            ? liveRec.text.slice(0, Math.min(liveRec.shownLen, liveRec.text.length))
-            : targetText;
-          const curStreaming = isStreamingThink || Boolean(liveRec && liveRec.shownLen < liveRec.text.length);
-          const bodySig = curDisplayText + '|' + rawText + '|' + effectiveMode + '|' + (settings.thinkHeightMode || 'md') + '|' + (item.translateStatus || '') + '|' + (item.translateModel || '') + '|' + (item.translateError || '') + '|' + running + '|' + curStreaming + '|' + (item.thinkingTokens || 0);
-          if (stepEl.dataset.bodySig === bodySig) return;
-          stepEl.dataset.bodySig = bodySig;
-          const bodyEl = stepEl.querySelector('.xx-step-body');
-          if (item.kind === 'think') {
-            const cursor = curStreaming ? '<span class="xx-cursor"></span>' : '';
-            const chipsHtml = buildFootChips(item, running);
-            const bilingualExtra =
-              effectiveMode === 'bilingual' && zhText && zhText !== rawText
-                ? '<div class="xx-bilingual-raw">' + renderMarkdown(rawText) + '</div>'
-                : '';
-            const langToggleHtml = zhText && zhText !== rawText
-              ? '<button class="xx-btn xx-toggle-lang" type="button">' + (effectiveMode === 'raw' ? '看中文' : '看原文') + '</button>'
-              : '';
-            const retryHtml =
-              settings.translateEnabled !== false && item.translateStatus !== 'off' && item.translateStatus !== 'no-key' && item.translateModel !== 'native-zh'
-                ? '<button class="xx-btn xx-retry-btn" type="button">重译</button>'
-                : '';
-
-            const mdHtml = (renderMarkdown(curDisplayText) || '<p>正在酝酿思路…</p>') + cursor + bilingualExtra;
-            const existingMd = bodyEl.querySelector('.xx-think-md');
-            const existingFoot = bodyEl.querySelector('.xx-step-foot');
-            if (existingMd && existingFoot) {
-              if (existingMd._lastHtml !== mdHtml) {
-                const nearBottom = existingMd.scrollHeight - existingMd.scrollTop - existingMd.clientHeight < 48;
-                existingMd._lastHtml = mdHtml;
-                existingMd.innerHTML = mdHtml;
-                if (curStreaming && nearBottom && stepEl.dataset.full !== 'true') {
-                  existingMd.scrollTop = existingMd.scrollHeight;
+              let displayText = targetText;
+              const modeKey = effectiveMode + ':' + (wantFullDetail ? 'full' : (useStepRender ? 'steps' : 'live')) + ':' + (activeZh && effectiveMode !== 'raw' ? 'zh' : 'raw');
+              let rec = streamShownMap.get(item.id);
+              if (!useSmooth) {
+                streamShownMap.delete(item.id);
+                displayText = targetText;
+              } else {
+                if (!rec || rec.modeKey !== modeKey) {
+                  const startLen = isStreamingThink ? 0 : targetText.length;
+                  rec = { text: targetText, shownLen: startLen, modeKey, rowEl, item, effectiveMode, running, isStreamingThink, summaryEnabled, policy, useStepRender, wantFullDetail };
+                  streamShownMap.set(item.id, rec);
+                } else {
+                  rec.rowEl = rowEl;
+                  rec.item = item;
+                  rec.effectiveMode = effectiveMode;
+                  rec.running = running;
+                  rec.isStreamingThink = isStreamingThink;
+                  rec.summaryEnabled = summaryEnabled;
+                  rec.policy = policy;
+                  rec.useStepRender = useStepRender;
+                  rec.wantFullDetail = wantFullDetail;
+                  rec.text = targetText;
+                  if (rec.shownLen > targetText.length) {
+                    rec.shownLen = targetText.length;
+                  }
                 }
+                if (!isStreamingThink && !rowOpen && rec.shownLen < rec.text.length) {
+                  rec.shownLen = rec.text.length;
+                }
+                if (rowOpen && rec.shownLen < rec.text.length) {
+                  localNeedsStream = true;
+                  needsStreamMore = true;
+                }
+                displayText = rec.text.slice(0, Math.min(rec.shownLen, rec.text.length));
               }
-              syncThinkOverflow(stepEl, existingMd);
-              const metaSpan = existingFoot.querySelector('.xx-foot-meta');
-              if (metaSpan && metaSpan._lastHtml !== chipsHtml) {
-                metaSpan._lastHtml = chipsHtml;
-                metaSpan.innerHTML = chipsHtml;
+
+              const sumText = computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled);
+              const showPreview = Boolean(sumText) && (isStreamingThink || policy.settledReasoningPreview);
+
+              rowEl.dataset.open = String(rowOpen);
+              rowEl.dataset.running = String(running);
+              rowEl.dataset.streaming = String(isStreamingThink);
+              rowEl.dataset.brief = String(Boolean(isBriefThink));
+              rowEl.dataset.preview = String(showPreview);
+              rowEl.dataset.hideSum = String(hideSum);
+              rowEl.dataset.full = String(expandedFullMap.get(item.id) === true);
+              rowEl._thinkItem = item;
+              rowEl._copyText = targetText;
+
+              const chevEl = rowEl.querySelector('.xx-think-head .xx-act-chev');
+              const wantChev = rowOpen ? ICONS.chevUp : ICONS.chevDown;
+              if (chevEl && chevEl._lastHtml !== wantChev) {
+                chevEl._lastHtml = wantChev;
+                chevEl.innerHTML = wantChev;
               }
-              const actionsSpan = existingFoot.querySelector('.xx-foot-actions');
-              const actionsSig = Boolean(langToggleHtml) + ':' + Boolean(retryHtml) + ':' + effectiveMode;
-              if (actionsSpan && actionsSpan.dataset.sig !== actionsSig) {
-                actionsSpan.dataset.sig = actionsSig;
-                actionsSpan.innerHTML = langToggleHtml + retryHtml + '<button class="xx-btn xx-copy-btn" type="button">复制</button>';
+              const sumEl = rowEl.querySelector('.xx-row-sum');
+              if (sumEl && sumEl.textContent !== sumText) sumEl.textContent = sumText;
+              const stepCount = useStepRender ? countThinkingSteps(activeZh || targetText) : 0;
+              const stepPillEl = rowEl.querySelector('.xx-row-steps-pill');
+              const stepPillText = item.translatePhase === 'distilling'
+                ? '整理脉络'
+                : (stepCount > 1 ? (stepCount + ' 步') : '');
+              if (stepPillEl && stepPillEl.textContent !== stepPillText) stepPillEl.textContent = stepPillText;
+
+              let tStr = '';
+              if (running && item.startedAtMs) {
+                tStr = Math.max(0, (Date.now() - item.startedAtMs) / 1000).toFixed(1) + 's';
+              } else if (typeof item.durationSec === 'number') {
+                tStr = item.durationSec.toFixed(1) + 's';
               }
+              const timeEl = rowEl.querySelector('.xx-row-time');
+              if (timeEl && timeEl.textContent !== tStr) timeEl.textContent = tStr;
+
+              const renderThinkBody = () => {
+                const liveRec = streamShownMap.get(item.id);
+                const curDisplayText = liveRec
+                  ? liveRec.text.slice(0, Math.min(liveRec.shownLen, liveRec.text.length))
+                  : targetText;
+                const curStreaming = isStreamingThink || Boolean(liveRec && liveRec.shownLen < liveRec.text.length);
+                const bodySig = curDisplayText.length + ':' + curDisplayText.slice(-24) + '|' + rawText.length + '|' + effectiveMode + '|' + wantFullDetail + '|' + useStepRender + '|' + isBriefThink + '|' + (item.translateStatus || '') + '|' + (item.translatePhase || '') + '|' + (item.fullTranslateStatus || '') + '|' + (item.fullTranslateError || '') + '|' + (item.translateModel || '') + '|' + (item.translateError || '') + '|' + curStreaming + '|' + (settings.thinkHeightMode || 'full') + '|' + (item.thinkingTokens || 0) + '|' + (expandedFullMap.get(item.id) === true);
+                if (rowEl.dataset.bodySig === bodySig) return;
+                rowEl.dataset.bodySig = bodySig;
+
+                const cursor = curStreaming ? '<span class="xx-cursor"></span>' : '';
+                const bilingualExtra = effectiveMode === 'bilingual' && activeZh && activeZh !== rawText
+                  ? '<div class="xx-bilingual-raw">' + renderMarkdown(rawText) + '</div>'
+                  : '';
+                const rendered = renderThinkingSteps(curDisplayText, useStepRender);
+                const mdHtml = (rendered || '<p>正在酝酿思路…</p>') + cursor + bilingualExtra;
+                const mdEl = rowEl.querySelector('.xx-think-md');
+                if (mdEl && mdEl._lastHtml !== mdHtml) {
+                  const nearBottom = mdEl.scrollHeight - mdEl.scrollTop - mdEl.clientHeight < 48;
+                  const settledToSteps = Boolean(mdEl._wasStreaming) && !curStreaming && useStepRender;
+                  mdEl._lastHtml = mdHtml;
+                  mdEl.innerHTML = mdHtml;
+                  if (curStreaming && nearBottom && rowEl.dataset.full !== 'true') {
+                    mdEl.scrollTop = mdEl.scrollHeight;
+                  } else if (settledToSteps) {
+                    mdEl.scrollTop = 0;
+                  }
+                }
+                if (mdEl) mdEl._wasStreaming = curStreaming;
+
+                const chipsHtml = buildFootChips(item, running, wantFullDetail);
+                const metaEl = rowEl.querySelector('.xx-foot-meta');
+                if (metaEl && metaEl._lastHtml !== chipsHtml) {
+                  metaEl._lastHtml = chipsHtml;
+                  metaEl.innerHTML = chipsHtml;
+                }
+
+                const isFullNow = rowEl.dataset.full === 'true';
+                const canRetry = Boolean(settings.translateEnabled !== false && item.translateStatus !== 'off' && item.translateStatus !== 'no-key' && item.translateModel !== 'native-zh');
+                const detailBtn = !isStreamingThink && isStepsStyle && !isBriefThink && effectiveMode !== 'raw' && zhFull && item.translateModel !== 'native-zh'
+                  ? '<button class="xx-btn xx-toggle-detail" type="button">' + (wantFullDetail ? '看脉络' : '看完整') + '</button>'
+                  : '';
+                const langBtn = zhFull && zhFull !== rawText
+                  ? '<button class="xx-btn xx-toggle-lang" type="button">' + (effectiveMode === 'raw' ? '看中文' : '看原文') + '</button>'
+                  : '';
+                const retryBtn = canRetry
+                  ? '<button class="xx-btn xx-retry-btn" type="button">重译</button>'
+                  : '';
+                const expandBtn = '<button class="xx-btn xx-expand-full-btn" type="button">' + (isFullNow ? '收起高度' : '展开全文') + '</button>';
+                const actHtml = expandBtn + detailBtn + langBtn + retryBtn + '<button class="xx-btn xx-copy-btn" type="button">复制</button>';
+                const actEl = rowEl.querySelector('.xx-foot-actions');
+                if (actEl && actEl._lastHtml !== actHtml) {
+                  actEl._lastHtml = actHtml;
+                  actEl.innerHTML = actHtml;
+                }
+                if (mdEl) syncThinkOverflow(rowEl, mdEl);
+              };
+
+              rowEl._renderThinkBody = renderThinkBody;
+              if (rowOpen) renderThinkBody();
+              nextRowEls.push(rowEl);
             } else {
-              const actionsSig = Boolean(langToggleHtml) + ':' + Boolean(retryHtml) + ':' + effectiveMode;
-              bodyEl.innerHTML =
-                '<div class="xx-think-md">' + mdHtml + '</div>' +
-                '<div class="xx-expand-bar"><button class="xx-expand-full-btn" type="button">展开全文</button></div>' +
-                '<div class="xx-step-foot">' +
-                  '<span class="xx-foot-meta">' + chipsHtml + '</span>' +
-                  '<span class="xx-foot-actions" data-sig="' + actionsSig + '">' + langToggleHtml + retryHtml + '<button class="xx-btn xx-copy-btn" type="button">复制</button></span>' +
-                '</div>';
-              const newMd = bodyEl.querySelector('.xx-think-md');
-              newMd._lastHtml = mdHtml;
-              bodyEl.querySelector('.xx-foot-meta')._lastHtml = chipsHtml;
-              if (curStreaming && stepEl.dataset.full !== 'true') {
-                newMd.scrollTop = newMd.scrollHeight;
+              // 单条工具行（DSH 默认收起，点击展开参数/命令详情）
+              const rowOpenKey = turnKey + ':tl:' + item.id;
+              const act = classifyToolActivity(item);
+              const icoKey = activityIconKey(act);
+              let rowEl = existingRows.get(rowOpenKey);
+              if (!rowEl) {
+                rowEl = document.createElement('div');
+                rowEl.className = 'xx-row xx-tool-row';
+                rowEl.dataset.rowOpenKey = rowOpenKey;
+                rowEl.innerHTML =
+                  '<button class="xx-row-head xx-tool-head" type="button">' +
+                    '<span class="xx-lead">' +
+                      '<span class="xx-act-ico"></span>' +
+                      '<span class="xx-act-chev">' + ICONS.chevDown + '</span>' +
+                    '</span>' +
+                    '<span class="xx-row-title"></span>' +
+                    '<span class="xx-row-sep"></span>' +
+                    '<span class="xx-row-sum"></span>' +
+                    '<span class="xx-row-time"></span>' +
+                  '</button>' +
+                  '<div class="xx-row-body-shell"><div class="xx-row-body-inner"><div class="xx-row-body">' +
+                    '<pre class="xx-detail-pre"></pre>' +
+                    '<div class="xx-row-foot">' +
+                      '<span class="xx-foot-meta"></span>' +
+                      '<span class="xx-foot-actions"><button class="xx-btn xx-copy-btn" type="button">复制</button></span>' +
+                    '</div>' +
+                  '</div></div></div>';
               }
-              syncThinkOverflow(stepEl, newMd);
-            }
-          } else {
-            if (!bodyEl.querySelector('.xx-detail-pre')) {
-              bodyEl.innerHTML =
-                '<pre class="xx-detail-pre">' + escapeHtml(rawText || '{}') + '</pre>' +
-                '<div class="xx-step-foot"><span class="xx-foot-meta"><span class="xx-chip">' + escapeHtml(item.label) + '</span></span><span class="xx-foot-actions"><button class="xx-btn xx-copy-btn" type="button">复制</button></span></div>';
-            } else {
-              const pre = bodyEl.querySelector('.xx-detail-pre');
-              const txt = rawText || '{}';
-              if (pre.textContent !== txt) pre.textContent = txt;
+
+              const rowOpen = openState.get(rowOpenKey) === true;
+              const running = item.status === 'running';
+              const isErr = item.status === 'error';
+              const sumText = item.summary || item.liveDetail || item.toolName || '';
+
+              rowEl.dataset.open = String(rowOpen);
+              rowEl.dataset.running = String(running);
+              rowEl.dataset.streaming = String(running);
+              rowEl.dataset.preview = String(Boolean(sumText));
+              rowEl._toolItem = item;
+              rowEl._copyText = item.detail || sumText;
+
+              const headEl = rowEl.querySelector('.xx-tool-head');
+              const leadEl = headEl.querySelector('.xx-lead');
+              const headSig = icoKey + '|' + item.label + '|' + sumText + '|' + rowOpen + '|' + isErr;
+              if (headEl.dataset.sig !== headSig) {
+                headEl.dataset.sig = headSig;
+                leadEl.dataset.ico = icoKey;
+                leadEl.dataset.err = String(isErr);
+                headEl.querySelector('.xx-act-ico').innerHTML = ICONS[icoKey] || ICONS.tool;
+                headEl.querySelector('.xx-act-chev').innerHTML = rowOpen ? ICONS.chevUp : ICONS.chevDown;
+                headEl.querySelector('.xx-row-title').textContent = item.label || '工具调用';
+                const sumEl = headEl.querySelector('.xx-row-sum');
+                sumEl.textContent = sumText;
+                sumEl.classList.toggle('xx-row-err', isErr);
+              }
+
+              let tStr = '';
+              if (running && item.startedAtMs) {
+                tStr = Math.max(0, (Date.now() - item.startedAtMs) / 1000).toFixed(1) + 's';
+              } else if (typeof item.durationSec === 'number') {
+                tStr = item.durationSec.toFixed(1) + 's';
+              }
+              const timeEl = rowEl.querySelector('.xx-row-time');
+              if (timeEl && timeEl.textContent !== tStr) timeEl.textContent = tStr;
+
+              const renderToolBody = () => {
+                const detailTxt = item.detail || sumText || '{}';
+                const pre = rowEl.querySelector('.xx-detail-pre');
+                if (pre && pre.textContent !== detailTxt) pre.textContent = detailTxt;
+                const metaEl = rowEl.querySelector('.xx-foot-meta');
+                const chipHtml = isErr
+                  ? '<span class="xx-chip err">执行异常</span>'
+                  : '<span class="xx-chip">' + escapeHtml(item.toolName || item.label || 'tool') + '</span>';
+                if (metaEl && metaEl._lastHtml !== chipHtml) {
+                  metaEl._lastHtml = chipHtml;
+                  metaEl.innerHTML = chipHtml;
+                }
+              };
+
+              rowEl._renderToolBody = renderToolBody;
+              if (rowOpen) renderToolBody();
+              nextRowEls.push(rowEl);
             }
           }
+
+          const curRowEls = Array.from(bodyEl.children);
+          const sameRows = curRowEls.length === nextRowEls.length && curRowEls.every((el, idx) => el === nextRowEls[idx]);
+          if (!sameRows) bodyEl.replaceChildren(...nextRowEls);
+
+          const isGroupedNow = grpEl.dataset.grouped === 'true';
+          const isGroupOpenNow = grpEl.dataset.groupOpen === 'true';
+          const isLiveNow = grpEl.dataset.live === 'true';
+          if (isGroupedNow && isGroupOpenNow) {
+            if (isLiveNow && groupFollowMap.get(groupOpenKey) === true) {
+              bodyEl.scrollTop = bodyEl.scrollHeight;
+            }
+            updateGroupScrollFades(bodyEl);
+          } else {
+            bodyEl.classList.remove('xx-fade-top', 'xx-fade-bottom');
+          }
+          if (localNeedsStream) scheduleStreamTick();
         };
-        stepEl._renderBody = renderBody;
-        if (stepOpen) renderBody();
 
-        nextChildren.push(stepEl);
+        grpEl._renderMembers = renderMembers;
+        if (turnOpen && groupOpen) renderMembers();
+        nextGroupEls.push(grpEl);
       }
 
-      const currentChildren = Array.from(stepsBox.children);
-      const sameOrder =
-        currentChildren.length === nextChildren.length &&
-        currentChildren.every((el, idx) => el === nextChildren[idx]);
-      if (!sameOrder) {
-        stepsBox.replaceChildren(...nextChildren);
-      }
+      const curGroups = Array.from(groupsBox.children);
+      const sameGroups = curGroups.length === nextGroupEls.length && curGroups.every((el, idx) => el === nextGroupEls[idx]);
+      if (!sameGroups) groupsBox.replaceChildren(...nextGroupEls);
 
       if (needsStreamMore) scheduleStreamTick();
     }
 
-    /**
-     * 精准局部 30fps 平滑吐字：绝不重跑整页 renderAll()，把 GPU/渲染进程 CPU 压到最低！
-     */
     function scheduleStreamTick() {
       if (streamRaf) return;
       streamRaf = requestAnimationFrame((ts) => {
         streamRaf = 0;
         if (document.visibilityState !== 'visible') {
-          // 后台标签页直接一步追平并同步 DOM，避免切回前台停在半截与残留光标
           for (const rec of streamShownMap.values()) {
             rec.shownLen = rec.text.length;
-            if (rec.stepEl && rec.stepEl.isConnected) {
-              updateStepThinkDisplay(rec.stepEl, rec.text, rec.item, rec.effectiveMode, rec.running, rec.isStreamingThink);
+            if (rec.rowEl && rec.rowEl.isConnected) {
+              updateThinkRowStreamDom(rec.rowEl, rec.text, rec.item, rec.effectiveMode, rec.running, rec.isStreamingThink, rec.summaryEnabled, rec.policy, rec.useStepRender, rec.wantFullDetail);
             }
           }
           return;
@@ -968,9 +1790,9 @@ function getClientBundle(owner) {
             const delta = rec.text.length - rec.shownLen;
             const step = Math.max(2, Math.min(12, Math.ceil(delta / 5)));
             rec.shownLen = Math.min(rec.text.length, rec.shownLen + step);
-            if (rec.stepEl && rec.stepEl.isConnected) {
+            if (rec.rowEl && rec.rowEl.isConnected) {
               const shown = rec.text.slice(0, rec.shownLen);
-              updateStepThinkDisplay(rec.stepEl, shown, rec.item, rec.effectiveMode, rec.running, rec.isStreamingThink || rec.shownLen < rec.text.length);
+              updateThinkRowStreamDom(rec.rowEl, shown, rec.item, rec.effectiveMode, rec.running, rec.isStreamingThink || rec.shownLen < rec.text.length, rec.summaryEnabled, rec.policy, rec.useStepRender, rec.wantFullDetail);
             }
             if (rec.shownLen < rec.text.length) hasMore = true;
           }
@@ -986,36 +1808,55 @@ function getClientBundle(owner) {
     function renderAll() {
       if (!lastData || !lastSettings?.inlineEnabled) {
         cleanupHosts();
-        return;
+        return { ok: true, responseCount: 0, hostCount: 0 };
       }
 
       const domConvId = detectConversationId();
-      if (domConvId && lastData.activeId && domConvId !== lastData.activeId) return;
+      if (domConvId && lastData.activeId && domConvId !== lastData.activeId) {
+        return { ok: false };
+      }
 
       if (lastData.activeId && lastActiveConvId && lastData.activeId !== lastActiveConvId) {
         streamShownMap.clear();
         openState.clear();
         userPinnedSet.clear();
+        turnAutoFoldedSet.clear();
+        groupFollowMap.clear();
+        clearLiveTitleTimers();
         rawOverrideMap.clear();
+        fullDetailMap.clear();
         expandedFullMap.clear();
-        turnSettledMap.clear();
       }
       if (lastData.activeId) lastActiveConvId = lastData.activeId;
+
+      const curStyle = lastSettings?.translateStyle || 'steps';
+      if (lastTranslateStyle && curStyle !== lastTranslateStyle) {
+        streamShownMap.clear();
+      }
+      lastTranslateStyle = curStyle;
+
+      const curCacheEpoch = Number(lastData.cacheEpoch || 0);
+      if (lastCacheEpoch !== -1 && curCacheEpoch !== lastCacheEpoch) {
+        fullDetailMap.clear();
+        streamShownMap.clear();
+      }
+      lastCacheEpoch = curCacheEpoch;
 
       const responses = Array.from(document.querySelectorAll('[data-testid="agent-response"]'));
       const turns = lastData.turns || [];
       if (turns.length === 0) {
         cleanupHosts();
-        return;
+        return { ok: true, responseCount: responses.length, hostCount: 0 };
       }
-      if (responses.length === 0) return;
+      if (responses.length === 0) return { ok: false };
 
       const theme = detectTheme();
       const paired = pairResponsesToTurns(responses, turns);
 
       for (let i = 0; i < paired.length; i++) {
         const { resp, turn } = paired[i];
-        if (!turn || !Array.isArray(turn.items) || turn.items.length === 0) {
+        const hasVisibleProcess = turn && (turn.hasProcess || (Array.isArray(turn.items) && turn.items.some((it) => it.kind !== 'reply-boundary')));
+        if (!hasVisibleProcess) {
           const old = resp.querySelector(':scope > .agy-thinking-inline-host');
           if (old) old.remove();
           continue;
@@ -1026,26 +1867,39 @@ function getClientBundle(owner) {
           host.className = 'agy-thinking-inline-host';
           resp.prepend(host);
         }
-        renderTurnIntoHost(host, turn, i === paired.length - 1, lastSettings, theme);
+        const lastTurnIndex = turns.length > 0 ? turns[turns.length - 1].turnIndex : -1;
+        renderTurnIntoHost(host, turn, turn.turnIndex === lastTurnIndex, lastSettings, theme);
       }
+
+      let hostCount = 0;
+      for (const r of responses) {
+        if (r.querySelector(':scope > .agy-thinking-inline-host')) hostCount++;
+      }
+      return { ok: true, responseCount: responses.length, hostCount };
     }
 
     function apply(data, settings, owner) {
       if (owner < (globalThis.__agyThinkingInline?.owner || 0)) return 'superseded';
       lastData = data;
       lastSettings = settings;
-      renderAll();
-      return true;
+      return renderAll();
     }
 
     function readState(owner) {
       if (owner < (globalThis.__agyThinkingInline?.owner || 0)) return 'superseded';
       const drained = pendingActions.length > 0 ? pendingActions.splice(0, pendingActions.length) : [];
+      const responses = document.querySelectorAll('[data-testid="agent-response"]');
+      let hostCount = 0;
+      for (const r of responses) {
+        if (r.querySelector(':scope > .agy-thinking-inline-host')) hostCount++;
+      }
       return {
         owner: OWNER,
         hash: ${JSON.stringify(createHash('sha1').update(String(owner)).digest('hex').slice(0, 12))},
         convId: detectConversationId(),
-        hasResponses: document.querySelectorAll('[data-testid="agent-response"]').length > 0,
+        hasResponses: responses.length > 0,
+        responseCount: responses.length,
+        hostCount,
         visible: document.visibilityState === 'visible',
         actions: drained,
       };
@@ -1054,9 +1908,9 @@ function getClientBundle(owner) {
     function onVisibilityChange() {
       if (document.visibilityState !== 'visible') return;
       for (const rec of streamShownMap.values()) {
-        if (rec.stepEl && rec.stepEl.isConnected) {
+        if (rec.rowEl && rec.rowEl.isConnected) {
           const shown = rec.text.slice(0, Math.min(rec.shownLen, rec.text.length));
-          updateStepThinkDisplay(rec.stepEl, shown, rec.item, rec.effectiveMode, rec.running, rec.isStreamingThink || rec.shownLen < rec.text.length);
+          updateThinkRowStreamDom(rec.rowEl, shown, rec.item, rec.effectiveMode, rec.running, rec.isStreamingThink || rec.shownLen < rec.text.length, rec.summaryEnabled, rec.policy, rec.useStepRender, rec.wantFullDetail);
         }
       }
       renderAll();
@@ -1067,12 +1921,15 @@ function getClientBundle(owner) {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       if (timerHandle) clearInterval(timerHandle);
       if (streamRaf) cancelAnimationFrame(streamRaf);
+      clearLiveTitleTimers();
       streamShownMap.clear();
       openState.clear();
       userPinnedSet.clear();
+      turnAutoFoldedSet.clear();
+      groupFollowMap.clear();
       rawOverrideMap.clear();
+      fullDetailMap.clear();
       expandedFullMap.clear();
-      turnSettledMap.clear();
       cleanupHosts();
       if (globalThis.__agyThinkingInline?.owner === OWNER) delete globalThis.__agyThinkingInline;
     }
@@ -1085,11 +1942,17 @@ function getClientBundle(owner) {
         const shadow = host.shadowRoot;
         if (!turn || !turn.isRunning || !shadow) continue;
         const labelEl = shadow.querySelector('.xx-turn-label');
-        if (labelEl) labelEl.textContent = formatTurnHeader(turn).label;
-        for (const stepEl of shadow.querySelectorAll('.xx-step[data-running="true"]')) {
-          const item = stepEl._itemData;
+        if (labelEl) {
+          const nextHtml = renderTurnLabelHtml(turn);
+          if (labelEl._lastHtml !== nextHtml) {
+            labelEl._lastHtml = nextHtml;
+            labelEl.innerHTML = nextHtml;
+          }
+        }
+        for (const rowEl of shadow.querySelectorAll('.xx-row[data-running="true"]')) {
+          const item = rowEl._thinkItem || rowEl._toolItem;
           if (!item?.startedAtMs) continue;
-          const timeEl = stepEl.querySelector('.xx-step-time');
+          const timeEl = rowEl.querySelector('.xx-row-time');
           if (timeEl) timeEl.textContent = Math.max(0, (Date.now() - item.startedAtMs) / 1000).toFixed(1) + 's';
         }
       }
@@ -1142,7 +2005,7 @@ export function startInlineInjector(
 
   const connect = async (target) => {
     const ws = new WebSocket(target.webSocketDebuggerUrl);
-    const entry = { ws, pending: new Map(), nextId: 1, lastSig: '', lastConvId: '', visible: true };
+    const entry = { ws, pending: new Map(), nextId: 1, lastSig: '', lastConvId: '', lastResponseCount: -1, lastHostCount: -1, visible: true };
     await new Promise((resolve, reject) => {
       const fail = (msg) => {
         clearTimeout(t);
@@ -1207,7 +2070,6 @@ export function startInlineInjector(
       cdpState = 'no-ws';
       return [];
     }
-    // 延长 page 枚举缓存至 10 秒，避免频繁打 /json/list
     if (!force && cachedPages.length && Date.now() - lastListAt < 10000) return cachedPages;
     let port;
     try {
@@ -1230,7 +2092,7 @@ export function startInlineInjector(
         return true;
       });
       lastListAt = Date.now();
-      cdpState = 'ok';
+      cdpState = cachedPages.length > 0 ? 'ok' : 'no-page';
       const validIds = new Set(cachedPages.map((t) => t.id));
       for (const [id, entry] of sockets) {
         if (!validIds.has(id)) retire(entry, id);
@@ -1246,7 +2108,9 @@ export function startInlineInjector(
     if (stopped) return;
     stopped = true;
     clearTimeout(timer);
+    timer = null;
     clearTimeout(cachedPushTimer);
+    cachedPushTimer = null;
     await Promise.all(
       [...sockets].map(async ([id, entry]) => {
         try {
@@ -1266,31 +2130,33 @@ export function startInlineInjector(
       activeId: data.activeId,
       activeStatus: data.activeStatus,
       isGenerating: data.isGenerating,
+      cacheEpoch: data.runtime?.cacheEpoch || 0,
       turns: data.turns,
     };
     const sig = computeSlimSignature(slimData, publicSettings);
     if (entry.lastSig === sig) return false;
 
-    const ok = await evaluate(
+    const res = await evaluate(
       entry,
       `globalThis.__agyThinkingInline?.apply(${JSON.stringify(slimData)},${JSON.stringify(publicSettings)},${owner})??false`
     );
-    if (ok === 'superseded') {
+    if (res === 'superseded') {
       cdpState = 'superseded';
       await stop();
       return false;
     }
-    if (ok) {
+    if (res && (res === true || res.ok)) {
       entry.lastSig = sig;
+      if (typeof res === 'object') {
+        entry.lastResponseCount = res.responseCount;
+        entry.lastHostCount = res.hostCount;
+      }
       lastChangeAt = Date.now();
       return true;
     }
     return false;
   }
 
-  /**
-   * 零 LS RPC 缓存热推：专门承接翻译流式新字，绝不触发 LanguageServer 轮询！
-   */
   const pushCached = (triggerNew = false) => {
     if (stopped) return;
     if (triggerNew) pendingCachedTriggerNew = true;
@@ -1305,17 +2171,35 @@ export function startInlineInjector(
         pendingCachedPush = true;
         return;
       }
+      busy = true;
       const shouldTrigger = pendingCachedTriggerNew;
       pendingCachedTriggerNew = false;
-      const settings = getSettings();
-      if (!settings.inlineEnabled) return;
-      const publicSettings = getPublicSettings();
-      for (const entry of sockets.values()) {
-        if (entry.closed || !entry.visible) continue;
-        try {
-          const cached = getCachedSnapshot?.(entry.lastConvId || '', settings, shouldTrigger);
-          if (cached) await pushDataToEntry(entry, cached, publicSettings);
-        } catch {}
+      try {
+        const settings = getSettings();
+        if (!settings.inlineEnabled) return;
+        const publicSettings = getPublicSettings();
+        for (const entry of sockets.values()) {
+          if (entry.closed || !entry.visible) continue;
+          try {
+            const cached = getCachedSnapshot?.(entry.lastConvId || '', settings, shouldTrigger);
+            if (cached) await pushDataToEntry(entry, cached, publicSettings);
+          } catch {}
+        }
+      } finally {
+        busy = false;
+        if (!stopped) {
+          const latestSettings = getSettings();
+          if (pendingCachedPush) {
+            pendingCachedPush = false;
+            if (latestSettings.inlineEnabled) pushCached(pendingCachedTriggerNew);
+            else pendingCachedTriggerNew = false;
+          }
+          if (pendingNudge || (!timer && latestSettings.inlineEnabled)) {
+            pendingNudge = false;
+            clearTimeout(timer);
+            timer = setTimeout(tick, 120);
+          }
+        }
       }
     }, 90);
   };
@@ -1331,13 +2215,37 @@ export function startInlineInjector(
   };
 
   const tick = async () => {
-    if (busy || stopped) return;
+    timer = null;
+    if (stopped) return;
+    if (busy) {
+      // pushCached 正在占用锁时绝不能吞掉 tick，标记 pendingNudge 由其 finally 立即补跑
+      pendingNudge = true;
+      return;
+    }
     busy = true;
     let anyGenerating = false;
     let anyVisible = false;
     const settings = getSettings();
     const publicSettings = getPublicSettings();
     try {
+      if (!settings.inlineEnabled) {
+        await Promise.all(
+          [...sockets].map(async ([id, entry]) => {
+            try {
+              await evaluate(
+                entry,
+                `globalThis.__agyThinkingInline?.owner===${owner}&&globalThis.__agyThinkingInline.dispose()`
+              );
+            } finally {
+              retire(entry, id);
+            }
+          })
+        );
+        cachedPages = [];
+        lastListAt = 0;
+        return;
+      }
+
       const pages = await listPages();
       for (const target of pages) {
         if (stopped) break;
@@ -1363,8 +2271,17 @@ export function startInlineInjector(
           }
           if (!state || state.owner !== owner) continue;
 
+          const nextConvId = state.convId || '';
+          const responseCountChanged = state.responseCount !== entry.lastResponseCount;
+          if (
+            nextConvId !== entry.lastConvId ||
+            responseCountChanged ||
+            state.hostCount !== entry.lastHostCount
+          ) {
+            entry.lastSig = '';
+          }
           entry.visible = state.visible !== false;
-          entry.lastConvId = state.convId || '';
+          entry.lastConvId = nextConvId;
           if (entry.visible) anyVisible = true;
 
           if (Array.isArray(state.actions) && state.actions.length > 0) {
@@ -1373,22 +2290,10 @@ export function startInlineInjector(
             }
           }
 
-          if (!settings.inlineEnabled) {
-            if (entry.lastSig !== 'OFF') {
-              await evaluate(
-                entry,
-                `globalThis.__agyThinkingInline?.apply(null,${JSON.stringify(publicSettings)},${owner})`
-              );
-              entry.lastSig = 'OFF';
-            }
-            continue;
-          }
-
           if (!state.hasResponses) continue;
-          // 隐藏页只在尚未注入过时刷一次，之后跳过节省 CPU
           if (!entry.visible && entry.lastSig) continue;
 
-          const data = await inspectByConvId(state.convId || '', settings);
+          const data = await inspectByConvId(state.convId || '', settings, { force: responseCountChanged });
           if (!data || stopped) continue;
           if (data.isGenerating || data.activeStatus === 'CASCADE_RUN_STATUS_RUNNING') {
             anyGenerating = true;
@@ -1399,20 +2304,29 @@ export function startInlineInjector(
         } catch {
           const entry = sockets.get(target.id);
           if (entry) retire(entry, target.id);
+          lastListAt = 0;
         }
       }
     } finally {
       busy = false;
       if (!stopped) {
+        const latestSettings = getSettings();
         if (pendingCachedPush) {
           pendingCachedPush = false;
-          pushCached(pendingCachedTriggerNew);
+          if (latestSettings.inlineEnabled) pushCached(pendingCachedTriggerNew);
+          else pendingCachedTriggerNew = false;
         }
-        const nextDelay = pendingNudge
-          ? 120
-          : computeNextDelay(anyGenerating, anyVisible, settings.inlineEnabled);
-        pendingNudge = false;
-        timer = setTimeout(tick, nextDelay);
+        if (latestSettings.inlineEnabled || pendingNudge) {
+          const nextDelay = pendingNudge
+            ? 120
+            : computeNextDelay(anyGenerating, anyVisible, latestSettings.inlineEnabled);
+          pendingNudge = false;
+          clearTimeout(timer);
+          timer = setTimeout(tick, nextDelay);
+        } else {
+          clearTimeout(timer);
+          timer = null;
+        }
       }
     }
   };

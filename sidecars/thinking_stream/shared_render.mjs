@@ -1,6 +1,6 @@
 /**
- * 侧边栏 UI 与内嵌 Shadow DOM 共用的纯渲染辅助函数与图标，
- * 避免两处复制粘贴导致 Markdown 解析或摘要逻辑漂移。
+ * 侧边栏 UI 与内嵌 Shadow DOM 共用的纯渲染辅助函数、DSH 过程分组引擎与图标，
+ * 确保两端在分组边界、活动分类、4 档策略、思考摘要与 Markdown 渲染上完全一致。
  */
 
 export const SHARED_RENDER_SOURCE = `
@@ -20,8 +20,8 @@ function formatInline(line) {
     inlineCodes.push('<code>' + code + '</code>');
     return '\\u0000IC_' + idx + '\\u0000';
   });
-  out = out.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
-  out = out.replace(/(^|[^*])\\*([^\\s*][^*]*?)\\*(?!\\*)/g, '$1<em>$2</em>');
+  out = out.replace(/\\*\\*((?:[^*]|\\*(?!\\*))+)\\*\\*/g, '<strong>$1</strong>');
+  out = out.replace(/(^|[^*\\w])\\*([^\\s*](?:[^*]*?[^\\s*])?)\\*(?![*\\w.])/g, '$1<em>$2</em>');
   if (inlineCodes.length > 0) {
     out = out.replace(/\\u0000IC_(\\d+)\\u0000/g, function (_m, i) {
       return inlineCodes[Number(i)] || '';
@@ -34,16 +34,16 @@ function renderMarkdown(raw) {
   if (!raw) return '';
   const codeBlocks = [];
   let text = String(raw).replace(/\\r\\n/g, '\\n');
-  text = text.replace(/\`\`\`[^\\n]*\\n([\\s\\S]*?)\`\`\`/g, function (_m, code) {
+  text = text.replace(/(^|\\n)[\\t ]*\`\`\`[^\\n]*\\n([\\s\\S]*?\\n)?[\\t ]*\`\`\`[\\t ]*(?=\\n|$)/g, function (_m, lead, code) {
     const idx = codeBlocks.length;
-    codeBlocks.push('<pre><code>' + escapeHtml(code.replace(/\\n$/, '')) + '</code></pre>');
-    return '\\n\\u0000CB_' + idx + '\\u0000\\n';
+    codeBlocks.push('<pre><code>' + escapeHtml((code || '').replace(/\\n$/, '')) + '</code></pre>');
+    return (lead || '') + '\\n\\u0000CB_' + idx + '\\u0000\\n';
   });
-  // 流式未闭合代码块兜底渲染，避免半截代码被当普通段落乱切
-  text = text.replace(/\`\`\`[^\\n]*\\n([\\s\\S]+)$/, function (_m, code) {
+  // 流式未闭合代码块兜底渲染（仅匹配行首围栏，避免行内三反引号吞掉后文）
+  text = text.replace(/(^|\\n)[\\t ]*\`\`\`[^\\n]*\\n([\\s\\S]*)$/, function (_m, lead, code) {
     const idx = codeBlocks.length;
-    codeBlocks.push('<pre><code>' + escapeHtml(code.replace(/\\n$/, '')) + '</code></pre>');
-    return '\\n\\u0000CB_' + idx + '\\u0000\\n';
+    codeBlocks.push('<pre><code>' + escapeHtml((code || '').replace(/\\n$/, '')) + '</code></pre>');
+    return (lead || '') + '\\n\\u0000CB_' + idx + '\\u0000\\n';
   });
 
   const lines = text.split('\\n');
@@ -55,7 +55,7 @@ function renderMarkdown(raw) {
 
   function flushPara() {
     if (paraLines.length > 0) {
-      out.push('<p>' + paraLines.map(formatInline).join('<br>') + '</p>');
+      out.push('<p>' + formatInline(paraLines.join('\\n')).replace(/\\n/g, '<br>') + '</p>');
       paraLines = [];
     }
   }
@@ -100,7 +100,7 @@ function renderMarkdown(raw) {
       continue;
     }
 
-    const headMatch = trimmed.match(/^(#{1,4})\\s+(.+)$/);
+    const headMatch = trimmed.match(/^(#{1,6})\\s+(.+)$/);
     if (headMatch) {
       flushAll();
       const lvl = Math.min(4, headMatch[1].length);
@@ -147,43 +147,141 @@ function renderMarkdown(raw) {
   });
 }
 
+function parseThinkingSteps(raw) {
+  if (!raw) return null;
+  const text = String(raw).replace(/\\r\\n/g, '\\n');
+  const lines = text.split('\\n');
+  const steps = [];
+  let inFence = false;
+  let current = null;
+  const leadLines = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (/^\`{3,}/.test(trimmed)) {
+      inFence = !inFence;
+      if (current) current.body.push(line);
+      else leadLines.push(line);
+      continue;
+    }
+    if (!inFence) {
+      const isIndentedSubItem = /^(?:\\t| {2,})/.test(line);
+      let m = null;
+      if (!isIndentedSubItem) {
+        m = trimmed.match(/^(?:[-*+]|\\d+[.)])\\s+\\*\\*((?:[^*]|\\*(?!\\*))+)\\*\\*\\s*(?:[：:\\-—]\\s*(.*))?$/);
+        if (!m) {
+          m = trimmed.match(/^#{1,4}\\s+(.+)$/);
+          if (m) {
+            m = [m[0], m[1].replace(/\\*\\*/g, '').trim(), ''];
+          }
+        }
+        if (!m) {
+          m = trimmed.match(/^\\*\\*((?:[^*]|\\*(?!\\*)){2,32})\\*\\*\\s*(?:[：:]\\s*(.*))?$/);
+        }
+      }
+      if (m) {
+        const title = String(m[1] || '').trim();
+        const rest = String(m[2] || '').trim();
+        if (title) {
+          current = { title, body: rest ? [rest] : [] };
+          steps.push(current);
+          continue;
+        }
+      }
+    }
+    if (current) current.body.push(line);
+    else if (trimmed) leadLines.push(line);
+  }
+
+  if (steps.length === 0) return null;
+  if (leadLines.length > 0) {
+    steps.unshift({ title: '思路概览', body: leadLines });
+  }
+  return steps;
+}
+
+function countThinkingSteps(raw) {
+  const steps = parseThinkingSteps(raw);
+  return steps ? steps.length : 0;
+}
+
+function renderThinkingSteps(raw, preferSteps) {
+  if (!raw) return '';
+  if (preferSteps !== false) {
+    const steps = parseThinkingSteps(raw);
+    if (steps && steps.length > 0) {
+      const nodes = steps.map(function (st, idx) {
+        const descRaw = st.body.join('\\n').trim();
+        const descHtml = descRaw ? ('<div class="tstep-desc">' + renderMarkdown(descRaw) + '</div>') : '';
+        return (
+          '<div class="tstep-node">' +
+            '<span class="tstep-idx">' + (idx + 1) + '</span>' +
+            '<div class="tstep-body">' +
+              '<div class="tstep-title">' + formatInline(st.title) + '</div>' +
+              descHtml +
+            '</div>' +
+          '</div>'
+        );
+      });
+      return '<div class="tstep-list">' + nodes.join('') + '</div>';
+    }
+  }
+  return renderMarkdown(raw);
+}
+
+function isFenceLine(trimmed) {
+  return /^\`{3,}/.test(trimmed);
+}
+
 function firstLine(text) {
   const lines = String(text || '').split(/\\r?\\n/);
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim();
-    if (trimmed) return trimmed;
+    if (trimmed && !isFenceLine(trimmed)) return trimmed;
   }
   return '';
 }
 
-function latestParagraphFirstLine(text) {
+/**
+ * DSH ReasoningRow 流式预览规则：
+ * 仅取「最近一个首行已经遇到换行符 \\n 的段落首行」，未完成首行时不提前闪现半行字。
+ */
+function latestCompletedParagraphFirstLine(text) {
+  const str = String(text || '').replace(/^(?:[\\t ]*\\r?\\n)+/, '');
   let summary = '';
   let start = 0;
   const sep = /\\r?\\n(?:[\\t ]*\\r?\\n)+/g;
   while (true) {
-    const next = sep.exec(text);
-    const end = next === null ? text.length : next.index + next[0].indexOf('\\n');
-    const nl = text.indexOf('\\n', start);
+    const next = sep.exec(str);
+    const end = next === null ? str.length : next.index + next[0].indexOf('\\n');
+    const nl = str.indexOf('\\n', start);
     if (nl !== -1 && nl <= end) {
-      const cand = text.slice(start, nl).trim();
-      if (cand) summary = cand;
-    } else if (next === null) {
-      const tail = text.slice(start).trim();
-      if (tail) summary = firstLine(tail);
+      const cand = str.slice(start, nl).trim();
+      if (cand && !isFenceLine(cand)) summary = cand;
     }
-    if (next === null) return summary || firstLine(text);
+    if (next === null) return summary;
     start = next.index + next[0].length;
   }
 }
 
-function thinkSummary(text, running) {
-  const line = running ? latestParagraphFirstLine(text) : firstLine(text);
-  return line
+function latestParagraphFirstLine(text) {
+  return latestCompletedParagraphFirstLine(text) || firstLine(text);
+}
+
+function stripSummaryDecor(line) {
+  return String(line || '')
     .replace(/^#{1,6}\\s+/, '')
-    .replace(/^[-*+]\\s+/, '')
+    .replace(/^(?:[-*+]|\\d+[.)])\\s+/, '')
     .replace(/\\*\\*/g, '')
     .replace(/\`/g, '')
-    .trim() || '正在整理思路…';
+    .replace(/\\s+/g, ' ')
+    .trim();
+}
+
+function thinkSummary(text, running) {
+  const line = running ? latestCompletedParagraphFirstLine(text) : firstLine(text);
+  return stripSummaryDecor(line);
 }
 
 function shortModelName(model) {
@@ -194,17 +292,321 @@ function shortModelName(model) {
   return parts[parts.length - 1] || model;
 }
 
+function formatDurationHuman(sec, running) {
+  if (typeof sec !== 'number' || !Number.isFinite(sec) || sec < 0) return '';
+  const whole = Math.max(1, Math.round(sec));
+  if (whole >= 3600) {
+    const hrs = Math.floor(whole / 3600);
+    const mins = Math.floor((whole % 3600) / 60);
+    return mins > 0 ? (hrs + '小时' + mins + '分') : (hrs + '小时');
+  }
+  if (whole >= 60) {
+    const mins = Math.floor(whole / 60);
+    const rem = whole % 60;
+    return rem > 0 ? (mins + '分' + rem + '秒') : (mins + '分');
+  }
+  if (running) return whole + '秒';
+  return (sec < 10 ? (Math.round(sec * 10) / 10) : whole) + '秒';
+}
+
+function formatDurationParts(sec, running) {
+  if (typeof sec !== 'number' || !Number.isFinite(sec) || sec < 0) return [];
+  const whole = Math.max(1, Math.round(sec));
+  if (whole >= 3600) {
+    const hrs = Math.floor(whole / 3600);
+    const mins = Math.floor((whole % 3600) / 60);
+    const parts = [{ text: String(hrs), numeric: true }, { text: '小时', numeric: false }];
+    if (mins > 0) parts.push({ text: String(mins), numeric: true }, { text: '分', numeric: false });
+    return parts;
+  }
+  if (whole >= 60) {
+    const mins = Math.floor(whole / 60);
+    const rem = whole % 60;
+    const parts = [{ text: String(mins), numeric: true }, { text: '分', numeric: false }];
+    if (rem > 0) parts.push({ text: String(rem), numeric: true }, { text: '秒', numeric: false });
+    return parts;
+  }
+  const s = running ? String(whole) : String(sec < 10 ? (Math.round(sec * 10) / 10) : whole);
+  return [{ text: s, numeric: true }, { text: '秒', numeric: false }];
+}
+
+/**
+ * 极简 2 档展示策略（专注观察思考，砍掉冗余模式）：
+ * - focus:    思考直出在主时间线，连续工具自动合并为单行胶囊，回答结束后整轮自动收起（默认）
+ * - expanded: 同上，但回答结束后保持整轮展开，方便连续复盘
+ */
+function getPresentationPolicy(settings) {
+  const raw = settings?.displayLevel;
+  const mode = (raw === 'expanded' || raw === 'verbose') ? 'expanded' : 'focus';
+  return {
+    mode,
+    foldCompletedTurns: mode !== 'expanded',
+    liveProcessDetail: true,
+    settledReasoningPreview: true,
+  };
+}
+
+/**
+ * DSH 13 类工具活动分类器（同时兼容 Antigravity 工具名与 DSH/常见 Agent 工具名）
+ */
+function classifyToolActivity(item) {
+  const name = String(item?.toolName || '').trim();
+  const lower = name.toLowerCase();
+  if (lower === 'read' || lower === 'read_file' || lower === 'view_file' || lower === 'view_file_outline' || lower === 'view_code_item') return 'read';
+  if (lower === 'read_image' || lower === 'view_image') return 'readImage';
+  if (lower === 'grep' || lower === 'grep_search' || lower === 'glob' || lower === 'find_by_name' || lower === 'list_dir' || lower.endsWith('_inspect')) return 'search';
+  if (lower === 'write' || lower === 'write_file' || lower === 'write_to_file') return 'write';
+  if (lower === 'edit' || lower === 'edit_file' || lower === 'apply_patch' || lower === 'replace_file_content' || lower === 'multi_replace_file_content') return 'edit';
+  if (['bash', 'pwsh', 'exec_command', 'write_stdin', 'run_command', 'send_command_input', 'command_status'].includes(lower) || lower.startsWith('terminal_')) return 'commands';
+  if (lower === 'run_code' || lower === 'run_workflow') return 'code';
+  if (lower === 'web_search' || lower === 'search_web') return 'webSearch';
+  if (lower === 'web_fetch' || lower === 'read_url_content' || lower === 'fetch_url') return 'webFetch';
+  if (lower === 'subagent' || lower.startsWith('subagent_') || lower === 'invoke_subagent' || lower === 'define_subagent' || lower === 'manage_subagents' || lower === 'swarm') return 'subagents';
+  if (['todo_write', 'create_goal', 'update_goal', 'get_goal', 'update_steps', 'update_focus'].includes(lower)) return 'plan';
+  if (lower === 'ask_user_question' || lower === 'request_user_input' || lower === 'ask_question') return 'questions';
+
+  if (item?.kind === 'cmd') return 'commands';
+  if (item?.kind === 'search') return 'webSearch';
+  if (item?.kind === 'file') {
+    if (item.label === '读取文件') return 'read';
+    if (item.label === '写入文件') return 'write';
+    return 'edit';
+  }
+  return 'tools';
+}
+
+function activityIconKey(act) {
+  if (act === 'thinking') return 'think';
+  if (act === 'read' || act === 'readImage') return 'read';
+  if (act === 'search') return 'search';
+  if (act === 'write' || act === 'edit') return 'edit';
+  if (act === 'commands') return 'cmd';
+  if (act === 'code') return 'code';
+  if (act === 'webSearch') return 'webSearch';
+  if (act === 'webFetch') return 'webFetch';
+  if (act === 'subagents') return 'subagents';
+  if (act === 'plan') return 'plan';
+  if (act === 'questions') return 'questions';
+  return 'tool';
+}
+
+const STEP_LIVE_LABELS = {
+  thinking: '正在分析请求',
+  read: '正在读取文件',
+  readImage: '正在读取图片',
+  write: '正在写入文件',
+  search: '正在搜索代码',
+  edit: '正在编辑文件',
+  commands: '正在运行命令',
+  code: '正在运行代码',
+  webSearch: '正在搜索网页',
+  webFetch: '正在访问网页',
+  subagents: '正在协调子智能体',
+  plan: '正在更新计划',
+  questions: '等待你的操作',
+  tools: '正在调用工具',
+};
+
+const STEP_DONE_LABELS = {
+  thinking: '已完成分析',
+  read: '已读取文件',
+  readImage: '已读取图片',
+  write: '已写入文件',
+  search: '已搜索代码',
+  edit: '修改了文件',
+  commands: '执行了命令',
+  code: '运行了代码',
+  webSearch: '已搜索网页',
+  webFetch: '已访问网页',
+  subagents: '已协调子智能体',
+  plan: '更新了计划',
+  questions: '向用户提出了问题',
+  tools: '已调用工具',
+};
+
+function normalizeDetailText(raw) {
+  const clean = String(raw || '').replace(/\\*\\*/g, '').replace(/\\s+/g, ' ').trim();
+  if (!clean) return '';
+  return clean.length > 160 ? clean.slice(0, 159).trimEnd() + '…' : clean;
+}
+
+function liveReasoningDetailFromMembers(members, displayMode, summaryEnabled) {
+  for (let i = members.length - 1; i >= 0; i--) {
+    const it = members[i];
+    if (it.kind !== 'think') continue;
+    const isLive = it.status === 'generating' || (displayMode !== 'raw' && it.translateStatus === 'translating');
+    if (!isLive) continue;
+    const text = displayMode !== 'raw'
+      ? ((summaryEnabled !== false && it.narrativeSummary) || it.translatedThinking || it.thinking || '')
+      : (it.thinking || '');
+    const paragraphs = String(text).split(/\\r?\\n[\\t ]*\\r?\\n/);
+    for (let p = paragraphs.length - 1; p >= 0; p--) {
+      const detail = normalizeDetailText(paragraphs[p]);
+      if (detail) return detail;
+    }
+  }
+  return '';
+}
+
+function computeGroupSummary(members, closed, displayMode, summaryEnabled) {
+  const countMap = new Map();
+  let running;
+  let runningDetail = '';
+  let runningTime = -Infinity;
+
+  for (let i = 0; i < members.length; i++) {
+    const it = members[i];
+    if (it.kind === 'think') continue;
+    const act = classifyToolActivity(it);
+    countMap.set(act, (countMap.get(act) || 0) + 1);
+    if (!closed && it.status === 'running') {
+      const t = typeof it.startedAtMs === 'number' ? it.startedAtMs : i;
+      if (t >= runningTime) {
+        runningTime = t;
+        running = act;
+        runningDetail = normalizeDetailText(it.liveDetail || it.summary || it.toolName || '');
+      }
+    }
+  }
+
+  const counts = [];
+  let totalCount = 0;
+  for (const [kind, count] of countMap.entries()) {
+    counts.push({ kind, count });
+    totalCount += count;
+  }
+  counts.sort(function (a, b) { return b.count - a.count; });
+
+  if (closed) {
+    return { counts, totalCount, running: undefined, runningDetail: '' };
+  }
+  if (!running) {
+    runningDetail = liveReasoningDetailFromMembers(members, displayMode, summaryEnabled);
+  }
+  return { counts, totalCount, running, runningDetail };
+}
+
+/**
+ * 连续工具胶囊标题组合规则：
+ * - 运行中：显示当前实时动作与详情
+ * - 已结束：取次数最多的前 2~3 类动作，并附带总步数（如「修改了文件并更新了计划 · 5 项」）
+ */
+function formatProcessGroupTitle(summary, closed, showDetail) {
+  if (!closed) {
+    const act = summary?.running || 'thinking';
+    const label = STEP_LIVE_LABELS[act] || STEP_LIVE_LABELS.thinking;
+    const detail = showDetail && summary?.runningDetail ? summary.runningDetail : '';
+    return {
+      activity: act,
+      iconKey: activityIconKey(act),
+      label,
+      detail,
+      title: detail ? (label + ' · ' + detail) : label,
+    };
+  }
+  const counts = summary?.counts || [];
+  const top = counts.slice(0, 3).map(function (c) { return STEP_DONE_LABELS[c.kind] || STEP_DONE_LABELS.tools; });
+  const leadAct = counts[0]?.kind || 'thinking';
+  let label = STEP_DONE_LABELS.thinking;
+  if (top.length === 1) {
+    label = top[0];
+  } else if (top.length === 2) {
+    const shared = top[0].startsWith('已') && top[1].startsWith('已');
+    label = top[0] + '并' + (shared ? top[1].slice(1) : top[1]);
+  } else if (top.length >= 3) {
+    label = top.join('，') + (counts.length > 3 ? '等' : '');
+  }
+  const total = summary?.totalCount || 0;
+  const fullTitle = total > 1 ? (label + ' · ' + total + ' 项') : label;
+  return {
+    activity: leadAct,
+    iconKey: activityIconKey(leadAct),
+    label,
+    detail: '',
+    title: fullTitle,
+  };
+}
+
+/**
+ * 聚焦思考的时间线分组引擎：
+ * - 每条思考永远直接展现在主时间线上（grouped: false），彻底消除套娃折叠
+ * - 单条工具直接单行展示（grouped: false），不套多余外壳
+ * - 连续 2 条及以上工具自动聚合成一行可展开的轻量工具胶囊（grouped: true），不把思考冲散
+ */
+function buildProcessGroups(items, turnIsRunning, displayMode, summaryEnabled) {
+  const groups = [];
+  let toolBurst = [];
+
+  function flushTools(forceClosed) {
+    if (toolBurst.length === 0) return;
+    const anyRunning = !forceClosed && toolBurst.some(function (it) { return it.status === 'running'; });
+    const closed = !anyRunning;
+    const hasError = toolBurst.some(function (it) { return it.status === 'error'; });
+    const firstId = toolBurst[0].id || ('t' + groups.length);
+    const summary = computeGroupSummary(toolBurst, closed, displayMode, summaryEnabled);
+    groups.push({
+      key: (toolBurst.length > 1 ? 'tc:' : 'tl:') + firstId,
+      kind: toolBurst.length > 1 ? 'tool-cluster' : 'tool',
+      grouped: toolBurst.length > 1,
+      members: toolBurst,
+      closed,
+      hasError,
+      summary,
+    });
+    toolBurst = [];
+  }
+
+  const list = Array.isArray(items) ? items : [];
+  for (let i = 0; i < list.length; i++) {
+    const it = list[i];
+    if (!it) continue;
+    if (it.kind === 'reply-boundary') {
+      flushTools(true);
+      continue;
+    }
+    if (it.kind === 'think') {
+      const hasText = Boolean(String(it.thinking || '').trim());
+      if (!hasText && it.status !== 'generating') continue;
+      flushTools(true);
+      const isLive = it.status === 'generating' && turnIsRunning;
+      groups.push({
+        key: 'th:' + (it.id || ('k' + groups.length)),
+        kind: 'think',
+        grouped: false,
+        members: [it],
+        closed: !isLive,
+        hasError: false,
+        summary: { counts: [], totalCount: 0, running: isLive ? 'thinking' : undefined, runningDetail: '' },
+      });
+      continue;
+    }
+    toolBurst.push(it);
+  }
+  flushTools(!turnIsRunning);
+  return groups;
+}
+
 const ICONS = {
   star: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z"/></svg>',
-  think: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M2 12h3M19 12h3M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12"/></svg>',
-  cmd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>',
-  file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
-  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg>',
-  tool: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.2 5.3L19.5 10l-5.3 1.7L12 17l-2.2-5.3L4.5 10l5.3-1.7Z"/></svg>',
+  think: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M2.5 12h3M18.5 12h3M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>',
+  read: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2.5H6.5a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V8.5Z"/><polyline points="14 2.5 14 8.5 19.5 8.5"/></svg>',
+  file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2.5H6.5a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V8.5Z"/><polyline points="14 2.5 14 8.5 19.5 8.5"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  cmd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3.5"/><polyline points="7.5 10 10.5 12.5 7.5 15"/><line x1="12.5" y1="15" x2="16.5" y2="15"/></svg>',
+  code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.8"/><line x1="20" y1="20" x2="16" y2="16"/></svg>',
+  webSearch: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a13 13 0 0 1 0 18M12 3a13 13 0 0 0 0 18"/></svg>',
+  webFetch: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+  subagents: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19.5a6 6 0 0 1 12 0"/><circle cx="17.5" cy="9.5" r="2.4"/><path d="M16 19.5h5a4.5 4.5 0 0 0-4.2-4.5"/></svg>',
+  plan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><polyline points="4 6 5.2 7.2 7 5"/><polyline points="4 12 5.2 13.2 7 11"/><polyline points="4 18 5.2 19.2 7 17"/></svg>',
+  questions: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .8c0 1.8-2.5 2.2-2.5 3.8"/><circle cx="12" cy="17.2" r="0.6" fill="currentColor"/></svg>',
+  tool: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L14.5 9.5L21 12L14.5 14.5L12 21L9.5 14.5L3 12L9.5 9.5Z"/></svg>',
   chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>',
+  chevDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
+  chevUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>',
 };
 `;
 
 export function buildSharedBrowserScript() {
-  return `(() => {\n${SHARED_RENDER_SOURCE}\nwindow.__agyThinkingShared = { escapeHtml, formatInline, renderMarkdown, firstLine, latestParagraphFirstLine, thinkSummary, shortModelName, ICONS };\n})();\n`;
+  return `(() => {\n${SHARED_RENDER_SOURCE}\nwindow.__agyThinkingShared = { escapeHtml, formatInline, renderMarkdown, parseThinkingSteps, countThinkingSteps, renderThinkingSteps, firstLine, latestCompletedParagraphFirstLine, latestParagraphFirstLine, thinkSummary, shortModelName, formatDurationHuman, formatDurationParts, getPresentationPolicy, classifyToolActivity, activityIconKey, buildProcessGroups, formatProcessGroupTitle, ICONS };\n})();\n`;
 }
