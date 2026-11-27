@@ -104,6 +104,8 @@ export function detectProviderKey(baseUrl) {
   if (/(^|\.)siliconflow\.(cn|com)$/i.test(host)) return 'siliconflow';
   if (/(^|\.)deepseek\.com$/i.test(host)) return 'deepseek';
   if (/(^|\.)bigmodel\.cn$/i.test(host)) return 'zhipu';
+  if (/(^|\.)modelscope\.(cn|ai)$/i.test(host)) return 'modelscope';
+  if (/(^|\.)(hunyuan\.cloud\.tencent\.com|tencentmaas\.com)$/i.test(host)) return 'hunyuan';
   if (/(^|\.)dashscope\.aliyuncs\.com$/i.test(host)) return 'qwen';
   if (/(^|\.)openrouter\.ai$/i.test(host)) return 'openrouter';
   return 'custom';
@@ -246,6 +248,17 @@ const MODEL_RATING_RULES = [
     reason: '吞吐极快、单价极薄，长思考流也不易卡顿',
   },
   {
+    match: /(^|\/)(qwen2\.5-72b|qwen3-32b)/i,
+    overall: 93,
+    value: 82,
+    natural: 96,
+    costTag: '收费 · 中等',
+    costTone: 'cheap',
+    priceIn: 2.0,
+    priceOut: 6.0,
+    reason: '大参数开源通义主力，复杂技术逻辑与长难句极稳',
+  },
+  {
     match: /(^|\/)(qwen2\.5-14b|qwen2\.5-32b|qwen3-14b|qwen3-30b-a3b|qwen-plus)/i,
     overall: 90,
     value: 84,
@@ -255,6 +268,28 @@ const MODEL_RATING_RULES = [
     priceIn: 0.8,
     priceOut: 2.4,
     reason: '中大参数通义，长难句拆解稳、行文自然不生硬',
+  },
+  {
+    match: /(^|\/)hunyuan-lite$/i,
+    overall: 93,
+    value: 96,
+    natural: 87,
+    costTag: '收费 · 轻量',
+    costTone: 'cheap',
+    priceIn: 0,
+    priceOut: 0,
+    reason: '轻量高速腾讯混元，中文顺滑自然、延迟低',
+  },
+  {
+    match: /(^|\/)(hunyuan-turbos|hunyuan-turbo)/i,
+    overall: 92,
+    value: 90,
+    natural: 93,
+    costTag: '收费 · 低价',
+    costTone: 'cheap',
+    priceIn: 0.8,
+    priceOut: 2.0,
+    reason: '腾讯混元高速主力，中文地道流畅、并发余量足',
   },
   {
     match: /(^|\/)(qwen-mt-flash|qwen-mt-turbo|qwen-mt-lite)/i,
@@ -481,6 +516,39 @@ export function evaluateModelForTranslation(modelId, baseUrl = '', rawItem = nul
       costTag = '官方免费';
       costTone = 'free';
       reason = '官方输入输出全免费，插件自动单并发防 429 限流';
+    }
+  } else if (provider === 'modelscope') {
+    isFree = true;
+    priceIn = 0;
+    priceOut = 0;
+    cacheIn = 0;
+    currency = 'CNY';
+    if (costTone !== 'slow') {
+      value = 98;
+      overall = Math.min(98, Math.round(natural * 0.62 + value * 0.38));
+      costTag = '每日免费额度';
+      costTone = 'free';
+      reason = `${reason}（魔搭每日免费 API 推理额度，实名绑定阿里云可用）`;
+    } else {
+      costTag = '推理型 · 免费额度';
+    }
+  } else if (provider === 'hunyuan') {
+    if (/^hunyuan-lite$/i.test(id)) {
+      isFree = true;
+      priceIn = 0;
+      priceOut = 0;
+      cacheIn = 0;
+      value = 100;
+      overall = 93;
+      costTag = '官方免费';
+      costTone = 'free';
+      reason = '腾讯混元官方免费轻量档，中文顺畅、自动低并发防限流';
+    } else if (/^hunyuan-turbo/i.test(id)) {
+      isFree = false;
+      priceIn = 0.8;
+      priceOut = 2.0;
+      costTag = '收费 · 低价';
+      costTone = 'cheap';
     }
   } else if (provider === 'deepseek') {
     if (/^(deepseek-chat|deepseek-flash)$/i.test(id)) {
@@ -1141,8 +1209,11 @@ export function createTranslator(getSettings, onProgress) {
   const getMaxConcurrency = () => {
     try {
       const s = getSettings();
+      const provider = detectProviderKey(s?.translateBaseUrl);
       // 智谱免费 Flash 系列官方并发限制极严（常为 1 并发），自动降为单并发防止 429 限流雪崩
-      if (isZhipuUrl(s?.translateBaseUrl)) return 1;
+      if (provider === 'zhipu') return 1;
+      // 魔搭每日免费推理与腾讯混元免费档降为 2 并发，兼顾速度与防 429
+      if (provider === 'modelscope' || provider === 'hunyuan') return 2;
     } catch {}
     return MAX_CONCURRENCY;
   };
@@ -2296,13 +2367,18 @@ export function createTranslator(getSettings, onProgress) {
     }
 
     if (!payload) {
-      if (provider === 'zhipu' && (lastStatus === 404 || lastStatus === 405)) {
+      if ((provider === 'zhipu' || provider === 'modelscope' || provider === 'hunyuan') && (lastStatus === 404 || lastStatus === 405)) {
+        const noticeMap = {
+          zhipu: '智谱官方未开放 /models 枚举接口，已保留下方官方核实精选列表（免费 Flash 与付费档可直接勾选）。',
+          modelscope: '魔搭 API-Inference 未开放全量 /models 列表，已保留下方热门免费主力模型（也可直接填入魔搭模型广场任意 ID）。',
+          hunyuan: '腾讯混元未开放 /models 枚举接口，已保留下方官方核实模型（hunyuan-lite 免费，可直接勾选）。',
+        };
         return {
           ok: true,
           baseUrl,
           provider,
           fallbackCurated: true,
-          notice: '智谱官方未开放 /models 枚举接口，已保留下方官方核实精选列表（免费 Flash 与付费档可直接勾选）。',
+          notice: noticeMap[provider],
           totalRaw: 0,
           count: 0,
           freeCount: 0,
@@ -2422,6 +2498,24 @@ export function createTranslator(getSettings, onProgress) {
         supported: true,
         summary: `Key 已用 $${used.toFixed(4)}${remTxt}`,
         raw: d,
+      };
+    }
+
+    if (provider === 'modelscope') {
+      return {
+        ok: true,
+        provider,
+        supported: false,
+        summary: '魔搭每日免费推理额度请在官网个人中心查看（插件已实时统计本地调用次数与 Token，点右侧可直达官网）',
+      };
+    }
+
+    if (provider === 'hunyuan') {
+      return {
+        ok: true,
+        provider,
+        supported: false,
+        summary: '腾讯混元无单 Key 余额 API：hunyuan-lite 官方免费不扣费，付费档请点右侧前往混元控制台核对',
       };
     }
 
