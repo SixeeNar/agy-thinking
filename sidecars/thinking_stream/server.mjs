@@ -597,15 +597,24 @@ function startServer() {
         }
         if (req.method === 'POST') {
           const patch = await readJsonBody(req);
+          if (typeof patch?.translateBaseUrl === 'string' && patch.translateBaseUrl.trim()) {
+            const checkUrl = validateSettings({ translateBaseUrl: patch.translateBaseUrl });
+            if (!checkUrl.translateBaseUrl) {
+              throw new Error('API Base URL 格式无效，请以 http:// 或 https:// 开头');
+            }
+          }
           const prev = settingsStore.read();
           const cleanedPatch = validateSettings(patch);
-          // 更换了服务商 Base URL 且本次未显式传入新 Key 时，自动清空旧服务商 Key，避免跨服务商误传凭证
-          if (
+          // 更换了服务商 Base URL 时，未显式传入新 Key/模型则自动清空旧服务商的 Key/模型，避免跨渠道串台
+          const providerChanged = Boolean(
             cleanedPatch.translateBaseUrl &&
-            cleanedPatch.translateBaseUrl.toLowerCase() !== (prev.translateBaseUrl || '').toLowerCase() &&
-            cleanedPatch.translateApiKey === undefined
-          ) {
+            cleanedPatch.translateBaseUrl.toLowerCase() !== (prev.translateBaseUrl || '').toLowerCase()
+          );
+          if (providerChanged && cleanedPatch.translateApiKey === undefined) {
             cleanedPatch.translateApiKey = '';
+          }
+          if (providerChanged && cleanedPatch.translateModels === undefined) {
+            cleanedPatch.translateModels = '';
           }
           const next = settingsStore.update(cleanedPatch);
           settingsVersion += 1;
@@ -640,6 +649,9 @@ function startServer() {
       try {
         const body = await readJsonBody(req);
         const override = validateSettings(body);
+        if (typeof body?.translateBaseUrl === 'string' && body.translateBaseUrl.trim() && !override.translateBaseUrl) {
+          throw new Error('API Base URL 格式无效，请以 http:// 或 https:// 开头');
+        }
         const result = await translator.discoverModels(override);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(result));
@@ -654,6 +666,9 @@ function startServer() {
       try {
         const body = await readJsonBody(req);
         const override = validateSettings(body);
+        if (typeof body?.translateBaseUrl === 'string' && body.translateBaseUrl.trim() && !override.translateBaseUrl) {
+          throw new Error('API Base URL 格式无效，请以 http:// 或 https:// 开头');
+        }
         const result = await translator.testConnection(override);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(result));

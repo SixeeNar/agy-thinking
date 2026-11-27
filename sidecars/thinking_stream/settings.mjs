@@ -17,8 +17,24 @@ export const DEFAULT_SETTINGS = Object.freeze({
   translateStyle: 'natural', // 'steps'（分步脉络）| 'natural'（自然直译）
   translateBaseUrl: 'https://api.siliconflow.cn/v1',
   translateApiKey: '',
-  translateModels: 'LoRA/Qwen/Qwen2.5-7B-Instruct, Pro/Qwen/Qwen2.5-7B-Instruct, Qwen/Qwen2.5-7B-Instruct',
+  translateModels: '',
 });
+
+export function normalizeApiBaseUrl(raw) {
+  if (typeof raw !== 'string') return '';
+  let clean = raw.trim().replace(/\/+$/, '');
+  if (!clean) return '';
+  // 自动剥离用户从文档整段复制过来的端点后缀，避免拼出 /chat/completions/chat/completions 或 /models/models
+  clean = clean.replace(/\/(chat\/completions|completions|models)$/i, '').replace(/\/+$/, '');
+  if (!/^https?:\/\/[^\s/]+/i.test(clean)) return '';
+  try {
+    const parsed = new URL(clean);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+    return clean;
+  } catch {
+    return '';
+  }
+}
 
 export function getSettingsPath() {
   return join(homedir(), '.gemini', 'config', 'agy-thinking', 'settings.json');
@@ -67,7 +83,8 @@ export function validateSettings(raw) {
     clean.fontSize = raw.fontSize;
   }
   if (typeof raw.translateBaseUrl === 'string' && raw.translateBaseUrl.trim()) {
-    clean.translateBaseUrl = raw.translateBaseUrl.trim().replace(/\/+$/, '');
+    const normalizedUrl = normalizeApiBaseUrl(raw.translateBaseUrl);
+    if (normalizedUrl) clean.translateBaseUrl = normalizedUrl;
   }
   if (typeof raw.translateModels === 'string') {
     clean.translateModels = raw.translateModels.trim();

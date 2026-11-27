@@ -1007,6 +1007,8 @@ function getClientBundle(owner) {
         chips.push('<span class="xx-chip live">' + liveTxt + '</span>');
       } else if (item.translateStatus === 'no-key') {
         chips.push('<span class="xx-chip">待填翻译 Key</span>');
+      } else if (item.translateStatus === 'no-model') {
+        chips.push('<span class="xx-chip">待选翻译模型</span>');
       } else if (item.translateStatus === 'error') {
         chips.push('<span class="xx-chip err" title="' + escapeHtml(item.translateError || '') + '">翻译异常</span>');
       } else if (item.translateModel) {
@@ -1677,7 +1679,7 @@ function getClientBundle(owner) {
                 }
 
                 const isFullNow = rowEl.dataset.full === 'true';
-                const canRetry = Boolean(settings.translateEnabled !== false && item.translateStatus !== 'off' && item.translateStatus !== 'no-key' && item.translateModel !== 'native-zh');
+                const canRetry = Boolean(settings.translateEnabled !== false && item.translateStatus !== 'off' && item.translateStatus !== 'no-key' && item.translateStatus !== 'no-model' && item.translateModel !== 'native-zh');
                 const detailBtn = (wantFullDetail || !isStreamingThink) && isStepsStyle && !isBriefThink && effectiveMode !== 'raw' && zhFull && item.translateModel !== 'native-zh'
                   ? '<button class="xx-btn xx-toggle-detail" type="button">' + (wantFullDetail ? '看脉络' : '看完整') + '</button>'
                   : '';

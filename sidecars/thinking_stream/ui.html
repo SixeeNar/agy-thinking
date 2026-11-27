@@ -2042,8 +2042,29 @@
         });
       } catch {}
 
+      function sanitizeBaseUrl(u) {
+        return String(u || '')
+          .trim()
+          .replace(/\/+$/, '')
+          .replace(/\/(chat\/completions|completions|models)$/i, '')
+          .replace(/\/+$/, '');
+      }
+
       function normalizeUrl(u) {
-        return String(u || '').trim().replace(/\/+$/, '').toLowerCase();
+        return sanitizeBaseUrl(u).toLowerCase();
+      }
+
+      function isLocalGatewayUrl(u) {
+        return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$)/i.test(String(u || '').trim());
+      }
+
+      function isValidHttpUrl(u) {
+        try {
+          const parsed = new URL(sanitizeBaseUrl(u));
+          return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        } catch {
+          return false;
+        }
       }
 
       function apiUrl(path) {
@@ -2105,13 +2126,16 @@
       }
 
       function inferPresetByUrl(url) {
-        const u = String(url || '').toLowerCase();
-        if (u.includes('siliconflow')) return 'siliconflow';
-        if (u.includes('deepseek')) return 'deepseek';
-        if (u.includes('bigmodel')) return 'zhipu';
-        if (u.includes('dashscope')) return 'qwen';
-        if (u.includes('openrouter')) return 'openrouter';
-        if (/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/.test(u)) return 'local';
+        const clean = sanitizeBaseUrl(url);
+        if (!clean) return '';
+        if (isLocalGatewayUrl(clean)) return 'local';
+        let host = '';
+        try { host = new URL(clean).hostname.toLowerCase(); } catch { return ''; }
+        if (/(^|\.)siliconflow\.(cn|com)$/.test(host)) return 'siliconflow';
+        if (/(^|\.)deepseek\.com$/.test(host)) return 'deepseek';
+        if (/(^|\.)bigmodel\.cn$/.test(host)) return 'zhipu';
+        if (/(^|\.)dashscope\.aliyuncs\.com$/.test(host)) return 'qwen';
+        if (/(^|\.)openrouter\.ai$/.test(host)) return 'openrouter';
         return '';
       }
 
@@ -2221,12 +2245,20 @@
 
       async function runDiscoverModels(silent = false) {
         clearTimeout(autoDetectTimer);
-        const baseUrl = optBaseUrl.value.trim();
+        const baseUrl = sanitizeBaseUrl(optBaseUrl.value);
+        if (baseUrl && baseUrl !== optBaseUrl.value.trim()) optBaseUrl.value = baseUrl;
         const rawKey = optApiKey.value.trim();
-        const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(baseUrl);
+        const isLocal = isLocalGatewayUrl(baseUrl);
         const sameProvider = normalizeUrl(baseUrl) === normalizeUrl(currentState?.settings?.translateBaseUrl);
         const hasSavedKey = Boolean(currentState?.settings?.hasApiKey) && sameProvider;
         if (!baseUrl) return;
+        if (!isValidHttpUrl(baseUrl)) {
+          if (!silent) {
+            testStatus.className = 'test-status err';
+            testStatus.textContent = 'API Base URL 格式无效，请填写以 http:// 或 https:// 开头的地址。';
+          }
+          return;
+        }
         if (!rawKey && !hasSavedKey && !isLocal) {
           if (!silent) {
             testStatus.className = 'test-status err';
@@ -2275,8 +2307,8 @@
       }
 
       function syncApiKeyHint(settings = currentState?.settings) {
-        const curUrl = optBaseUrl.value.trim();
-        const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(curUrl);
+        const curUrl = sanitizeBaseUrl(optBaseUrl.value);
+        const isLocal = isLocalGatewayUrl(curUrl);
         const savedUrl = settings?.translateBaseUrl || '';
         const sameProvider = !savedUrl || normalizeUrl(curUrl) === normalizeUrl(savedUrl);
         const hasSavedKey = Boolean(settings?.hasApiKey);
@@ -2332,7 +2364,7 @@
 
         const apiSummaryEl = document.getElementById('apiProviderSummary');
         const apiDetailsEl = document.getElementById('apiConfigDetails');
-        const isLocalUrl = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(settings.translateBaseUrl || '');
+        const isLocalUrl = isLocalGatewayUrl(settings.translateBaseUrl || '');
         const providerNames = {
           siliconflow: '硅基流动',
           deepseek: 'DeepSeek',
@@ -2343,17 +2375,22 @@
         };
         const pName = providerNames[inferPresetByUrl(settings.translateBaseUrl || '')] || '自定义网关';
         const firstModel = String(settings.translateModels || '').split(/[,，\n]+/).map((s) => s.trim()).filter(Boolean)[0] || '';
+        const hasKeyOrLocal = Boolean(settings.hasApiKey || isLocalUrl);
+        const isConfigReady = hasKeyOrLocal && Boolean(firstModel);
         if (apiSummaryEl) {
-          if (settings.hasApiKey || isLocalUrl) {
+          if (isConfigReady) {
             apiSummaryEl.className = 'fold-sub ok';
-            apiSummaryEl.textContent = `${pName} · ${firstModel ? shortModelName(firstModel) : '已就绪'}${isLocalUrl ? '（本地免 Key）' : ' · 已配 Key'}`;
-          } else {
+            apiSummaryEl.textContent = `${pName} · ${shortModelName(firstModel)}${isLocalUrl ? '（本地免 Key）' : ' · 已配 Key'}`;
+          } else if (!hasKeyOrLocal) {
             apiSummaryEl.className = 'fold-sub warn';
             apiSummaryEl.textContent = `${pName} · 待填写 API Key`;
+          } else {
+            apiSummaryEl.className = 'fold-sub warn';
+            apiSummaryEl.textContent = `${pName} · 待选择模型${isLocalUrl ? '（本地免 Key）' : ' · 已配 Key'}`;
           }
         }
         if (apiDetailsEl && !settingsHydrated) {
-          apiDetailsEl.open = !(settings.hasApiKey || isLocalUrl);
+          apiDetailsEl.open = !isConfigReady;
         }
 
         document.body.dataset.font = settings.fontSize || 'md';
@@ -2377,7 +2414,7 @@
           optApiKey.value = '';
           syncApiKeyHint(settings);
           renderModelList();
-          const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(settings.translateBaseUrl || '');
+          const isLocal = isLocalGatewayUrl(settings.translateBaseUrl || '');
           if (settings.hasApiKey || isLocal) {
             void runDiscoverModels(true);
           }
@@ -2432,6 +2469,7 @@
         else if (wantFullDetail && item.fullTranslatedThinking) chips.push('<span class="chip">完整思考</span>');
         if (item.translateStatus === 'translating') chips.push(`<span class="chip live">${item.translatePhase === 'distilling' ? '整理脉络中' : '实时译中'}</span>`);
         else if (item.translateStatus === 'no-key') chips.push('<span class="chip">切「控制中心」填 Key 译中文</span>');
+        else if (item.translateStatus === 'no-model') chips.push('<span class="chip">切「控制中心」选翻译模型</span>');
         else if (item.translateStatus === 'error') chips.push(`<span class="chip err" title="${escapeHtml(item.translateError || '')}">译文失败</span>`);
         else if (item.translateModel) chips.push(`<span class="chip">${escapeHtml(shortModelName(item.translateModel))}</span>`);
         return chips.join('');
@@ -3049,7 +3087,7 @@
                     const langBtn = zh && zh !== raw
                       ? `<button class="copy-btn" type="button" data-action="toggle-lang" data-key="${escapeHtml(item.id)}">${effectiveMode === 'raw' ? '看中文' : '看原文'}</button>`
                       : '';
-                    const retryBtn = settings.translateEnabled !== false && item.translateStatus !== 'off' && item.translateStatus !== 'no-key' && item.translateModel !== 'native-zh'
+                    const retryBtn = settings.translateEnabled !== false && item.translateStatus !== 'off' && item.translateStatus !== 'no-key' && item.translateStatus !== 'no-model' && item.translateModel !== 'native-zh'
                       ? `<button class="copy-btn" type="button" data-action="retry-one" data-key="${escapeHtml(item.id)}">重译</button>`
                       : '';
                     const actSig = `${Boolean(detailBtn)}:${wantFullDetail}:${Boolean(langBtn)}:${Boolean(retryBtn)}:${effectiveMode}`;
@@ -3332,13 +3370,20 @@
           cancelPendingDiscover();
           const urlChanged = normalizeUrl(optBaseUrl.value) !== normalizeUrl(p.baseUrl);
           optBaseUrl.value = p.baseUrl;
-          optModels.value = p.models;
-          if (urlChanged) optApiKey.value = '';
+          if (urlChanged) {
+            optApiKey.value = '';
+            optModels.value = '';
+          }
+          modelSearch = '';
+          modelSearchInput.value = '';
           discoveredModels = null;
           syncApiKeyHint();
           renderModelList();
           testStatus.className = 'test-status';
           testStatus.textContent = p.hint;
+          if (isLocalGatewayUrl(p.baseUrl)) {
+            void runDiscoverModels(true);
+          }
           return;
         }
 
@@ -3389,6 +3434,14 @@
 
       optBaseUrl.addEventListener('change', () => {
         cancelPendingDiscover();
+        const cleaned = sanitizeBaseUrl(optBaseUrl.value);
+        if (cleaned) optBaseUrl.value = cleaned;
+        const switchedAwayFromSaved = normalizeUrl(optBaseUrl.value) !== normalizeUrl(currentState?.settings?.translateBaseUrl);
+        if (switchedAwayFromSaved) {
+          optApiKey.value = '';
+        }
+        modelSearch = '';
+        modelSearchInput.value = '';
         discoveredModels = null;
         syncApiKeyHint();
         renderModelList();
@@ -3432,12 +3485,18 @@
 
       async function persistTranslationConfig(runTest) {
         cancelPendingDiscover();
-        const baseUrl = optBaseUrl.value.trim();
+        const baseUrl = sanitizeBaseUrl(optBaseUrl.value);
         if (!baseUrl) {
           testStatus.className = 'test-status err';
           testStatus.textContent = '请先填写 API Base URL。';
           return;
         }
+        if (!isValidHttpUrl(baseUrl)) {
+          testStatus.className = 'test-status err';
+          testStatus.textContent = 'API Base URL 格式无效，请以 http:// 或 https:// 开头。';
+          return;
+        }
+        optBaseUrl.value = baseUrl;
         const activeModeBtn = document.querySelector('#segDisplayMode .seg-btn.active');
         const activeStyleBtn = document.querySelector('#segTranslateStyle .seg-btn.active');
         const patch = {
@@ -3461,11 +3520,15 @@
           if (!currentState) currentState = { settings: saved, turns: [], conversations: [] };
           else currentState.settings = saved;
           hydrateSettingsInputs(saved);
-          const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(baseUrl);
+          const isLocal = isLocalGatewayUrl(baseUrl);
+          const hasModels = Boolean(String(saved.translateModels || '').trim());
           if (!runTest) {
             if (!saved.hasApiKey && !isLocal) {
               testStatus.className = 'test-status err';
               testStatus.textContent = '配置已保存，但当前服务商尚未设置 API Key（切换服务商时已自动清空旧 Key），请填入 Key 后生效。';
+            } else if (!hasModels) {
+              testStatus.className = 'test-status err';
+              testStatus.textContent = '配置已保存，但尚未选择翻译模型，请在上方列表勾选模型或手动输入后再保存。';
             } else {
               testStatus.className = 'test-status ok';
               testStatus.textContent = '配置已保存！新思考将立即按新模型与风格翻译。';

@@ -358,20 +358,33 @@ function parseModels(modelsStr) {
     .filter(Boolean);
 }
 
+function getHostnameSafe(baseUrl) {
+  try {
+    return new URL(String(baseUrl || '').trim()).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
 export function isLocalGatewayUrl(baseUrl) {
   return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$)/i.test(String(baseUrl || '').trim());
 }
 
 function isSiliconFlowUrl(baseUrl) {
-  return /siliconflow\.(cn|com)/i.test(String(baseUrl || ''));
+  return /(^|\.)siliconflow\.(cn|com)$/i.test(getHostnameSafe(baseUrl));
 }
 
 function isZhipuUrl(baseUrl) {
-  return /open\.bigmodel\.cn|bigmodel\.cn/i.test(String(baseUrl || ''));
+  return /(^|\.)bigmodel\.cn$/i.test(getHostnameSafe(baseUrl));
 }
 
 function normalizeBaseUrl(url) {
-  return String(url || '').trim().replace(/\/+$/, '').toLowerCase();
+  return String(url || '')
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/(chat\/completions|completions|models)$/i, '')
+    .replace(/\/+$/, '')
+    .toLowerCase();
 }
 
 function isHunyuanMtModel(model) {
@@ -385,7 +398,8 @@ function isQwenMtModel(model) {
 function supportsEnableThinkingFlag(baseUrl, model) {
   const m = String(model || '').toLowerCase();
   if (isHunyuanMtModel(m) || isQwenMtModel(m)) return false;
-  if (isSiliconFlowUrl(baseUrl) || /dashscope\.aliyuncs\.com|modelscope\.cn/i.test(String(baseUrl || ''))) {
+  const host = getHostnameSafe(baseUrl);
+  if (isSiliconFlowUrl(baseUrl) || /(^|\.)(dashscope\.aliyuncs\.com|modelscope\.cn)$/i.test(host)) {
     // 仅对明确支持 enable_thinking 的推理/混合思考模型下发，避免普通模型返回 400
     return /(qwen3(?!-coder)|qwq|deepseek-r1|glm-4\.5|glm-4\.7|glm-z1|seed-thinking|hunyuan-a13b|intern-s1)/i.test(m);
   }
@@ -856,7 +870,7 @@ export function createTranslator(getSettings, onProgress) {
             (err?.status === 400 || err?.status === 422) &&
             settings.disableTranslatorThinking !== false &&
             !externalSignal?.aborted &&
-            /(reasoning_effort|enable_thinking|thinking|unknown|unrecognized|unsupported|extra_forbidden)/i.test(err.responseText || err.message || '')
+            /(reasoning_effort|enable_thinking|thinking|unknown|unrecognized|unsupported|extra_forbidden|不支持|无效参数|未知参数|非法参数)/i.test(err.responseText || err.message || '')
           ) {
             res = await runOnce(false);
           } else {
@@ -1697,6 +1711,7 @@ export function createTranslator(getSettings, onProgress) {
     const style = settings.translateStyle || 'natural';
     const summaryEnabled = settings.summaryEnabled === true && style !== 'steps';
     const hasKey = Boolean(settings.translateApiKey) || isLocalGatewayUrl(settings.translateBaseUrl);
+    const hasModels = parseModels(settings.translateModels).length > 0;
     const triggerNew = options.triggerNew !== false;
 
     for (const turn of turns || []) {
@@ -1713,6 +1728,11 @@ export function createTranslator(getSettings, onProgress) {
         if (!hasKey && !mostlyZh) {
           item.translateStatus = 'no-key';
           item.narrativeStatus = 'no-key';
+          continue;
+        }
+        if (!hasModels && !mostlyZh) {
+          item.translateStatus = 'no-model';
+          item.narrativeStatus = 'no-model';
           continue;
         }
 
