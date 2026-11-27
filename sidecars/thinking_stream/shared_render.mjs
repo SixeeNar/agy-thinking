@@ -727,43 +727,91 @@ const COLOR_THEMES = {
     id: 'gemini',
     name: 'Gemini',
     label: '蓝紫极光 · Gemini 经典三色',
-    dark: { c1: '77, 163, 255', c2: '155, 114, 203', c3: '232, 121, 168', think: '#b392f0' },
-    light: { c1: '66, 133, 244', c2: '139, 92, 246', c3: '217, 101, 112', think: '#7c3aed' },
+    dark: {
+      c1: '77, 163, 255', c2: '155, 114, 203', c3: '232, 121, 168',
+      think: '#b392f0', btnFg: '#ffffff',
+      icons: { think: '#b392f0', file: '#60a5fa', edit: '#c084fc', cmd: '#2dd4bf', code: '#818cf8', search: '#38bdf8', sub: '#f472b6', plan: '#34d399', tool: '#e879a8' },
+    },
+    light: {
+      c1: '66, 133, 244', c2: '139, 92, 246', c3: '217, 101, 112',
+      think: '#7c3aed', btnFg: '#ffffff',
+      icons: { think: '#7c3aed', file: '#2563eb', edit: '#9333ea', cmd: '#0d9488', code: '#4f46e5', search: '#0284c7', sub: '#db2777', plan: '#059669', tool: '#e11d48' },
+    },
   },
   mono: {
     id: 'mono',
     name: 'Silver',
     label: '极简冷银 · 黑白高对比',
-    dark: { c1: '241, 245, 249', c2: '168, 180, 200', c3: '110, 124, 148', think: '#cbd5e1' },
-    light: { c1: '30, 41, 59', c2: '71, 85, 105', c3: '130, 144, 166', think: '#475569' },
+    dark: {
+      c1: '241, 245, 249', c2: '176, 190, 210', c3: '118, 132, 154',
+      think: '#f1f5f9', btnFg: '#0f172a',
+      icons: { think: '#f1f5f9', file: '#cbd5e1', edit: '#e2e8f0', cmd: '#9fc5be', code: '#b8c6e2', search: '#9ac2d6', sub: '#d6c2d2', plan: '#adcbb6', tool: '#94a3b8' },
+    },
+    light: {
+      c1: '30, 41, 59', c2: '71, 85, 105', c3: '120, 136, 160',
+      think: '#1e293b', btnFg: '#ffffff',
+      icons: { think: '#1e293b', file: '#475569', edit: '#334155', cmd: '#35665e', code: '#425078', search: '#336076', sub: '#6d5168', plan: '#38634a', tool: '#64748b' },
+    },
   },
   amber: {
     id: 'amber',
     name: 'Amber',
     label: '暖金琥珀 · 柔和日落',
-    dark: { c1: '251, 191, 36', c2: '251, 146, 60', c3: '244, 114, 182', think: '#fbbf24' },
-    light: { c1: '217, 119, 6', c2: '234, 88, 12', c3: '219, 39, 119', think: '#d97706' },
+    dark: {
+      c1: '251, 191, 36', c2: '249, 142, 58', c3: '244, 114, 132',
+      think: '#fbbf24', btnFg: '#1a1106',
+      icons: { think: '#fbbf24', file: '#fcd34d', edit: '#fb923c', cmd: '#a3c96e', code: '#f59e0b', search: '#e6b87c', sub: '#f47284', plan: '#7dd3a0', tool: '#fda4af' },
+    },
+    light: {
+      c1: '217, 119, 6', c2: '234, 88, 12', c3: '225, 75, 102',
+      think: '#d97706', btnFg: '#ffffff',
+      icons: { think: '#d97706', file: '#b45309', edit: '#ea580c', cmd: '#4d7c0f', code: '#c2410c', search: '#9a6715', sub: '#e11d48', plan: '#15803d', tool: '#be123c' },
+    },
   },
   emerald: {
     id: 'emerald',
     name: 'Jade',
     label: '青翠流光 · 清透冷绿',
-    dark: { c1: '45, 212, 191', c2: '16, 185, 129', c3: '56, 189, 248', think: '#2dd4bf' },
-    light: { c1: '13, 148, 136', c2: '5, 150, 105', c3: '2, 132, 199', think: '#0d9488' },
+    dark: {
+      c1: '45, 212, 191', c2: '16, 185, 129', c3: '56, 189, 248',
+      think: '#2dd4bf', btnFg: '#041d17',
+      icons: { think: '#2dd4bf', file: '#38bdf8', edit: '#34d399', cmd: '#a3e635', code: '#67e8f9', search: '#22d3ee', sub: '#6ee7b7', plan: '#4ade80', tool: '#5eead4' },
+    },
+    light: {
+      c1: '13, 148, 136', c2: '5, 150, 105', c3: '2, 132, 199',
+      think: '#0d9488', btnFg: '#ffffff',
+      icons: { think: '#0d9488', file: '#0284c7', edit: '#059669', cmd: '#4d7c0f', code: '#0891b2', search: '#0369a1', sub: '#0f766e', plan: '#16a34a', tool: '#047857' },
+    },
   },
   sakura: {
     id: 'sakura',
     name: 'Sakura',
     label: '柔粉樱紫 · 轻盈绯光',
-    dark: { c1: '249, 168, 212', c2: '244, 114, 182', c3: '192, 132, 252', think: '#f472b6' },
-    light: { c1: '236, 72, 153', c2: '219, 39, 119', c3: '147, 51, 234', think: '#db2777' },
+    dark: {
+      c1: '249, 168, 212', c2: '244, 114, 182', c3: '192, 132, 252',
+      think: '#f472b6', btnFg: '#240718',
+      icons: { think: '#f472b6', file: '#c084fc', edit: '#fb7185', cmd: '#a5b4fc', code: '#e879f9', search: '#f9a8d4', sub: '#fda4af', plan: '#d8b4fe', tool: '#f0abfc' },
+    },
+    light: {
+      c1: '236, 72, 153', c2: '219, 39, 119', c3: '147, 51, 234',
+      think: '#db2777', btnFg: '#ffffff',
+      icons: { think: '#db2777', file: '#9333ea', edit: '#e11d48', cmd: '#4f46e5', code: '#c026d3', search: '#be185d', sub: '#f43f5e', plan: '#7e22ce', tool: '#a21caf' },
+    },
   },
   host: {
     id: 'host',
     name: 'System',
     label: '跟随客户端 · 自动取主题色',
-    dark: { c1: '148, 163, 184', c2: '186, 198, 218', c3: '125, 145, 174', think: '#cbd5e1' },
-    light: { c1: '71, 85, 105', c2: '100, 116, 139', c3: '51, 65, 85', think: '#475569' },
+    dark: {
+      c1: '148, 163, 184', c2: '186, 198, 218', c3: '125, 145, 174',
+      think: '#cbd5e1', btnFg: '#0f172a',
+      icons: { think: '#cbd5e1', file: '#93c5fd', edit: '#c4b5fd', cmd: '#5eead4', code: '#a5b4fc', search: '#7dd3fc', sub: '#f9a8d4', plan: '#6ee7b7', tool: '#94a3b8' },
+    },
+    light: {
+      c1: '71, 85, 105', c2: '100, 116, 139', c3: '51, 65, 85',
+      think: '#475569', btnFg: '#ffffff',
+      icons: { think: '#475569', file: '#2563eb', edit: '#7c3aed', cmd: '#0d9488', code: '#4f46e5', search: '#0284c7', sub: '#db2777', plan: '#059669', tool: '#64748b' },
+    },
   },
 };
 
@@ -771,31 +819,83 @@ function clampRgb(n) {
   return Math.max(0, Math.min(255, Math.round(n)));
 }
 
-function shiftRgbTone(rgb, factor, offset) {
-  return [
-    clampRgb(rgb[0] * factor + offset),
-    clampRgb(rgb[1] * factor + offset),
-    clampRgb(rgb[2] * factor + offset),
-  ];
+function rgbToHsl(r, g, b) {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  let h = 0;
+  let s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === rn) h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
+    else if (max === gn) h = ((bn - rn) / d + 2) / 6;
+    else h = ((rn - gn) / d + 4) / 6;
+  }
+  return [h * 360, s * 100, l * 100];
+}
+
+function hslToRgb(h, s, l) {
+  const hn = (((h % 360) + 360) % 360) / 360;
+  const sn = Math.max(0, Math.min(100, s)) / 100;
+  const ln = Math.max(0, Math.min(100, l)) / 100;
+  if (sn === 0) {
+    const v = clampRgb(ln * 255);
+    return [v, v, v];
+  }
+  const q = ln < 0.5 ? ln * (1 + sn) : ln + sn - ln * sn;
+  const p = 2 * ln - q;
+  const hue2rgb = function (t) {
+    let tt = t;
+    if (tt < 0) tt += 1;
+    if (tt > 1) tt -= 1;
+    if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+    if (tt < 1 / 2) return q;
+    if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+    return p;
+  };
+  return [clampRgb(hue2rgb(hn + 1 / 3) * 255), clampRgb(hue2rgb(hn) * 255), clampRgb(hue2rgb(hn - 1 / 3) * 255)];
+}
+
+function hslToCss(h, s, l) {
+  const rgb = hslToRgb(h, s, l);
+  return 'rgb(' + rgb[0] + ', ' + rgb[1] + ', ' + rgb[2] + ')';
 }
 
 function resolveColorThemePalette(themeId, isLight, hostAccentRgb) {
   const mode = isLight ? 'light' : 'dark';
   if (themeId === 'host' && Array.isArray(hostAccentRgb) && hostAccentRgb.length >= 3) {
     const base = [clampRgb(hostAccentRgb[0]), clampRgb(hostAccentRgb[1]), clampRgb(hostAccentRgb[2])];
-    // 保证强调色在当前明暗底色下可见，同时衍生出同色系三段和谐流光
-    const lum = (0.2126 * base[0] + 0.7152 * base[1] + 0.0722 * base[2]) / 255;
-    let c2Arr = base;
-    if (!isLight && lum < 0.34) c2Arr = shiftRgbTone(base, 0.72, 82);
-    else if (isLight && lum > 0.72) c2Arr = shiftRgbTone(base, 0.68, 0);
-    const c1Arr = isLight ? shiftRgbTone(c2Arr, 0.86, 10) : shiftRgbTone(c2Arr, 0.82, 48);
-    const c3Arr = isLight ? shiftRgbTone(c2Arr, 1.05, -24) : shiftRgbTone(c2Arr, 0.88, 16);
+    const [h, sRaw, lRaw] = rgbToHsl(base[0], base[1], base[2]);
+    const s = sRaw < 12 ? 16 : Math.min(82, Math.max(46, sRaw));
+    const lMain = isLight ? Math.min(46, Math.max(34, lRaw)) : Math.min(72, Math.max(58, lRaw));
+    const c1Arr = hslToRgb(h - 24, Math.min(88, s + 6), isLight ? lMain + 4 : lMain + 6);
+    const c2Arr = hslToRgb(h, s, lMain);
+    const c3Arr = hslToRgb(h + 28, Math.min(86, s + 4), isLight ? lMain - 2 : lMain + 2);
     const toStr = function (a) { return a[0] + ', ' + a[1] + ', ' + a[2]; };
+    const lum2 = (0.2126 * c2Arr[0] + 0.7152 * c2Arr[1] + 0.0722 * c2Arr[2]) / 255;
+    const icoS = sRaw < 12 ? 26 : Math.min(76, Math.max(48, s));
+    const icoL = isLight ? 40 : 70;
     return {
       c1: toStr(c1Arr),
       c2: toStr(c2Arr),
       c3: toStr(c3Arr),
       think: 'rgb(' + toStr(c2Arr) + ')',
+      btnFg: lum2 > 0.56 ? '#0f172a' : '#ffffff',
+      icons: {
+        think: hslToCss(h, icoS, icoL),
+        file: hslToCss(h - 34, icoS, icoL + (isLight ? -2 : 2)),
+        edit: hslToCss(h + 24, icoS, icoL),
+        cmd: hslToCss(h + 112, Math.max(42, icoS - 6), icoL - (isLight ? 2 : 0)),
+        code: hslToCss(h - 58, icoS, icoL + (isLight ? -1 : 3)),
+        search: hslToCss(h - 14, Math.min(84, icoS + 6), icoL + (isLight ? 0 : 4)),
+        sub: hslToCss(h + 52, icoS, icoL + (isLight ? -1 : 2)),
+        plan: hslToCss(h + 84, Math.max(44, icoS - 4), icoL - (isLight ? 2 : 1)),
+        tool: hslToCss(h + 32, icoS, icoL),
+      },
     };
   }
   const entry = COLOR_THEMES[themeId] || COLOR_THEMES.gemini;

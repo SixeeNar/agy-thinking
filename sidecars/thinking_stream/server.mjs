@@ -633,6 +633,7 @@ function startServer() {
             translator.resetErrors();
           }
           broadcastCachedToClients(true);
+          inlineInjector?.pushCached?.(false);
           inlineInjector?.nudge?.();
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify(next));

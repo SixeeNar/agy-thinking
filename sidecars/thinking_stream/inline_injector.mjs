@@ -204,6 +204,9 @@ function getClientBundle(owner) {
         display: block;
         margin: 4px 0 12px;
         font-family: "PingFang SC", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+      }
+      /* 重要：所有派生变量与基础色变量必须声明在同一元素(.xx-wrap)上，避免 :host 提前求值导致切换主题时流光渐变锁死 */
+      .xx-wrap {
         --xx-c1-rgb: 77, 163, 255;
         --xx-c2-rgb: 155, 114, 203;
         --xx-c3-rgb: 232, 121, 168;
@@ -597,7 +600,7 @@ function getClientBundle(owner) {
       }
       .xx-wrap[data-compact="true"] .xx-group-body { gap: 2px; }
       .xx-group-body::-webkit-scrollbar { width: 4px; }
-      .xx-group-body::-webkit-scrollbar-thumb { background: rgba(138, 174, 242, 0.28); border-radius: 999px; }
+      .xx-group-body::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--xx-fg) 22%, transparent); border-radius: 999px; }
       .xx-group-body::-webkit-scrollbar-track { background: transparent; }
 
       .xx-group-body.xx-fade-top {
@@ -784,7 +787,7 @@ function getClientBundle(owner) {
         white-space: nowrap;
       }
       .xx-think-row[data-open="true"] .xx-row-time {
-        background: rgba(138, 174, 242, 0.08);
+        background: var(--xx-surface);
         color: var(--xx-muted);
       }
       .xx-row-err { color: var(--xx-err); }
@@ -849,7 +852,7 @@ function getClientBundle(owner) {
         padding-right: 6px;
       }
       .xx-think-md::-webkit-scrollbar { width: 4px; }
-      .xx-think-md::-webkit-scrollbar-thumb { background: rgba(138, 174, 242, 0.28); border-radius: 999px; }
+      .xx-think-md::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--xx-fg) 22%, transparent); border-radius: 999px; }
       .xx-think-md p { margin: 0 0 10px; }
       .xx-think-md p:last-child { margin-bottom: 0; }
       .xx-think-md .md-h { margin: 8px 0 4px; font-size: 12.5px; font-weight: 600; color: var(--xx-fg); }
@@ -904,7 +907,7 @@ function getClientBundle(owner) {
         top: 20px;
         bottom: -9px;
         width: 1px;
-        background: linear-gradient(180deg, rgba(155, 114, 203, 0.36), rgba(77, 163, 255, 0.14));
+        background: linear-gradient(180deg, rgba(var(--xx-c2-rgb), 0.38), rgba(var(--xx-c1-rgb), 0.14));
       }
       .xx-think-md .tstep-idx {
         flex: 0 0 auto;
@@ -912,7 +915,7 @@ function getClientBundle(owner) {
         height: 18px;
         margin-top: 1px;
         border-radius: 999px;
-        border: 1px solid rgba(155, 114, 203, 0.42);
+        border: 1px solid rgba(var(--xx-c2-rgb), 0.42);
         background: var(--xx-grad-soft);
         color: var(--xx-fg);
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -993,7 +996,7 @@ function getClientBundle(owner) {
         left: 0;
         right: 0;
         height: 1px;
-        background: linear-gradient(90deg, rgba(138, 174, 242, 0.14), rgba(155, 114, 203, 0.12) 50%, transparent);
+        background: linear-gradient(90deg, rgba(var(--xx-c1-rgb), 0.18), rgba(var(--xx-c2-rgb), 0.16) 50%, transparent);
         pointer-events: none;
       }
       .xx-foot-meta { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
@@ -1012,7 +1015,7 @@ function getClientBundle(owner) {
         gap: 4px;
         padding: 1.5px 7px;
         border-radius: 999px;
-        background: rgba(138, 174, 242, 0.075);
+        background: var(--xx-surface);
         border: none;
         font-size: 10.4px;
         color: var(--xx-dim);
@@ -1020,7 +1023,7 @@ function getClientBundle(owner) {
       }
       .xx-chip.live {
         color: var(--xx-accent-2);
-        background: rgba(232, 121, 168, 0.12);
+        background: rgba(var(--xx-c3-rgb), 0.14);
       }
       .xx-chip.err {
         color: var(--xx-err);
@@ -1040,7 +1043,7 @@ function getClientBundle(owner) {
       .xx-btn:hover {
         background: var(--xx-grad-soft);
         color: var(--xx-fg);
-        border-color: rgba(155, 114, 203, 0.28);
+        border-color: rgba(var(--xx-c2-rgb), 0.3);
       }
 
       /* ─── 极简无框风格（Minimal Editorial Stream）：全链路去气泡、融背景、高对比易读 ─── */
@@ -1174,7 +1177,7 @@ function getClientBundle(owner) {
         font-size: 10.8px;
       }
       .xx-wrap[data-card-style="minimal"] .xx-btn:hover {
-        background: rgba(138, 174, 242, 0.12);
+        background: var(--xx-surface-hover);
         border-color: transparent;
       }
     \`;
@@ -1672,6 +1675,16 @@ function getClientBundle(owner) {
       wrap.style.setProperty('--xx-c2-rgb', pal.c2);
       wrap.style.setProperty('--xx-c3-rgb', pal.c3);
       wrap.style.setProperty('--xx-think', pal.think);
+      if (pal.icons) {
+        wrap.style.setProperty('--xx-file', pal.icons.file);
+        wrap.style.setProperty('--xx-edit', pal.icons.edit);
+        wrap.style.setProperty('--xx-cmd', pal.icons.cmd);
+        wrap.style.setProperty('--xx-code', pal.icons.code);
+        wrap.style.setProperty('--xx-search', pal.icons.search);
+        wrap.style.setProperty('--xx-sub', pal.icons.sub);
+        wrap.style.setProperty('--xx-plan', pal.icons.plan);
+        wrap.style.setProperty('--xx-tool', pal.icons.tool);
+      }
       if (hostBg) {
         const bgRgb = 'rgb(' + hostBg[0] + ',' + hostBg[1] + ',' + hostBg[2] + ')';
         wrap.style.setProperty('--xx-host-bg', bgRgb);
