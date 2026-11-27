@@ -1541,7 +1541,7 @@ function getClientBundle(owner) {
 
               const rawText = item.thinking || '';
               const zhFull = item.translatedThinking || '';
-              const isStepsStyle = (settings.translateStyle || 'steps') === 'steps';
+              const isStepsStyle = (settings.translateStyle || 'natural') === 'steps';
               const wantFullDetail = isStepsStyle && fullDetailMap.get(item.id) === true;
               const showRawOverride = rawOverrideMap.get(item.id) === true;
               const effectiveMode = showRawOverride ? (mode === 'raw' ? 'zh' : 'raw') : mode;
@@ -1914,7 +1914,7 @@ function getClientBundle(owner) {
       }
       if (lastData.activeId) lastActiveConvId = lastData.activeId;
 
-      const curStyle = lastSettings?.translateStyle || 'steps';
+      const curStyle = lastSettings?.translateStyle || 'natural';
       if (lastTranslateStyle && curStyle !== lastTranslateStyle) {
         streamShownMap.clear();
       }

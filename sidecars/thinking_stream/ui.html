@@ -2298,7 +2298,7 @@
       };
 
       function hydrateSettingsInputs(settings) {
-        const nextStyle = settings.translateStyle === 'natural' ? 'natural' : 'steps';
+        const nextStyle = settings.translateStyle === 'steps' ? 'steps' : 'natural';
         if (lastTranslateStyle && nextStyle !== lastTranslateStyle) {
           streamShownMap.clear();
         }
@@ -2923,7 +2923,7 @@
 
                 const raw = item.kind === 'think' ? (item.thinking || '') : (item.detail || '');
                 const zh = item.kind === 'think' ? (item.translatedThinking || '') : '';
-                const isStepsStyle = (settings.translateStyle || 'steps') === 'steps';
+                const isStepsStyle = (settings.translateStyle || 'natural') === 'steps';
                 const wantFullDetail = item.kind === 'think' && isStepsStyle && fullDetailMap.get(item.id) === true;
                 const activeZh = wantFullDetail ? (item.fullTranslatedThinking || zh) : zh;
                 const showRawOverride = rawOverrideMap.get(item.id) === true;
@@ -3444,7 +3444,7 @@
           translateEnabled: optTranslate.checked,
           disableTranslatorThinking: optDisableThink.checked,
           displayMode: activeModeBtn?.dataset.val || 'zh',
-          translateStyle: activeStyleBtn?.dataset.val || 'steps',
+          translateStyle: activeStyleBtn?.dataset.val || 'natural',
           translateBaseUrl: baseUrl,
           translateModels: optModels.value.trim(),
         };
@@ -3653,7 +3653,7 @@
           if (!found) return;
           const mode = currentState?.settings?.displayMode || 'zh';
           const showRaw = rawOverrideMap.get(key) === true ? (mode !== 'raw') : (mode === 'raw');
-          const wantFullDetail = (currentState?.settings?.translateStyle || 'steps') === 'steps' && fullDetailMap.get(key) === true;
+          const wantFullDetail = (currentState?.settings?.translateStyle || 'natural') === 'steps' && fullDetailMap.get(key) === true;
           const activeZh = wantFullDetail ? (found.fullTranslatedThinking || found.translatedThinking) : found.translatedThinking;
           const txt = found.kind === 'think'
             ? (!showRaw && activeZh ? activeZh : found.thinking)

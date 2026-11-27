@@ -14,10 +14,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   summaryEnabled: false, // 分步脉络首条标题即摘要，默认关闭额外摘要请求省额度
   disableTranslatorThinking: true,
   displayMode: 'zh', // 'zh' | 'bilingual' | 'raw'
-  translateStyle: 'steps', // 'steps'（分步脉络）| 'natural'（自然直译）
+  translateStyle: 'natural', // 'steps'（分步脉络）| 'natural'（自然直译）
   translateBaseUrl: 'https://api.siliconflow.cn/v1',
   translateApiKey: '',
-  translateModels: 'Qwen/Qwen2.5-7B-Instruct, THUDM/glm-4-9b-chat, tencent/Hunyuan-MT-7B',
+  translateModels: 'LoRA/Qwen/Qwen2.5-7B-Instruct, Pro/Qwen/Qwen2.5-7B-Instruct, Qwen/Qwen2.5-7B-Instruct',
 });
 
 export function getSettingsPath() {

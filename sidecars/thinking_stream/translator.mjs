@@ -839,7 +839,7 @@ export function createTranslator(getSettings, onProgress) {
           model,
           text,
           disableTranslatorThinking: disableThink,
-          translateStyle: settings.translateStyle || 'steps',
+          translateStyle: settings.translateStyle || 'natural',
           promptMode,
           onChunk,
           signal,
@@ -1135,7 +1135,7 @@ export function createTranslator(getSettings, onProgress) {
   function triggerTranslate(item, settings) {
     const rawText = (item.thinking || '').trim();
     if (!rawText) return;
-    const style = settings.translateStyle || 'steps';
+    const style = settings.translateStyle || 'natural';
     const fullKey = cacheKeyFor(rawText, style);
 
     if (containsMostlyChinese(rawText)) {
@@ -1408,7 +1408,7 @@ export function createTranslator(getSettings, onProgress) {
   function triggerNarrativeSummary(item, settings) {
     const rawText = (item.thinking || '').trim();
     if (!rawText) return;
-    const style = settings.translateStyle || 'steps';
+    const style = settings.translateStyle || 'natural';
     const nKey = narrativeCacheKey(rawText, style);
     const isGenerating = item.status === 'generating';
 
@@ -1694,7 +1694,7 @@ export function createTranslator(getSettings, onProgress) {
   function enrichTurns(turns, options = {}) {
     const settings = getSettings();
     const enabled = settings.translateEnabled !== false;
-    const style = settings.translateStyle || 'steps';
+    const style = settings.translateStyle || 'natural';
     const summaryEnabled = settings.summaryEnabled === true && style !== 'steps';
     const hasKey = Boolean(settings.translateApiKey) || isLocalGatewayUrl(settings.translateBaseUrl);
     const triggerNew = options.triggerNew !== false;
@@ -1735,7 +1735,7 @@ export function createTranslator(getSettings, onProgress) {
         }
 
         // 1b) 在「分步脉络」模式下，若用户按需点了「看完整」，补译并附带完整逐句中文
-        if ((settings.translateStyle || 'steps') === 'steps' && fullRequestedIds.has(item.id)) {
+        if ((settings.translateStyle || 'natural') === 'steps' && fullRequestedIds.has(item.id)) {
           if (triggerNew && (hasKey || mostlyZh)) {
             triggerFullDetailTranslate(item, settings);
           }
@@ -1965,7 +1965,7 @@ export function createTranslator(getSettings, onProgress) {
 
   function retryItem(itemId, rawText = '') {
     modelCooldownUntil.clear();
-    const style = getSettings().translateStyle || 'steps';
+    const style = getSettings().translateStyle || 'natural';
     if (itemId) {
       const fk = fullTrackKey(itemId);
       const dsk = distillTrackKey(itemId);
