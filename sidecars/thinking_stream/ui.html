@@ -1083,10 +1083,17 @@
       display: grid;
       grid-template-rows: 0fr;
       opacity: 0;
-      transition: grid-template-rows 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
+      visibility: hidden;
+      pointer-events: none;
+      transition: grid-template-rows 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease, visibility 0.18s ease;
     }
-    .turn-block[data-turn-open="true"] .turn-steps-shell { grid-template-rows: 1fr; opacity: 1; }
-    .turn-steps-inner { overflow: clip; }
+    .turn-block[data-turn-open="true"] .turn-steps-shell {
+      grid-template-rows: 1fr;
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+    .turn-steps-inner { min-height: 0; overflow: clip; }
     @keyframes rail-beam {
       0% { background-position: 0 100%; }
       100% { background-position: 0 0%; }
@@ -1147,7 +1154,7 @@
       transition: grid-template-rows 0.18s cubic-bezier(0.22, 1, 0.36, 1);
     }
     .step-card[data-open="true"] .step-body-shell { grid-template-rows: 1fr; }
-    .step-body-inner { overflow: hidden; }
+    .step-body-inner { min-height: 0; overflow: hidden; }
     .step-body { padding: 8px 11px 10px 26px; }
     body[data-compact="true"] .step-body { padding: 6px 9px 8px 22px; }
     .step-card[data-kind="think"][data-brief="true"] .step-body { padding: 5px 10px 7px 24px; }
@@ -1509,14 +1516,18 @@
       display: grid;
       grid-template-rows: 0fr;
       opacity: 0;
-      transition: grid-template-rows 0.18s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.15s ease;
+      visibility: hidden;
+      pointer-events: none;
+      transition: grid-template-rows 0.18s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.15s ease, visibility 0.15s ease;
     }
     .proc-group[data-group-open="true"] > .proc-body-shell,
     .proc-group[data-grouped="false"] > .proc-body-shell {
       grid-template-rows: 1fr;
       opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
     }
-    .proc-body-inner { overflow: clip; }
+    .proc-body-inner { min-height: 0; overflow: clip; }
     .proc-body {
       margin-top: 6px;
       padding: 0 4px 4px 2px;
@@ -2739,7 +2750,8 @@
         if (!currentState) return;
         const settings = currentState.settings || {};
 
-        if (currentState.activeId && lastRenderedConvId && currentState.activeId !== lastRenderedConvId) {
+        const convSwitched = Boolean(currentState.activeId && lastRenderedConvId && currentState.activeId !== lastRenderedConvId);
+        if (convSwitched) {
           streamShownMap.clear();
           openMap.clear();
           userPinnedMap.clear();
@@ -2822,6 +2834,18 @@
         let anyRenderedClosed = false;
 
         const visibleEntries = getFilteredTurnEntries(allTurns);
+        if (hasSearch || feedKindFilter !== 'all') {
+          let visThink = 0;
+          let visTools = 0;
+          for (const entry of visibleEntries) {
+            for (const it of entry.items) {
+              if (it.kind === 'reply-boundary') continue;
+              if (it.kind === 'think') visThink += 1;
+              else visTools += 1;
+            }
+          }
+          feedStatsHint.textContent = `匹配 ${visThink} 思考 · ${visTools} 步骤`;
+        }
         for (let i = 0; i < visibleEntries.length; i++) {
           const { turn, items, isLast } = visibleEntries[i];
           const turnKey = `${currentState.activeId}:turn:${turn.turnIndex}`;
@@ -3213,7 +3237,10 @@
         }
 
         if (nextTurnEls.length === 0) {
-          feed.innerHTML = '<div class="empty-state">当前筛选条件下没有内容，可切换上方「思考 + 工具」查看</div>';
+          const emptyHint = hasSearch
+            ? `没有找到包含「${escapeHtml(searchQuery.trim())}」的思考或步骤记录`
+            : '当前筛选条件下没有内容，可切换上方「思考 + 工具」查看';
+          feed.innerHTML = `<div class="empty-state">${emptyHint}</div>`;
           toggleAllBtn.textContent = '展开';
           toggleAllBtn.disabled = true;
           return;
@@ -3234,7 +3261,11 @@
           toggleAllBtn.textContent = anyRenderedClosed ? '展开' : '收起';
           toggleAllBtn.title = '展开/收起全部';
         }
-        if (currentState.isGenerating && nearBottom) feed.scrollTop = feed.scrollHeight;
+        if (convSwitched) {
+          feed.scrollTop = currentState.isGenerating ? feed.scrollHeight : 0;
+        } else if (currentState.isGenerating && nearBottom) {
+          feed.scrollTop = feed.scrollHeight;
+        }
         if (needsStreamMore) scheduleStreamTick();
       }
 
@@ -3652,6 +3683,7 @@
             }, 200);
           } else {
             groupFollowMap.set(key, false);
+            if (bodyEl) bodyEl.classList.remove('fade-top', 'fade-bottom');
           }
         } else if (action === 'toggle-step') {
           const el = btn.closest('.step-card');
@@ -3671,7 +3703,11 @@
             el._renderBody();
             setTimeout(() => {
               if (el.isConnected && el.dataset.open === 'true') {
-                syncThinkOverflow(el, el.querySelector('.think-md'));
+                const mdEl = el.querySelector('.think-md');
+                if (mdEl && el.dataset.streaming === 'true' && el.dataset.full !== 'true') {
+                  mdEl.scrollTop = mdEl.scrollHeight;
+                }
+                syncThinkOverflow(el, mdEl);
                 const grpBody = el.closest('.proc-body');
                 if (grpBody) updateGroupScrollFades(grpBody);
               }
