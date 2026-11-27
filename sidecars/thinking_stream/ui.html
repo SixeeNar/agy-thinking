@@ -7,101 +7,92 @@
   <script src="/preload.js"></script>
   <script src="/shared.js"></script>
   <style>
-    /* ─── Gemini 娘星云蓝 · 幻光紫 · 霞樱粉 双子星美学主题 ─── */
+    /* ─── 双层解耦配色体系：底色与字色 100% 随反重力客户端自适应，流光与高亮由 colorTheme 驱动 ─── */
     :root {
+      --c1-rgb: 77, 163, 255;
+      --c2-rgb: 155, 114, 203;
+      --c3-rgb: 232, 121, 168;
       --bg-base: var(--background, #090c14);
-      --bg-mesh: radial-gradient(circle at 12% -6%, rgba(77, 163, 255, 0.14), transparent 46%),
-                 radial-gradient(circle at 88% 4%, rgba(232, 121, 168, 0.12), transparent 44%),
-                 radial-gradient(circle at 52% 105%, rgba(155, 114, 203, 0.1), transparent 52%);
-      --bg-elev: rgba(138, 174, 242, 0.052);
-      --bg-card: rgba(15, 20, 35, 0.72);
-      --bg-sticky-card: #121829;
-      --bg-card-hover: rgba(155, 114, 203, 0.095);
       --fg-base: var(--foreground, #eef3ff);
-      --fg-muted: var(--muted-foreground, #9fb0d0);
-      --fg-dim: rgba(148, 168, 206, 0.64);
-      --border-soft: rgba(138, 174, 242, 0.15);
-      --border-strong: rgba(155, 114, 203, 0.44);
-      --guide-line: rgba(138, 174, 242, 0.24);
-      --gem-blue: #4da3ff;
-      --gem-purple: #9b72cb;
-      --gem-pink: #e879a8;
-      --gem-grad: linear-gradient(135deg, #4da3ff 0%, #9b72cb 52%, #e879a8 100%);
-      --gem-grad-soft: linear-gradient(135deg, rgba(77, 163, 255, 0.16) 0%, rgba(155, 114, 203, 0.16) 55%, rgba(232, 121, 168, 0.14) 100%);
-      --code-bg: rgba(5, 8, 18, 0.48);
-      --think-clr: #b392f0;
+      --fg-muted: var(--muted-foreground, color-mix(in srgb, var(--fg-base) 72%, transparent));
+      --fg-dim: color-mix(in srgb, var(--fg-base) 52%, transparent);
+      --bg-mesh: radial-gradient(circle at 12% -6%, rgba(var(--c1-rgb), 0.13), transparent 46%),
+                 radial-gradient(circle at 88% 4%, rgba(var(--c3-rgb), 0.11), transparent 44%),
+                 radial-gradient(circle at 52% 105%, rgba(var(--c2-rgb), 0.09), transparent 52%);
+      --bg-elev: color-mix(in srgb, var(--fg-base) 5.5%, transparent);
+      --bg-card: color-mix(in srgb, var(--bg-base) 91%, var(--fg-base) 9%);
+      --bg-sticky-card: color-mix(in srgb, var(--bg-base) 92%, var(--fg-base) 8%);
+      --bg-card-hover: rgba(var(--c2-rgb), 0.11);
+      --border-soft: color-mix(in srgb, var(--fg-base) 13%, transparent);
+      --border-strong: rgba(var(--c2-rgb), 0.44);
+      --guide-line: color-mix(in srgb, var(--fg-base) 20%, transparent);
+      --gem-blue: rgb(var(--c1-rgb));
+      --gem-purple: rgb(var(--c2-rgb));
+      --gem-pink: rgb(var(--c3-rgb));
+      --gem-grad: linear-gradient(135deg, rgb(var(--c1-rgb)) 0%, rgb(var(--c2-rgb)) 52%, rgb(var(--c3-rgb)) 100%);
+      --gem-grad-soft: linear-gradient(135deg, rgba(var(--c1-rgb), 0.16) 0%, rgba(var(--c2-rgb), 0.16) 55%, rgba(var(--c3-rgb), 0.14) 100%);
+      --code-bg: color-mix(in srgb, var(--fg-base) 7.5%, transparent);
+      --think-clr: rgb(var(--c2-rgb));
       --cmd-clr: #2dd4bf;
       --file-clr: #60a5fa;
       --search-clr: #38bdf8;
-      --tool-clr: #e879a8;
+      --tool-clr: rgb(var(--c3-rgb));
       --err-clr: #fb7185;
       --ok-clr: #34d399;
       --ui-font-sans: var(--font-sans, "PingFang SC", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif);
       --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      --shadow-card: 0 6px 22px -10px rgba(3, 7, 18, 0.65);
+      --shadow-card: 0 6px 22px -10px rgba(0, 0, 0, 0.55);
     }
 
     :root[data-theme="light"] {
       --bg-base: var(--background, #f4f7ff);
-      --bg-mesh: radial-gradient(circle at 12% -6%, rgba(66, 133, 244, 0.11), transparent 46%),
-                 radial-gradient(circle at 88% 4%, rgba(217, 101, 112, 0.09), transparent 44%),
-                 radial-gradient(circle at 52% 105%, rgba(139, 92, 246, 0.08), transparent 52%);
-      --bg-elev: rgba(66, 133, 244, 0.055);
-      --bg-card: rgba(255, 255, 255, 0.88);
-      --bg-sticky-card: #f6f8ff;
-      --bg-card-hover: rgba(139, 92, 246, 0.07);
       --fg-base: var(--foreground, #141c2f);
-      --fg-muted: var(--muted-foreground, #526382);
-      --fg-dim: rgba(96, 114, 148, 0.76);
-      --border-soft: rgba(66, 133, 244, 0.15);
-      --border-strong: rgba(139, 92, 246, 0.38);
-      --guide-line: rgba(66, 133, 244, 0.22);
-      --gem-blue: #4285f4;
-      --gem-purple: #8b5cf6;
-      --gem-pink: #d96570;
-      --gem-grad: linear-gradient(135deg, #4285f4 0%, #8b5cf6 54%, #d96570 100%);
-      --gem-grad-soft: linear-gradient(135deg, rgba(66, 133, 244, 0.12) 0%, rgba(139, 92, 246, 0.12) 55%, rgba(217, 101, 112, 0.1) 100%);
-      --code-bg: rgba(66, 133, 244, 0.065);
-      --think-clr: #7c3aed;
+      --fg-muted: var(--muted-foreground, color-mix(in srgb, var(--fg-base) 72%, transparent));
+      --fg-dim: color-mix(in srgb, var(--fg-base) 54%, transparent);
+      --bg-mesh: radial-gradient(circle at 12% -6%, rgba(var(--c1-rgb), 0.1), transparent 46%),
+                 radial-gradient(circle at 88% 4%, rgba(var(--c3-rgb), 0.085), transparent 44%),
+                 radial-gradient(circle at 52% 105%, rgba(var(--c2-rgb), 0.075), transparent 52%);
+      --bg-elev: color-mix(in srgb, var(--fg-base) 4.5%, transparent);
+      --bg-card: color-mix(in srgb, var(--bg-base) 96%, #ffffff 4%);
+      --bg-sticky-card: color-mix(in srgb, var(--bg-base) 95%, #ffffff 5%);
+      --bg-card-hover: rgba(var(--c2-rgb), 0.08);
+      --border-soft: color-mix(in srgb, var(--fg-base) 13%, transparent);
+      --border-strong: rgba(var(--c2-rgb), 0.38);
+      --guide-line: color-mix(in srgb, var(--fg-base) 18%, transparent);
+      --gem-grad-soft: linear-gradient(135deg, rgba(var(--c1-rgb), 0.12) 0%, rgba(var(--c2-rgb), 0.12) 55%, rgba(var(--c3-rgb), 0.1) 100%);
+      --code-bg: color-mix(in srgb, var(--fg-base) 6%, transparent);
       --cmd-clr: #059669;
       --file-clr: #2563eb;
       --search-clr: #0284c7;
-      --tool-clr: #d97706;
       --err-clr: #e11d48;
       --ok-clr: #059669;
-      --shadow-card: 0 4px 16px -8px rgba(66, 133, 244, 0.16);
+      --shadow-card: 0 4px 16px -8px rgba(15, 23, 42, 0.12);
     }
 
     @media (prefers-color-scheme: light) {
       :root:not([data-theme="dark"]) {
         --bg-base: var(--background, #f4f7ff);
-        --bg-mesh: radial-gradient(circle at 12% -6%, rgba(66, 133, 244, 0.11), transparent 46%),
-                   radial-gradient(circle at 88% 4%, rgba(217, 101, 112, 0.09), transparent 44%),
-                   radial-gradient(circle at 52% 105%, rgba(139, 92, 246, 0.08), transparent 52%);
-        --bg-elev: rgba(66, 133, 244, 0.055);
-        --bg-card: rgba(255, 255, 255, 0.88);
-        --bg-sticky-card: #f6f8ff;
-        --bg-card-hover: rgba(139, 92, 246, 0.07);
         --fg-base: var(--foreground, #141c2f);
-        --fg-muted: var(--muted-foreground, #526382);
-        --fg-dim: rgba(96, 114, 148, 0.76);
-        --border-soft: rgba(66, 133, 244, 0.15);
-        --border-strong: rgba(139, 92, 246, 0.38);
-        --guide-line: rgba(66, 133, 244, 0.22);
-        --gem-blue: #4285f4;
-        --gem-purple: #8b5cf6;
-        --gem-pink: #d96570;
-        --gem-grad: linear-gradient(135deg, #4285f4 0%, #8b5cf6 54%, #d96570 100%);
-        --gem-grad-soft: linear-gradient(135deg, rgba(66, 133, 244, 0.12) 0%, rgba(139, 92, 246, 0.12) 55%, rgba(217, 101, 112, 0.1) 100%);
-        --code-bg: rgba(66, 133, 244, 0.065);
-        --think-clr: #7c3aed;
+        --fg-muted: var(--muted-foreground, color-mix(in srgb, var(--fg-base) 72%, transparent));
+        --fg-dim: color-mix(in srgb, var(--fg-base) 54%, transparent);
+        --bg-mesh: radial-gradient(circle at 12% -6%, rgba(var(--c1-rgb), 0.1), transparent 46%),
+                   radial-gradient(circle at 88% 4%, rgba(var(--c3-rgb), 0.085), transparent 44%),
+                   radial-gradient(circle at 52% 105%, rgba(var(--c2-rgb), 0.075), transparent 52%);
+        --bg-elev: color-mix(in srgb, var(--fg-base) 4.5%, transparent);
+        --bg-card: color-mix(in srgb, var(--bg-base) 96%, #ffffff 4%);
+        --bg-sticky-card: color-mix(in srgb, var(--bg-base) 95%, #ffffff 5%);
+        --bg-card-hover: rgba(var(--c2-rgb), 0.08);
+        --border-soft: color-mix(in srgb, var(--fg-base) 13%, transparent);
+        --border-strong: rgba(var(--c2-rgb), 0.38);
+        --guide-line: color-mix(in srgb, var(--fg-base) 18%, transparent);
+        --gem-grad-soft: linear-gradient(135deg, rgba(var(--c1-rgb), 0.12) 0%, rgba(var(--c2-rgb), 0.12) 55%, rgba(var(--c3-rgb), 0.1) 100%);
+        --code-bg: color-mix(in srgb, var(--fg-base) 6%, transparent);
         --cmd-clr: #059669;
         --file-clr: #2563eb;
         --search-clr: #0284c7;
-        --tool-clr: #d97706;
         --err-clr: #e11d48;
         --ok-clr: #059669;
-        --shadow-card: 0 4px 16px -8px rgba(66, 133, 244, 0.16);
+        --shadow-card: 0 4px 16px -8px rgba(15, 23, 42, 0.12);
       }
     }
 
@@ -559,6 +550,51 @@
       color: var(--fg-base);
       box-shadow: inset 0 0 0 1px var(--border-strong);
     }
+    .theme-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .theme-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      border-radius: 9px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-elev);
+      color: var(--fg-muted);
+      font: inherit;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .theme-chip:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-strong);
+      color: var(--fg-base);
+    }
+    .theme-chip.active {
+      background: var(--gem-grad-soft);
+      border-color: var(--border-strong);
+      color: var(--fg-base);
+      box-shadow: 0 0 0 1px rgba(var(--c2-rgb), 0.16);
+    }
+    .theme-swatch {
+      flex: 0 0 auto;
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+    }
+    .theme-chip-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     #segDisplayLevel .seg-btn,
     #segTranslateStyle .seg-btn {
       padding: 4.5px 3px;
@@ -993,33 +1029,33 @@
       max-width: 100%;
       padding: 4.5px 13px 4.5px 10px;
       border-radius: 999px;
-      border: 1px solid rgba(155, 114, 203, 0.26);
-      background: linear-gradient(135deg, rgba(77, 163, 255, 0.09), rgba(155, 114, 203, 0.09) 52%, rgba(232, 121, 168, 0.08));
+      border: 1px solid rgba(var(--c2-rgb), 0.28);
+      background: linear-gradient(135deg, rgba(var(--c1-rgb), 0.09), rgba(var(--c2-rgb), 0.09) 52%, rgba(var(--c3-rgb), 0.08));
       color: var(--fg-base);
       font: inherit;
       font-size: 12.2px;
       cursor: pointer;
       user-select: none;
-      box-shadow: 0 2px 12px -6px rgba(77, 163, 255, 0.30);
+      box-shadow: 0 2px 12px -6px rgba(var(--c1-rgb), 0.30);
       transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.2s ease;
     }
     .turn-bar::after {
       content: "";
       position: absolute;
       inset: 0;
-      background: linear-gradient(105deg, transparent 20%, rgba(255, 255, 255, 0.22) 48%, rgba(232, 121, 168, 0.16) 56%, transparent 80%);
+      background: linear-gradient(105deg, transparent 20%, rgba(255, 255, 255, 0.2) 48%, rgba(var(--c3-rgb), 0.16) 56%, transparent 80%);
       transform: translateX(-130%);
       pointer-events: none;
     }
     .turn-bar:hover {
       background: var(--gem-grad-soft);
       border-color: var(--border-strong);
-      box-shadow: 0 0 0 1px rgba(155, 114, 203, 0.18), 0 4px 16px -6px rgba(155, 114, 203, 0.42);
+      box-shadow: 0 0 0 1px rgba(var(--c2-rgb), 0.18), 0 4px 16px -6px rgba(var(--c2-rgb), 0.42);
     }
     .turn-bar:hover::after { animation: bar-sheen 1.15s cubic-bezier(0.22, 1, 0.36, 1); }
     .turn-block[data-running="true"] .turn-bar {
-      border-color: rgba(232, 121, 168, 0.48);
-      box-shadow: 0 0 0 1px rgba(155, 114, 203, 0.22), 0 4px 18px -5px rgba(155, 114, 203, 0.46);
+      border-color: rgba(var(--c3-rgb), 0.48);
+      box-shadow: 0 0 0 1px rgba(var(--c2-rgb), 0.22), 0 4px 18px -5px rgba(var(--c2-rgb), 0.46);
     }
     .turn-block[data-running="true"] .turn-bar::after { animation: bar-sheen 2.4s ease-in-out infinite; }
     @keyframes bar-sheen {
@@ -1107,23 +1143,14 @@
     }
     .step-card[data-open="true"] {
       background:
-        radial-gradient(115% 75% at 0% 0%, rgba(77, 163, 255, 0.085) 0%, rgba(155, 114, 203, 0.055) 38%, transparent 72%),
-        linear-gradient(180deg, rgba(20, 25, 42, 0.72), rgba(12, 16, 29, 0.84));
-      border-color: rgba(155, 114, 203, 0.18);
+        radial-gradient(115% 75% at 0% 0%, rgba(var(--c1-rgb), 0.085) 0%, rgba(var(--c2-rgb), 0.055) 38%, transparent 72%),
+        var(--bg-card);
+      border-color: rgba(var(--c2-rgb), 0.2);
       box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.065),
-        0 10px 26px -16px rgba(2, 6, 22, 0.78);
+        inset 0 1px 0 color-mix(in srgb, var(--fg-base) 8%, transparent),
+        var(--shadow-card);
       margin: 2px 0;
       overflow: clip;
-    }
-    :root[data-theme="light"] .step-card[data-open="true"] {
-      background:
-        radial-gradient(115% 75% at 0% 0%, rgba(66, 133, 244, 0.08) 0%, rgba(139, 92, 246, 0.045) 40%, transparent 72%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(246, 249, 255, 0.96));
-      border-color: rgba(139, 92, 246, 0.17);
-      box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.9),
-        0 8px 22px -14px rgba(66, 133, 244, 0.24);
     }
     .step-card[data-open="true"]::before {
       content: "";
@@ -1132,17 +1159,17 @@
       left: 12px;
       right: 12px;
       height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(77, 163, 255, 0.34) 26%, rgba(155, 114, 203, 0.42) 55%, rgba(232, 121, 168, 0.28) 80%, transparent);
+      background: linear-gradient(90deg, transparent, rgba(var(--c1-rgb), 0.34) 26%, rgba(var(--c2-rgb), 0.42) 55%, rgba(var(--c3-rgb), 0.28) 80%, transparent);
       opacity: 0.65;
       pointer-events: none;
       z-index: 6;
     }
     .step-card[data-open="true"][data-running="true"] {
-      border-color: rgba(155, 114, 203, 0.34);
+      border-color: rgba(var(--c2-rgb), 0.36);
       box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        0 0 0 1px rgba(155, 114, 203, 0.12),
-        0 12px 28px -14px rgba(155, 114, 203, 0.36);
+        inset 0 1px 0 color-mix(in srgb, var(--fg-base) 10%, transparent),
+        0 0 0 1px rgba(var(--c2-rgb), 0.14),
+        0 12px 28px -14px rgba(var(--c2-rgb), 0.36);
     }
     .step-card[data-open="true"][data-running="true"]::before {
       height: 1.5px;
@@ -1187,13 +1214,7 @@
 
     .step-kind { flex: 0 0 auto; font-weight: 560; letter-spacing: 0.01em; color: var(--fg-base); white-space: nowrap; }
     .step-card[data-kind="think"][data-open="true"] .step-kind {
-      background: linear-gradient(90deg, var(--fg-base) 0%, #c8dcff 65%, #e2c7ff 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
-    :root[data-theme="light"] .step-card[data-kind="think"][data-open="true"] .step-kind {
-      background: linear-gradient(90deg, #1e293b 0%, #4285f4 65%, #8b5cf6 100%);
+      background: linear-gradient(90deg, var(--fg-base) 0%, rgb(var(--c1-rgb)) 65%, rgb(var(--c2-rgb)) 100%);
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -1235,15 +1256,13 @@
       width: 100%;
       padding: 0;
       border-left: none;
-      color: rgba(226, 234, 252, 0.88);
+      color: var(--fg-base);
+      opacity: 0.9;
       font-size: 12.6px;
       line-height: 1.74;
       letter-spacing: 0.01em;
       word-break: break-word;
       user-select: text;
-    }
-    :root[data-theme="light"] .think-md {
-      color: rgba(24, 34, 56, 0.88);
     }
     .step-card[data-kind="think"]:not([data-full="true"]) .think-md {
       max-height: 260px;
@@ -1314,28 +1333,22 @@
     .think-md .md-h { margin: 8px 0 4px; font-size: 12.5px; font-weight: 600; color: var(--fg-base); }
     .think-md .md-h:first-child { margin-top: 0; }
     .think-md hr { border: none; border-top: 1px solid var(--border-soft); margin: 7px 0; }
-    .think-md strong { color: rgba(248, 250, 255, 0.98); font-weight: 620; }
-    :root[data-theme="light"] .think-md strong { color: #0f172a; }
+    .think-md strong { color: var(--fg-base); font-weight: 620; }
     .think-md code {
       font-family: var(--font-mono);
       font-size: 11.3px;
       padding: 1.5px 6px;
       border-radius: 5px;
-      border: 1px solid rgba(138, 174, 242, 0.16);
-      background: rgba(138, 174, 242, 0.1);
-      color: #c8dcff;
-    }
-    :root[data-theme="light"] .think-md code {
-      border-color: rgba(66, 133, 244, 0.18);
-      background: rgba(66, 133, 244, 0.08);
-      color: #2563eb;
+      border: 1px solid color-mix(in srgb, var(--fg-base) 14%, transparent);
+      background: var(--code-bg);
+      color: var(--fg-base);
     }
     .think-md pre, .detail-pre {
       margin: 6px 0 0;
       padding: 9px 11px;
       border-radius: 9px;
-      border: 1px solid rgba(138, 174, 242, 0.12);
-      background: rgba(7, 10, 20, 0.56);
+      border: 1px solid var(--border-soft);
+      background: var(--code-bg);
       overflow-x: auto;
       font-family: var(--font-mono);
       font-size: 11.4px;
@@ -1344,11 +1357,6 @@
       white-space: pre-wrap;
       word-break: break-word;
       user-select: text;
-    }
-    :root[data-theme="light"] .think-md pre,
-    :root[data-theme="light"] .detail-pre {
-      background: rgba(66, 133, 244, 0.055);
-      border-color: rgba(66, 133, 244, 0.14);
     }
     .think-md ul, .think-md ol { margin: 4px 0 7px; padding-left: 18px; }
     .think-md li { margin-bottom: 2px; }
@@ -1498,7 +1506,7 @@
       left: 16px;
       width: 1.5px;
       border-radius: 999px;
-      background: linear-gradient(180deg, rgba(77, 163, 255, 0.5) 0%, rgba(155, 114, 203, 0.4) 52%, rgba(232, 121, 168, 0.28) 100%);
+      background: linear-gradient(180deg, rgba(var(--c1-rgb), 0.52) 0%, rgba(var(--c2-rgb), 0.42) 52%, rgba(var(--c3-rgb), 0.28) 100%);
       -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 5%, #000 72%, rgba(0, 0, 0, 0.36) 88%, transparent 100%);
       mask-image: linear-gradient(180deg, transparent 0%, #000 5%, #000 72%, rgba(0, 0, 0, 0.36) 88%, transparent 100%);
     }
@@ -1515,18 +1523,18 @@
         180deg,
         transparent 0%,
         transparent 32%,
-        rgba(77, 163, 255, 0.2) 40%,
-        rgba(116, 138, 232, 0.62) 50%,
-        rgba(155, 114, 203, 0.92) 58%,
-        rgba(232, 121, 168, 1) 62%,
-        rgba(255, 228, 245, 0.96) 64.5%,
-        rgba(232, 121, 168, 0.32) 66.5%,
+        rgba(var(--c1-rgb), 0.22) 40%,
+        rgba(var(--c1-rgb), 0.65) 50%,
+        rgba(var(--c2-rgb), 0.92) 58%,
+        rgba(var(--c3-rgb), 1) 62%,
+        rgba(255, 255, 255, 0.92) 64.5%,
+        rgba(var(--c3-rgb), 0.32) 66.5%,
         transparent 68%,
         transparent 100%
       );
       background-size: 100% 340%;
       background-repeat: no-repeat;
-      filter: drop-shadow(0 0 3px rgba(155, 114, 203, 0.62));
+      filter: drop-shadow(0 0 3px rgba(var(--c2-rgb), 0.62));
       -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 5%, #000 72%, rgba(0, 0, 0, 0.36) 88%, transparent 100%);
       mask-image: linear-gradient(180deg, transparent 0%, #000 5%, #000 72%, rgba(0, 0, 0, 0.36) 88%, transparent 100%);
       pointer-events: none;
@@ -1669,13 +1677,10 @@
       z-index: 5;
       min-height: 33px;
       padding: 6px 13px;
-      background: rgba(16, 21, 36, 0.78);
+      background: color-mix(in srgb, var(--bg-sticky-card) 86%, transparent);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border-radius: 0;
-    }
-    :root[data-theme="light"] .step-card[data-kind="think"][data-open="true"] > .step-head {
-      background: rgba(248, 250, 255, 0.84);
     }
     .step-card[data-kind="think"][data-open="true"] > .step-head::after {
       content: "";
@@ -1684,14 +1689,11 @@
       right: 14px;
       bottom: 0;
       height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(138, 174, 242, 0.16) 18%, rgba(155, 114, 203, 0.2) 55%, rgba(232, 121, 168, 0.12) 84%, transparent);
+      background: linear-gradient(90deg, transparent, rgba(var(--c1-rgb), 0.18) 18%, rgba(var(--c2-rgb), 0.22) 55%, rgba(var(--c3-rgb), 0.14) 84%, transparent);
       pointer-events: none;
     }
     .step-card[data-kind="think"][data-open="true"] > .step-head:hover {
-      background: rgba(24, 31, 52, 0.86);
-    }
-    :root[data-theme="light"] .step-card[data-kind="think"][data-open="true"] > .step-head:hover {
-      background: rgba(240, 245, 255, 0.92);
+      background: color-mix(in srgb, var(--bg-sticky-card) 92%, var(--fg-base) 8%);
     }
 
     /* ─── 极简无框风格（Minimal Editorial Stream）：全链路去气泡、融背景、高对比易读 ─── */
@@ -1952,6 +1954,36 @@
               <button type="button" class="seg-btn" data-val="glass">极光玻璃（卡片）</button>
             </div>
           </div>
+
+          <div class="field-group">
+            <span class="field-label">流光配色主题（底色自动适配客户端）</span>
+            <div class="theme-grid" id="themePicker">
+              <button type="button" class="theme-chip" data-theme-id="gemini">
+                <span class="theme-swatch" style="background:linear-gradient(135deg,#4da3ff,#9b72cb,#e879a8);"></span>
+                <span class="theme-chip-name">双子极光</span>
+              </button>
+              <button type="button" class="theme-chip" data-theme-id="mono">
+                <span class="theme-swatch" style="background:linear-gradient(135deg,#f8fafc,#94a3b8,#475569);"></span>
+                <span class="theme-chip-name">冷银星芒</span>
+              </button>
+              <button type="button" class="theme-chip" data-theme-id="amber">
+                <span class="theme-swatch" style="background:linear-gradient(135deg,#fbbf24,#fb923c,#f472b6);"></span>
+                <span class="theme-chip-name">琥珀暖金</span>
+              </button>
+              <button type="button" class="theme-chip" data-theme-id="emerald">
+                <span class="theme-swatch" style="background:linear-gradient(135deg,#2dd4bf,#10b981,#38bdf8);"></span>
+                <span class="theme-chip-name">翠境青岚</span>
+              </button>
+              <button type="button" class="theme-chip" data-theme-id="sakura">
+                <span class="theme-swatch" style="background:linear-gradient(135deg,#f9a8d4,#f472b6,#c084fc);"></span>
+                <span class="theme-chip-name">樱雪绯紫</span>
+              </button>
+              <button type="button" class="theme-chip" data-theme-id="host">
+                <span class="theme-swatch" style="background:conic-gradient(from 45deg,#4da3ff,#10b981,#fbbf24,#e879a8,#4da3ff);"></span>
+                <span class="theme-chip-name">原生随主</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- L3: 第二权重 · 翻译服务与智能选模（已配好默认优雅收起，未填 Key 自动展开） -->
@@ -2133,7 +2165,7 @@
     (function () {
       const {
         escapeHtml, renderMarkdown, renderThinkingSteps, countThinkingSteps, thinkSummary, shortModelName, formatDurationParts,
-        getPresentationPolicy, classifyToolActivity, activityIconKey, buildProcessGroups, formatProcessGroupTitle, isTurnTranslating, formatTurnBarLabel, ICONS,
+        getPresentationPolicy, classifyToolActivity, activityIconKey, buildProcessGroups, formatProcessGroupTitle, isTurnTranslating, formatTurnBarLabel, resolveColorThemePalette, ICONS,
       } = window.__agyThinkingShared;
       const params = new URLSearchParams(window.location.search);
       const token = params.get('token') || '';
@@ -2302,6 +2334,61 @@
       const expandedFullMap = new Map();
       const streamShownMap = new Map();
 
+      let activeColorTheme = 'gemini';
+
+      function parseCssColorToRgb(raw) {
+        const str = String(raw || '').trim();
+        if (!str || str === 'transparent' || str === 'none') return null;
+        const m = str.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/i);
+        if (m) {
+          const a = m[4] === undefined ? 1 : Number(m[4]);
+          if (a < 0.35) return null;
+          return [Number(m[1]), Number(m[2]), Number(m[3])];
+        }
+        try {
+          const probe = document.createElement('span');
+          probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;color:' + str;
+          document.body.appendChild(probe);
+          const computed = getComputedStyle(probe).color;
+          probe.remove();
+          const pm = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/i);
+          if (!pm) return null;
+          const a = pm[4] === undefined ? 1 : Number(pm[4]);
+          return a >= 0.35 ? [Number(pm[1]), Number(pm[2]), Number(pm[3])] : null;
+        } catch {
+          return null;
+        }
+      }
+
+      function detectHostAccentRgb() {
+        const rootStyle = getComputedStyle(document.documentElement);
+        const candidates = ['--primary', '--accent', '--ring', '--vscode-focusBorder', '--vscode-button-background', '--vscode-textLink-foreground'];
+        for (const name of candidates) {
+          const rgb = parseCssColorToRgb(rootStyle.getPropertyValue(name));
+          if (rgb) return rgb;
+        }
+        return null;
+      }
+
+      function applyColorTheme(themeId = activeColorTheme) {
+        activeColorTheme = themeId || 'gemini';
+        const isLight = document.documentElement.dataset.theme === 'light' ||
+          (!document.documentElement.dataset.theme && window.matchMedia?.('(prefers-color-scheme: light)')?.matches);
+        const hostAccent = activeColorTheme === 'host' ? detectHostAccentRgb() : null;
+        const pal = resolveColorThemePalette(activeColorTheme, isLight, hostAccent);
+        const root = document.documentElement;
+        root.style.setProperty('--c1-rgb', pal.c1);
+        root.style.setProperty('--c2-rgb', pal.c2);
+        root.style.setProperty('--c3-rgb', pal.c3);
+        root.style.setProperty('--think-clr', pal.think);
+        const picker = document.getElementById('themePicker');
+        if (picker) {
+          for (const chip of picker.querySelectorAll('.theme-chip')) {
+            chip.classList.toggle('active', chip.dataset.themeId === activeColorTheme);
+          }
+        }
+      }
+
       function syncHostTheme() {
         const parseRgba = (bg) => {
           const m = String(bg || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/i);
@@ -2315,14 +2402,16 @@
         const bg = (bodyBg && bodyBg[3] >= 0.45) ? bodyBg : ((docBg && docBg[3] >= 0.45) ? docBg : null);
         if (bg) {
           document.documentElement.dataset.theme = lumOf(bg) < 0.52 ? 'dark' : 'light';
+          applyColorTheme();
           return;
         }
         const fg = parseRgba(getComputedStyle(document.body).color);
         if (fg && fg[3] >= 0.4) {
           const fgLum = lumOf(fg);
-          if (fgLum > 0.55) { document.documentElement.dataset.theme = 'dark'; return; }
-          if (fgLum < 0.45) { document.documentElement.dataset.theme = 'light'; return; }
+          if (fgLum > 0.55) { document.documentElement.dataset.theme = 'dark'; applyColorTheme(); return; }
+          if (fgLum < 0.45) { document.documentElement.dataset.theme = 'light'; applyColorTheme(); return; }
         }
+        applyColorTheme();
       }
       syncHostTheme();
       try {
@@ -2694,6 +2783,7 @@
         setSegmentedActive('segTranslateStyle', nextStyle);
         setSegmentedActive('segFontSize', settings.fontSize || 'md');
         setSegmentedActive('segCardStyle', settings.cardStyle === 'glass' ? 'glass' : 'minimal');
+        applyColorTheme(settings.colorTheme || 'gemini');
 
         if (!tabInitialized) {
           tabInitialized = true;
@@ -3663,6 +3753,13 @@
       bindSegmented('segCardStyle', (val) => {
         document.body.dataset.cardStyle = val;
         void saveQuickSetting({ cardStyle: val });
+      });
+      document.getElementById('themePicker')?.addEventListener('click', (ev) => {
+        const chip = ev.target.closest('.theme-chip[data-theme-id]');
+        if (!chip) return;
+        const nextTheme = chip.dataset.themeId;
+        applyColorTheme(nextTheme);
+        void saveQuickSetting({ colorTheme: nextTheme });
       });
       bindSegmented('segFeedKind', (val) => {
         feedKindFilter = val;

@@ -722,6 +722,80 @@ function formatTurnBarLabel(turn, settings, numClass) {
   return { html, title: durPlain ? (fullTitle + '，用时 ' + durPlain) : fullTitle, active: false };
 }
 
+const COLOR_THEMES = {
+  gemini: {
+    id: 'gemini',
+    name: '双子极光',
+    dark: { c1: '77, 163, 255', c2: '155, 114, 203', c3: '232, 121, 168', think: '#b392f0' },
+    light: { c1: '66, 133, 244', c2: '139, 92, 246', c3: '217, 101, 112', think: '#7c3aed' },
+  },
+  mono: {
+    id: 'mono',
+    name: '冷银星芒',
+    dark: { c1: '241, 245, 249', c2: '168, 180, 200', c3: '110, 124, 148', think: '#cbd5e1' },
+    light: { c1: '30, 41, 59', c2: '71, 85, 105', c3: '130, 144, 166', think: '#475569' },
+  },
+  amber: {
+    id: 'amber',
+    name: '琥珀暖金',
+    dark: { c1: '251, 191, 36', c2: '251, 146, 60', c3: '244, 114, 182', think: '#fbbf24' },
+    light: { c1: '217, 119, 6', c2: '234, 88, 12', c3: '219, 39, 119', think: '#d97706' },
+  },
+  emerald: {
+    id: 'emerald',
+    name: '翠境青岚',
+    dark: { c1: '45, 212, 191', c2: '16, 185, 129', c3: '56, 189, 248', think: '#2dd4bf' },
+    light: { c1: '13, 148, 136', c2: '5, 150, 105', c3: '2, 132, 199', think: '#0d9488' },
+  },
+  sakura: {
+    id: 'sakura',
+    name: '樱雪绯紫',
+    dark: { c1: '249, 168, 212', c2: '244, 114, 182', c3: '192, 132, 252', think: '#f472b6' },
+    light: { c1: '236, 72, 153', c2: '219, 39, 119', c3: '147, 51, 234', think: '#db2777' },
+  },
+  host: {
+    id: 'host',
+    name: '原生随主',
+    dark: { c1: '148, 163, 184', c2: '186, 198, 218', c3: '125, 145, 174', think: '#cbd5e1' },
+    light: { c1: '71, 85, 105', c2: '100, 116, 139', c3: '51, 65, 85', think: '#475569' },
+  },
+};
+
+function clampRgb(n) {
+  return Math.max(0, Math.min(255, Math.round(n)));
+}
+
+function shiftRgbTone(rgb, factor, offset) {
+  return [
+    clampRgb(rgb[0] * factor + offset),
+    clampRgb(rgb[1] * factor + offset),
+    clampRgb(rgb[2] * factor + offset),
+  ];
+}
+
+function resolveColorThemePalette(themeId, isLight, hostAccentRgb) {
+  const mode = isLight ? 'light' : 'dark';
+  if (themeId === 'host' && Array.isArray(hostAccentRgb) && hostAccentRgb.length >= 3) {
+    const base = [clampRgb(hostAccentRgb[0]), clampRgb(hostAccentRgb[1]), clampRgb(hostAccentRgb[2])];
+    // 保证强调色在当前明暗底色下可见，同时衍生出同色系三段和谐流光
+    const lum = (0.2126 * base[0] + 0.7152 * base[1] + 0.0722 * base[2]) / 255;
+    let c2Arr = base;
+    if (!isLight && lum < 0.34) c2Arr = shiftRgbTone(base, 0.72, 82);
+    else if (isLight && lum > 0.72) c2Arr = shiftRgbTone(base, 0.68, 0);
+    const c1Arr = isLight ? shiftRgbTone(c2Arr, 0.86, 10) : shiftRgbTone(c2Arr, 0.82, 48);
+    const c3Arr = isLight ? shiftRgbTone(c2Arr, 1.05, -24) : shiftRgbTone(c2Arr, 0.88, 16);
+    const toStr = function (a) { return a[0] + ', ' + a[1] + ', ' + a[2]; };
+    return {
+      c1: toStr(c1Arr),
+      c2: toStr(c2Arr),
+      c3: toStr(c3Arr),
+      think: 'rgb(' + toStr(c2Arr) + ')',
+    };
+  }
+  const entry = COLOR_THEMES[themeId] || COLOR_THEMES.gemini;
+  return entry[mode] || entry.dark;
+}
+
 const ICONS = {
   star: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z"/></svg>',
   think: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M2.5 12h3M18.5 12h3M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>',
@@ -744,5 +818,5 @@ const ICONS = {
 `;
 
 export function buildSharedBrowserScript() {
-  return `(() => {\n${SHARED_RENDER_SOURCE}\nwindow.__agyThinkingShared = { escapeHtml, formatInline, renderMarkdown, parseThinkingSteps, countThinkingSteps, renderThinkingSteps, firstLine, latestCompletedParagraphFirstLine, latestParagraphFirstLine, thinkSummary, shortModelName, formatDurationHuman, formatDurationParts, getPresentationPolicy, classifyToolActivity, activityIconKey, buildProcessGroups, formatProcessGroupTitle, isTurnTranslating, formatTurnBarLabel, ICONS };\n})();\n`;
+  return `(() => {\n${SHARED_RENDER_SOURCE}\nwindow.__agyThinkingShared = { escapeHtml, formatInline, renderMarkdown, parseThinkingSteps, countThinkingSteps, renderThinkingSteps, firstLine, latestCompletedParagraphFirstLine, latestParagraphFirstLine, thinkSummary, shortModelName, formatDurationHuman, formatDurationParts, getPresentationPolicy, classifyToolActivity, activityIconKey, buildProcessGroups, formatProcessGroupTitle, isTurnTranslating, formatTurnBarLabel, COLOR_THEMES, resolveColorThemePalette, ICONS };\n})();\n`;
 }

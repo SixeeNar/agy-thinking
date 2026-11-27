@@ -95,9 +95,40 @@ function getClientBundle(owner) {
       return (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
     }
 
+    function parseCssColorRgb(raw) {
+      const str = String(raw || '').trim();
+      if (!str || str === 'transparent' || str === 'none') return null;
+      const direct = parseRgba(str);
+      if (direct) return direct[3] >= 0.35 ? [direct[0], direct[1], direct[2]] : null;
+      try {
+        const probe = document.createElement('span');
+        probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;color:' + str;
+        (document.body || document.documentElement).appendChild(probe);
+        const computed = getComputedStyle(probe).color;
+        probe.remove();
+        const parsed = parseRgba(computed);
+        return parsed && parsed[3] >= 0.35 ? [parsed[0], parsed[1], parsed[2]] : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function detectHostAccent(anchorEl) {
+      const roots = [document.documentElement, document.body, anchorEl].filter(Boolean);
+      const varNames = ['--primary', '--accent', '--ring', '--vscode-focusBorder', '--vscode-button-background', '--vscode-textLink-foreground'];
+      for (const root of roots) {
+        const cs = getComputedStyle(root);
+        for (const name of varNames) {
+          const rgb = parseCssColorRgb(cs.getPropertyValue(name));
+          if (rgb) return rgb;
+        }
+      }
+      return null;
+    }
+
     /**
-     * 沿着实际挂载节点一路向上探测宿主真实背景色与文字色，
-     * 避免 body 背景透明时回退到系统浅色模式，导致暗黑 IDE 中误用深黑文字看不清。
+     * 沿着实际挂载节点一路向上探测宿主真实背景色、文字色与强调色，
+     * 确保在任意用户自定义客户端配色（纯黑、暖棕、墨绿、浅白等）下都清晰融合。
      */
     function detectHostAppearance(anchorEl) {
       let hostBg = null;
@@ -115,31 +146,29 @@ function getClientBundle(owner) {
         if (docBg && docBg[3] >= 0.45) hostBg = docBg;
       }
 
-      if (hostBg) {
-        const theme = rgbLuminance(hostBg) < 0.52 ? 'dark' : 'light';
-        return { theme, hostBg };
-      }
-
-      // 背景全透明时，改用锚点真实前景色反推明暗：浅字必暗底，深字必亮底
       const fgTarget = anchorEl || document.body || document.documentElement;
-      const fg = fgTarget ? parseRgba(getComputedStyle(fgTarget).color) : null;
-      if (fg && fg[3] >= 0.4) {
-        const fgLum = rgbLuminance(fg);
-        if (fgLum > 0.55) return { theme: 'dark', hostBg: null };
-        if (fgLum < 0.45) return { theme: 'light', hostBg: null };
-      }
+      const fgRaw = fgTarget ? parseRgba(getComputedStyle(fgTarget).color) : null;
+      const hostFg = fgRaw && fgRaw[3] >= 0.4 ? fgRaw : null;
+      const hostAccent = detectHostAccent(anchorEl);
 
-      const cls = ((document.documentElement.className || '') + ' ' + (document.body?.className || '')).toLowerCase();
-      const dt = (document.documentElement.dataset?.theme || document.body?.dataset?.theme || '').toLowerCase();
-      if (dt.includes('dark') || /\\b(dark|vs-dark|vscode-dark|hc-black)\\b/.test(cls)) {
-        return { theme: 'dark', hostBg: null };
+      let theme = '';
+      if (hostBg) {
+        theme = rgbLuminance(hostBg) < 0.52 ? 'dark' : 'light';
+      } else if (hostFg) {
+        const fgLum = rgbLuminance(hostFg);
+        if (fgLum > 0.55) theme = 'dark';
+        else if (fgLum < 0.45) theme = 'light';
       }
-      if (dt.includes('light') || /\\b(light|vs|vscode-light|hc-light)\\b/.test(cls)) {
-        return { theme: 'light', hostBg: null };
+      if (!theme) {
+        const cls = ((document.documentElement.className || '') + ' ' + (document.body?.className || '')).toLowerCase();
+        const dt = (document.documentElement.dataset?.theme || document.body?.dataset?.theme || '').toLowerCase();
+        if (dt.includes('dark') || /\\b(dark|vs-dark|vscode-dark|hc-black)\\b/.test(cls)) theme = 'dark';
+        else if (dt.includes('light') || /\\b(light|vs|vscode-light|hc-light)\\b/.test(cls)) theme = 'light';
       }
-
-      const prefersLight = window.matchMedia?.('(prefers-color-scheme: light)')?.matches;
-      return { theme: prefersLight ? 'light' : 'dark', hostBg: null };
+      if (!theme) {
+        theme = window.matchMedia?.('(prefers-color-scheme: light)')?.matches ? 'light' : 'dark';
+      }
+      return { theme, hostBg, hostFg, hostAccent };
     }
 
     function detectConversationId() {
@@ -175,25 +204,29 @@ function getClientBundle(owner) {
         display: block;
         margin: 4px 0 12px;
         font-family: "PingFang SC", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+        --xx-c1-rgb: 77, 163, 255;
+        --xx-c2-rgb: 155, 114, 203;
+        --xx-c3-rgb: 232, 121, 168;
+        --xx-host-bg: #0d111b;
         --xx-bg-sticky: #0d111b;
         --xx-host-bg-translucent: rgba(13, 17, 27, 0.88);
         --xx-fg: rgba(244, 247, 255, 0.96);
         --xx-muted: rgba(206, 217, 238, 0.88);
         --xx-dim: rgba(164, 179, 208, 0.76);
-        --xx-surface: rgba(77, 163, 255, 0.06);
-        --xx-surface-hover: rgba(155, 114, 203, 0.13);
-        --xx-card: rgba(14, 19, 34, 0.56);
-        --xx-border: rgba(138, 174, 242, 0.18);
-        --xx-border-strong: rgba(155, 114, 203, 0.46);
-        --xx-line: rgba(138, 174, 242, 0.24);
-        --xx-code-bg: rgba(7, 10, 20, 0.44);
-        --xx-accent: #4da3ff;
-        --xx-accent-mid: #9b72cb;
-        --xx-accent-2: #e879a8;
-        --xx-grad: linear-gradient(135deg, #4da3ff 0%, #9b72cb 52%, #e879a8 100%);
-        --xx-grad-flow: linear-gradient(90deg, #4da3ff 0%, #9b72cb 36%, #e879a8 68%, #4da3ff 100%);
-        --xx-grad-soft: linear-gradient(135deg, rgba(77, 163, 255, 0.14) 0%, rgba(155, 114, 203, 0.15) 52%, rgba(232, 121, 168, 0.13) 100%);
-        --xx-think: #b392f0;
+        --xx-surface: color-mix(in srgb, var(--xx-fg) 6%, transparent);
+        --xx-surface-hover: rgba(var(--xx-c2-rgb), 0.13);
+        --xx-card: color-mix(in srgb, var(--xx-host-bg) 90%, var(--xx-fg) 10%);
+        --xx-border: color-mix(in srgb, var(--xx-fg) 15%, transparent);
+        --xx-border-strong: rgba(var(--xx-c2-rgb), 0.46);
+        --xx-line: color-mix(in srgb, var(--xx-fg) 20%, transparent);
+        --xx-code-bg: color-mix(in srgb, var(--xx-fg) 8%, transparent);
+        --xx-accent: rgb(var(--xx-c1-rgb));
+        --xx-accent-mid: rgb(var(--xx-c2-rgb));
+        --xx-accent-2: rgb(var(--xx-c3-rgb));
+        --xx-grad: linear-gradient(135deg, rgb(var(--xx-c1-rgb)) 0%, rgb(var(--xx-c2-rgb)) 52%, rgb(var(--xx-c3-rgb)) 100%);
+        --xx-grad-flow: linear-gradient(90deg, rgb(var(--xx-c1-rgb)) 0%, rgb(var(--xx-c2-rgb)) 36%, rgb(var(--xx-c3-rgb)) 68%, rgb(var(--xx-c1-rgb)) 100%);
+        --xx-grad-soft: linear-gradient(135deg, rgba(var(--xx-c1-rgb), 0.14) 0%, rgba(var(--xx-c2-rgb), 0.15) 52%, rgba(var(--xx-c3-rgb), 0.13) 100%);
+        --xx-think: rgb(var(--xx-c2-rgb));
         --xx-cmd: #2dd4bf;
         --xx-file: #60a5fa;
         --xx-edit: #a78bfa;
@@ -201,29 +234,24 @@ function getClientBundle(owner) {
         --xx-code: #818cf8;
         --xx-sub: #f472b6;
         --xx-plan: #34d399;
-        --xx-tool: #e879a8;
+        --xx-tool: rgb(var(--xx-c3-rgb));
         --xx-err: #fb7185;
       }
       .xx-wrap[data-theme="light"] {
+        --xx-host-bg: #f6f8fe;
         --xx-bg-sticky: #f6f8fe;
         --xx-host-bg-translucent: rgba(248, 250, 255, 0.9);
         --xx-fg: rgba(15, 23, 42, 0.95);
         --xx-muted: rgba(51, 65, 85, 0.88);
         --xx-dim: rgba(100, 116, 139, 0.82);
-        --xx-surface: rgba(66, 133, 244, 0.06);
-        --xx-surface-hover: rgba(139, 92, 246, 0.10);
-        --xx-card: rgba(255, 255, 255, 0.88);
-        --xx-border: rgba(66, 133, 244, 0.18);
-        --xx-border-strong: rgba(139, 92, 246, 0.44);
-        --xx-line: rgba(66, 133, 244, 0.22);
-        --xx-code-bg: rgba(66, 133, 244, 0.07);
-        --xx-accent: #4285f4;
-        --xx-accent-mid: #8b5cf6;
-        --xx-accent-2: #d96570;
-        --xx-grad: linear-gradient(135deg, #4285f4 0%, #8b5cf6 54%, #d96570 100%);
-        --xx-grad-flow: linear-gradient(90deg, #4285f4 0%, #8b5cf6 36%, #d96570 68%, #4285f4 100%);
-        --xx-grad-soft: linear-gradient(135deg, rgba(66, 133, 244, 0.11) 0%, rgba(139, 92, 246, 0.12) 54%, rgba(217, 101, 112, 0.10) 100%);
-        --xx-think: #7c3aed;
+        --xx-surface: color-mix(in srgb, var(--xx-fg) 5%, transparent);
+        --xx-surface-hover: rgba(var(--xx-c2-rgb), 0.10);
+        --xx-card: color-mix(in srgb, var(--xx-host-bg) 96%, #ffffff 4%);
+        --xx-border: color-mix(in srgb, var(--xx-fg) 14%, transparent);
+        --xx-border-strong: rgba(var(--xx-c2-rgb), 0.42);
+        --xx-line: color-mix(in srgb, var(--xx-fg) 18%, transparent);
+        --xx-code-bg: color-mix(in srgb, var(--xx-fg) 6.5%, transparent);
+        --xx-grad-soft: linear-gradient(135deg, rgba(var(--xx-c1-rgb), 0.11) 0%, rgba(var(--xx-c2-rgb), 0.12) 54%, rgba(var(--xx-c3-rgb), 0.10) 100%);
         --xx-cmd: #0d9488;
         --xx-file: #2563eb;
         --xx-edit: #7c3aed;
@@ -231,7 +259,6 @@ function getClientBundle(owner) {
         --xx-code: #4f46e5;
         --xx-sub: #db2777;
         --xx-plan: #059669;
-        --xx-tool: #db2777;
         --xx-err: #e11d48;
       }
       .xx-wrap, .xx-wrap * { box-sizing: border-box; }
@@ -255,44 +282,44 @@ function getClientBundle(owner) {
         max-width: 100%;
         padding: 4.5px 13px 4.5px 10px;
         border-radius: 999px;
-        border: 1px solid rgba(155, 114, 203, 0.26);
-        background: linear-gradient(135deg, rgba(77, 163, 255, 0.09), rgba(155, 114, 203, 0.09) 52%, rgba(232, 121, 168, 0.08));
+        border: 1px solid rgba(var(--xx-c2-rgb), 0.28);
+        background: linear-gradient(135deg, rgba(var(--xx-c1-rgb), 0.09), rgba(var(--xx-c2-rgb), 0.09) 52%, rgba(var(--xx-c3-rgb), 0.08));
         color: var(--xx-fg);
         font: inherit;
         font-size: 12.4px;
         cursor: pointer;
         user-select: none;
-        box-shadow: 0 2px 12px -6px rgba(77, 163, 255, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        box-shadow: 0 2px 12px -6px rgba(var(--xx-c1-rgb), 0.32), inset 0 1px 0 color-mix(in srgb, var(--xx-fg) 8%, transparent);
         transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.2s ease, transform 0.12s ease;
       }
       .xx-wrap[data-theme="light"] .xx-turn-bar {
-        border-color: rgba(139, 92, 246, 0.24);
-        background: linear-gradient(135deg, rgba(66, 133, 244, 0.08), rgba(139, 92, 246, 0.08) 54%, rgba(217, 101, 112, 0.07));
-        box-shadow: 0 2px 10px -6px rgba(139, 92, 246, 0.22);
+        border-color: rgba(var(--xx-c2-rgb), 0.24);
+        background: linear-gradient(135deg, rgba(var(--xx-c1-rgb), 0.08), rgba(var(--xx-c2-rgb), 0.08) 54%, rgba(var(--xx-c3-rgb), 0.07));
+        box-shadow: 0 2px 10px -6px rgba(var(--xx-c2-rgb), 0.22);
       }
       .xx-turn-bar:disabled { cursor: default; }
       .xx-turn-bar::after {
         content: "";
         position: absolute;
         inset: 0;
-        background: linear-gradient(105deg, transparent 20%, rgba(255, 255, 255, 0.22) 48%, rgba(232, 121, 168, 0.16) 56%, transparent 80%);
+        background: linear-gradient(105deg, transparent 20%, rgba(255, 255, 255, 0.2) 48%, rgba(var(--xx-c3-rgb), 0.16) 56%, transparent 80%);
         transform: translateX(-130%);
         pointer-events: none;
       }
       .xx-turn-bar:not(:disabled):hover {
         background: var(--xx-grad-soft);
         border-color: var(--xx-border-strong);
-        box-shadow: 0 0 0 1px rgba(155, 114, 203, 0.18), 0 4px 18px -6px rgba(155, 114, 203, 0.42);
+        box-shadow: 0 0 0 1px rgba(var(--xx-c2-rgb), 0.18), 0 4px 18px -6px rgba(var(--xx-c2-rgb), 0.42);
       }
       .xx-turn-bar:not(:disabled):hover::after { animation: xx-sheen 1.15s cubic-bezier(0.22, 1, 0.36, 1); }
       .xx-turn-bar:not(:disabled):active { transform: scale(0.988); }
       .xx-wrap[data-turn-open="true"] .xx-turn-bar {
         background: var(--xx-grad-soft);
-        border-color: rgba(155, 114, 203, 0.34);
+        border-color: rgba(var(--xx-c2-rgb), 0.34);
       }
       .xx-wrap[data-running="true"] .xx-turn-bar {
-        border-color: rgba(232, 121, 168, 0.48);
-        box-shadow: 0 0 0 1px rgba(155, 114, 203, 0.22), 0 4px 20px -5px rgba(155, 114, 203, 0.48), 0 0 16px -6px rgba(77, 163, 255, 0.38);
+        border-color: rgba(var(--xx-c3-rgb), 0.48);
+        box-shadow: 0 0 0 1px rgba(var(--xx-c2-rgb), 0.22), 0 4px 20px -5px rgba(var(--xx-c2-rgb), 0.48), 0 0 16px -6px rgba(var(--xx-c1-rgb), 0.38);
       }
       .xx-wrap[data-running="true"] .xx-turn-bar::after { animation: xx-sheen 2.4s ease-in-out infinite; }
       @keyframes xx-sheen {
@@ -307,7 +334,7 @@ function getClientBundle(owner) {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        filter: drop-shadow(0 0 5px rgba(155, 114, 203, 0.55));
+        filter: drop-shadow(0 0 5px rgba(var(--xx-c2-rgb), 0.55));
       }
       .xx-turn-star svg { display: none; }
       .xx-turn-star::before {
@@ -322,7 +349,7 @@ function getClientBundle(owner) {
         mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M12 1.5L14.6 9.4L22.5 12L14.6 14.6L12 22.5L9.4 14.6L1.5 12L9.4 9.4Z'/%3E%3C/svg%3E") center/contain no-repeat;
       }
       .xx-wrap[data-running="true"] .xx-turn-star {
-        filter: drop-shadow(0 0 8px rgba(232, 121, 168, 0.78));
+        filter: drop-shadow(0 0 8px rgba(var(--xx-c3-rgb), 0.78));
         animation: xx-star-pulse 1.6s ease-in-out infinite;
       }
       .xx-wrap[data-running="true"] .xx-turn-star::before { animation: xx-aurora-shift 2.2s linear infinite; }
@@ -340,13 +367,7 @@ function getClientBundle(owner) {
         font-variant-numeric: tabular-nums;
       }
       .xx-wrap:not([data-running="true"]) .xx-turn-label {
-        background: linear-gradient(90deg, var(--xx-fg) 0%, #c8dcff 58%, #e4c6ff 100%);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-      }
-      .xx-wrap[data-theme="light"]:not([data-running="true"]) .xx-turn-label {
-        background: linear-gradient(90deg, #1e293b 0%, #4285f4 62%, #8b5cf6 100%);
+        background: linear-gradient(90deg, var(--xx-fg) 0%, rgb(var(--xx-c1-rgb)) 62%, rgb(var(--xx-c2-rgb)) 100%);
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
@@ -408,7 +429,7 @@ function getClientBundle(owner) {
         left: 16px;
         width: 1.5px;
         border-radius: 999px;
-        background: linear-gradient(180deg, rgba(77, 163, 255, 0.5) 0%, rgba(155, 114, 203, 0.4) 52%, rgba(232, 121, 168, 0.28) 100%);
+        background: linear-gradient(180deg, rgba(var(--xx-c1-rgb), 0.52) 0%, rgba(var(--xx-c2-rgb), 0.42) 52%, rgba(var(--xx-c3-rgb), 0.28) 100%);
         -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 5%, #000 72%, rgba(0, 0, 0, 0.36) 88%, transparent 100%);
         mask-image: linear-gradient(180deg, transparent 0%, #000 5%, #000 72%, rgba(0, 0, 0, 0.36) 88%, transparent 100%);
       }
@@ -425,18 +446,18 @@ function getClientBundle(owner) {
           180deg,
           transparent 0%,
           transparent 32%,
-          rgba(77, 163, 255, 0.2) 40%,
-          rgba(116, 138, 232, 0.62) 50%,
-          rgba(155, 114, 203, 0.92) 58%,
-          rgba(232, 121, 168, 1) 62%,
-          rgba(255, 228, 245, 0.96) 64.5%,
-          rgba(232, 121, 168, 0.32) 66.5%,
+          rgba(var(--xx-c1-rgb), 0.22) 40%,
+          rgba(var(--xx-c1-rgb), 0.65) 50%,
+          rgba(var(--xx-c2-rgb), 0.92) 58%,
+          rgba(var(--xx-c3-rgb), 1) 62%,
+          rgba(255, 255, 255, 0.92) 64.5%,
+          rgba(var(--xx-c3-rgb), 0.32) 66.5%,
           transparent 68%,
           transparent 100%
         );
         background-size: 100% 340%;
         background-repeat: no-repeat;
-        filter: drop-shadow(0 0 3px rgba(155, 114, 203, 0.62));
+        filter: drop-shadow(0 0 3px rgba(var(--xx-c2-rgb), 0.62));
         -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 5%, #000 72%, rgba(0, 0, 0, 0.36) 88%, transparent 100%);
         mask-image: linear-gradient(180deg, transparent 0%, #000 5%, #000 72%, rgba(0, 0, 0, 0.36) 88%, transparent 100%);
         pointer-events: none;
@@ -604,23 +625,19 @@ function getClientBundle(owner) {
       }
       .xx-row[data-open="true"] {
         background:
-          radial-gradient(115% 75% at 0% 0%, rgba(77, 163, 255, 0.085) 0%, rgba(155, 114, 203, 0.055) 38%, transparent 72%),
-          linear-gradient(180deg, rgba(20, 25, 42, 0.72), rgba(12, 16, 29, 0.84));
-        border-color: rgba(155, 114, 203, 0.18);
+          radial-gradient(115% 75% at 0% 0%, rgba(var(--xx-c1-rgb), 0.085) 0%, rgba(var(--xx-c2-rgb), 0.055) 38%, transparent 72%),
+          var(--xx-card);
+        border-color: rgba(var(--xx-c2-rgb), 0.2);
         box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.065),
-          0 10px 26px -16px rgba(2, 6, 22, 0.78);
+          inset 0 1px 0 color-mix(in srgb, var(--xx-fg) 8%, transparent),
+          0 10px 26px -16px rgba(0, 0, 0, 0.65);
         margin: 2px 0;
         overflow: clip;
       }
       .xx-wrap[data-theme="light"] .xx-row[data-open="true"] {
-        background:
-          radial-gradient(115% 75% at 0% 0%, rgba(66, 133, 244, 0.08) 0%, rgba(139, 92, 246, 0.045) 40%, transparent 72%),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(246, 249, 255, 0.96));
-        border-color: rgba(139, 92, 246, 0.17);
         box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.9),
-          0 8px 22px -14px rgba(66, 133, 244, 0.24);
+          inset 0 1px 0 rgba(255, 255, 255, 0.85),
+          0 8px 22px -14px rgba(15, 23, 42, 0.16);
       }
       .xx-row[data-open="true"]::before {
         content: "";
@@ -629,17 +646,17 @@ function getClientBundle(owner) {
         left: 12px;
         right: 12px;
         height: 1px;
-        background: linear-gradient(90deg, transparent, rgba(77, 163, 255, 0.34) 26%, rgba(155, 114, 203, 0.42) 55%, rgba(232, 121, 168, 0.28) 80%, transparent);
+        background: linear-gradient(90deg, transparent, rgba(var(--xx-c1-rgb), 0.34) 26%, rgba(var(--xx-c2-rgb), 0.42) 55%, rgba(var(--xx-c3-rgb), 0.28) 80%, transparent);
         opacity: 0.65;
         pointer-events: none;
         z-index: 6;
       }
       .xx-row[data-open="true"][data-running="true"] {
-        border-color: rgba(155, 114, 203, 0.34);
+        border-color: rgba(var(--xx-c2-rgb), 0.36);
         box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.08),
-          0 0 0 1px rgba(155, 114, 203, 0.12),
-          0 12px 28px -14px rgba(155, 114, 203, 0.36);
+          inset 0 1px 0 color-mix(in srgb, var(--xx-fg) 10%, transparent),
+          0 0 0 1px rgba(var(--xx-c2-rgb), 0.14),
+          0 12px 28px -14px rgba(var(--xx-c2-rgb), 0.36);
       }
       .xx-row[data-open="true"][data-running="true"]::before {
         height: 1.5px;
@@ -679,13 +696,10 @@ function getClientBundle(owner) {
         z-index: 5;
         min-height: 33px;
         padding: 6px 13px;
-        background: rgba(16, 21, 36, 0.78);
+        background: var(--xx-host-bg-translucent);
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
         border-radius: 0;
-      }
-      .xx-wrap[data-theme="light"] .xx-think-row[data-open="true"] > .xx-row-head {
-        background: rgba(248, 250, 255, 0.84);
       }
       .xx-think-row[data-open="true"] > .xx-row-head::after {
         content: "";
@@ -694,14 +708,11 @@ function getClientBundle(owner) {
         right: 14px;
         bottom: 0;
         height: 1px;
-        background: linear-gradient(90deg, transparent, rgba(138, 174, 242, 0.16) 18%, rgba(155, 114, 203, 0.2) 55%, rgba(232, 121, 168, 0.12) 84%, transparent);
+        background: linear-gradient(90deg, transparent, rgba(var(--xx-c1-rgb), 0.18) 18%, rgba(var(--xx-c2-rgb), 0.22) 55%, rgba(var(--xx-c3-rgb), 0.14) 84%, transparent);
         pointer-events: none;
       }
       .xx-think-row[data-open="true"] > .xx-row-head:hover {
-        background: rgba(24, 31, 52, 0.86);
-      }
-      .xx-wrap[data-theme="light"] .xx-think-row[data-open="true"] > .xx-row-head:hover {
-        background: rgba(240, 245, 255, 0.92);
+        background: color-mix(in srgb, var(--xx-bg-sticky) 90%, var(--xx-fg) 10%);
       }
 
       .xx-row-head:hover .xx-act-ico,
@@ -723,13 +734,7 @@ function getClientBundle(owner) {
         white-space: nowrap;
       }
       .xx-think-row[data-open="true"] .xx-row-title {
-        background: linear-gradient(90deg, var(--xx-fg) 0%, #c8dcff 65%, #e2c7ff 100%);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-      }
-      .xx-wrap[data-theme="light"] .xx-think-row[data-open="true"] .xx-row-title {
-        background: linear-gradient(90deg, #1e293b 0%, #4285f4 65%, #8b5cf6 100%);
+        background: linear-gradient(90deg, var(--xx-fg) 0%, rgb(var(--xx-c1-rgb)) 65%, rgb(var(--xx-c2-rgb)) 100%);
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
@@ -804,15 +809,13 @@ function getClientBundle(owner) {
         width: 100%;
         padding: 0;
         border-left: none;
-        color: rgba(226, 234, 252, 0.88);
+        color: var(--xx-fg);
+        opacity: 0.9;
         font-size: 12.6px;
         line-height: 1.74;
         letter-spacing: 0.01em;
         word-break: break-word;
         user-select: text;
-      }
-      .xx-wrap[data-theme="light"] .xx-think-md {
-        color: rgba(24, 34, 56, 0.88);
       }
       /* 统一 260px 限高视口 + 上下柔和渐隐（短内容自然撑开无滚动条，长内容结束不炸屏，点「展开全文」可解除） */
       .xx-think-row:not([data-full="true"]) .xx-think-md {
@@ -852,28 +855,22 @@ function getClientBundle(owner) {
       .xx-think-md .md-h { margin: 8px 0 4px; font-size: 12.5px; font-weight: 600; color: var(--xx-fg); }
       .xx-think-md .md-h:first-child { margin-top: 0; }
       .xx-think-md hr { border: none; border-top: 1px solid var(--xx-border); margin: 7px 0; }
-      .xx-think-md strong { color: rgba(248, 250, 255, 0.98); font-weight: 620; }
-      .xx-wrap[data-theme="light"] .xx-think-md strong { color: #0f172a; }
+      .xx-think-md strong { color: var(--xx-fg); font-weight: 620; }
       .xx-think-md code {
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-size: 11.3px;
         padding: 1.5px 6px;
         border-radius: 5px;
-        border: 1px solid rgba(138, 174, 242, 0.16);
-        background: rgba(138, 174, 242, 0.1);
-        color: #c8dcff;
-      }
-      .xx-wrap[data-theme="light"] .xx-think-md code {
-        border-color: rgba(66, 133, 244, 0.18);
-        background: rgba(66, 133, 244, 0.08);
-        color: #2563eb;
+        border: 1px solid color-mix(in srgb, var(--xx-fg) 14%, transparent);
+        background: var(--xx-code-bg);
+        color: var(--xx-fg);
       }
       .xx-think-md pre, .xx-detail-pre {
         margin: 6px 0 0;
         padding: 9px 11px;
         border-radius: 9px;
-        border: 1px solid rgba(138, 174, 242, 0.12);
-        background: rgba(7, 10, 20, 0.56);
+        border: 1px solid var(--xx-border);
+        background: var(--xx-code-bg);
         overflow-x: auto;
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-size: 11.4px;
@@ -882,11 +879,6 @@ function getClientBundle(owner) {
         user-select: text;
         white-space: pre-wrap;
         word-break: break-word;
-      }
-      .xx-wrap[data-theme="light"] .xx-think-md pre,
-      .xx-wrap[data-theme="light"] .xx-detail-pre {
-        background: rgba(66, 133, 244, 0.055);
-        border-color: rgba(66, 133, 244, 0.14);
       }
       .xx-think-md ul, .xx-think-md ol { margin: 4px 0 7px; padding-left: 18px; }
       .xx-think-md li { margin-bottom: 2px; }
@@ -1142,18 +1134,13 @@ function getClientBundle(owner) {
         padding: 4px 4px 8px 25px;
       }
       .xx-wrap[data-card-style="minimal"] .xx-think-md {
-        color: rgba(232, 239, 252, 0.9);
+        color: var(--xx-fg);
+        opacity: 0.9;
         line-height: 1.76;
-      }
-      .xx-wrap[data-theme="light"][data-card-style="minimal"] .xx-think-md {
-        color: rgba(24, 34, 56, 0.9);
       }
       .xx-wrap[data-card-style="minimal"] .xx-think-md code {
         border-color: transparent;
-        background: rgba(138, 174, 242, 0.12);
-      }
-      .xx-wrap[data-theme="light"][data-card-style="minimal"] .xx-think-md code {
-        background: rgba(66, 133, 244, 0.09);
+        background: var(--xx-code-bg);
       }
       .xx-wrap[data-card-style="minimal"] .xx-row-foot {
         margin-top: 7px;
@@ -1464,6 +1451,8 @@ function getClientBundle(owner) {
     function renderTurnIntoHost(host, turn, isLastTurn, settings, appearance) {
       const theme = typeof appearance === 'string' ? appearance : (appearance?.theme || 'dark');
       const hostBg = typeof appearance === 'object' ? appearance?.hostBg : null;
+      const hostFg = typeof appearance === 'object' ? appearance?.hostFg : null;
+      const hostAccent = typeof appearance === 'object' ? appearance?.hostAccent : null;
       let shadow = host.shadowRoot;
       if (!shadow) {
         shadow = host.attachShadow({ mode: 'open' });
@@ -1678,12 +1667,32 @@ function getClientBundle(owner) {
 
       const turnActive = Boolean(turn.isRunning || isTurnTranslating(turn, settings));
       wrap.dataset.theme = theme;
+      const pal = resolveColorThemePalette(settings.colorTheme || 'gemini', theme === 'light', hostAccent);
+      wrap.style.setProperty('--xx-c1-rgb', pal.c1);
+      wrap.style.setProperty('--xx-c2-rgb', pal.c2);
+      wrap.style.setProperty('--xx-c3-rgb', pal.c3);
+      wrap.style.setProperty('--xx-think', pal.think);
       if (hostBg) {
+        const bgRgb = 'rgb(' + hostBg[0] + ',' + hostBg[1] + ',' + hostBg[2] + ')';
+        wrap.style.setProperty('--xx-host-bg', bgRgb);
+        wrap.style.setProperty('--xx-bg-sticky', bgRgb);
         wrap.style.setProperty('--xx-host-bg-translucent', 'rgba(' + hostBg[0] + ',' + hostBg[1] + ',' + hostBg[2] + ',0.9)');
-        wrap.style.setProperty('--xx-bg-sticky', 'rgb(' + hostBg[0] + ',' + hostBg[1] + ',' + hostBg[2] + ')');
       } else {
-        wrap.style.removeProperty('--xx-host-bg-translucent');
+        wrap.style.removeProperty('--xx-host-bg');
         wrap.style.removeProperty('--xx-bg-sticky');
+        wrap.style.removeProperty('--xx-host-bg-translucent');
+      }
+      // 若宿主前景色与明暗主题方向一致且对比度充足，直接沿用宿主色系，确保暖白/复古/墨绿主题下完全融为一体
+      const fgLum = hostFg ? rgbLuminance(hostFg) : -1;
+      const fgUsable = hostFg && ((theme === 'dark' && fgLum >= 0.62) || (theme === 'light' && fgLum <= 0.42));
+      if (fgUsable) {
+        wrap.style.setProperty('--xx-fg', 'rgba(' + hostFg[0] + ',' + hostFg[1] + ',' + hostFg[2] + ',0.95)');
+        wrap.style.setProperty('--xx-muted', 'rgba(' + hostFg[0] + ',' + hostFg[1] + ',' + hostFg[2] + ',0.78)');
+        wrap.style.setProperty('--xx-dim', 'rgba(' + hostFg[0] + ',' + hostFg[1] + ',' + hostFg[2] + ',0.6)');
+      } else {
+        wrap.style.removeProperty('--xx-fg');
+        wrap.style.removeProperty('--xx-muted');
+        wrap.style.removeProperty('--xx-dim');
       }
       wrap.dataset.running = String(turnActive);
       wrap.dataset.error = String(Boolean(turn.hasError));
@@ -2322,8 +2331,30 @@ function getClientBundle(owner) {
     }
     document.addEventListener('visibilitychange', onVisibilityChange);
 
+    let hostThemeTimer = null;
+    let hostThemeObserver = null;
+    const scheduleHostThemeSync = () => {
+      if (!lastData || !lastSettings?.inlineEnabled) return;
+      clearTimeout(hostThemeTimer);
+      hostThemeTimer = setTimeout(() => {
+        hostThemeTimer = null;
+        if (document.visibilityState === 'visible') renderAll();
+      }, 120);
+    };
+    try {
+      hostThemeObserver = new MutationObserver(scheduleHostThemeSync);
+      hostThemeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
+      if (document.body) {
+        hostThemeObserver.observe(document.body, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
+      }
+    } catch {}
+
     function dispose() {
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      clearTimeout(hostThemeTimer);
+      hostThemeTimer = null;
+      try { hostThemeObserver?.disconnect?.(); } catch {}
+      hostThemeObserver = null;
       if (timerHandle) clearInterval(timerHandle);
       if (streamRaf) cancelAnimationFrame(streamRaf);
       clearLiveTitleTimers();
