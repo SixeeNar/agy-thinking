@@ -28,10 +28,11 @@ function computeSlimSignature(slimData, publicSettings) {
         continue;
       }
       const len = item.kind === 'think' ? (item.thinking?.length || 0) : (item.detail?.length || 0);
+      const stepHint = item.kind === 'think' ? '' : sampleTextSig(item.liveDetail || item.summary);
       const tSig = sampleTextSig(item.translatedThinking);
       const fSig = sampleTextSig(item.fullTranslatedThinking);
       const nSig = sampleTextSig(item.narrativeSummary);
-      sig += `${item.id}/${item.status}/${len}/${tSig}/${item.translateStatus || ''}/${item.translatePhase || ''}/${item.translateModel || ''}/${item.translateError || ''}/${fSig}/${item.fullTranslateStatus || ''}/${item.fullTranslateModel || ''}/${item.fullTranslateError || ''}/${nSig}/${item.narrativeStatus || ''}/${item.narrativeModel || ''}/${item.narrativeError || ''}/${item.thinkingTokens || 0}/${item.durationSec ?? ''};`;
+      sig += `${item.id}/${item.status}/${len}/${stepHint}/${tSig}/${item.translateStatus || ''}/${item.translatePhase || ''}/${item.translateModel || ''}/${item.translateError || ''}/${fSig}/${item.fullTranslateStatus || ''}/${item.fullTranslateModel || ''}/${item.fullTranslateError || ''}/${nSig}/${item.narrativeStatus || ''}/${item.narrativeModel || ''}/${item.narrativeError || ''}/${item.thinkingTokens || 0}/${item.durationSec ?? ''};`;
     }
   }
   return sig;
@@ -1173,6 +1174,7 @@ function getClientBundle(owner) {
           if (bar.disabled) return;
           const key = host.dataset.turnKey;
           const next = wrap.dataset.turnOpen !== 'true';
+          clearFoldTimer(key);
           openState.set(key, next);
           userPinnedSet.add(key);
           wrap.dataset.turnOpen = String(next);

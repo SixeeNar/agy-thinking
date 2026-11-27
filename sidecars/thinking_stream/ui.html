@@ -3549,6 +3549,7 @@
           if (btn.disabled) return;
           const el = btn.closest('.turn-block');
           const next = el.dataset.turnOpen !== 'true';
+          clearFoldTimer(key);
           openMap.set(key, next);
           userPinnedMap.set(key, true);
           el.dataset.turnOpen = String(next);
@@ -3681,6 +3682,7 @@
           const key = `${currentState.activeId}:turn:${turn.turnIndex}`;
           const st = resolveTurnOpenState(key, turn, isLast, settings);
           if (!st.canCollapse) continue;
+          clearFoldTimer(key);
           openMap.set(key, anyClosed);
           userPinnedMap.set(key, true);
           if (!anyClosed) resetTurnInnerDisclosures(key);

@@ -283,17 +283,25 @@ async function fetchSnapshot(requestedId = 'auto', hostConvId = DEFAULT_CONV_ID,
 
   const wasActive = activeConvMap.has(activeId);
   const trajectoryData = await fetchTrajectoryCached(activeId, { force: Boolean(options.force) });
-  let payload = buildTurnsPayload(conversations, activeId, trajectoryData, settings);
+  const trajHasActive = trajectoryCache.get(activeId)?.isRunning === true;
+  const cachedMeta = conversations.find((c) => c.id === activeId);
+  const cachedSaysRunning = cachedMeta?.status === 'CASCADE_RUN_STATUS_RUNNING';
 
-  // 内嵌模式按 UUID 跳过了会话列表时，若对话疑似刚从运行态结束，强制向 LS 复核一次整体状态，
-  // 防止工具与下一次思考之间的衔接空窗误判为已完成并触发提前收起
-  if (!needList && wasActive && !payload.isGenerating) {
-    try {
-      conversations = await listConversationsCached({ force: true });
-      payload = buildTurnsPayload(conversations, activeId, trajectoryData, settings);
-    } catch {}
+  // 内嵌模式跳过会话列表时，只要轨迹本身看不到运行中步骤，但之前活跃或旧缓存仍标着 RUNNING，
+  // 就按最小 650ms 节流向 LS 复核最新状态：既防止空窗期提前收起，也彻底杜绝过期 RUNNING 缓存自举死锁
+  let effectiveConversations = conversations;
+  if (!needList && !trajHasActive && (wasActive || cachedSaysRunning)) {
+    const cacheAge = Date.now() - conversationsCache.fetchedAt;
+    if (cacheAge >= 650) {
+      try {
+        effectiveConversations = await listConversationsCached({ force: true });
+      } catch {
+        if (cacheAge > 8000) effectiveConversations = [];
+      }
+    }
   }
 
+  const payload = buildTurnsPayload(effectiveConversations, activeId, trajectoryData, settings);
   const liveRunning = payload.isGenerating || payload.activeStatus === 'CASCADE_RUN_STATUS_RUNNING';
   updateConvActivity(activeId, liveRunning);
   translator.enrichTurns(payload.turns, { triggerNew: options.triggerNew !== false });
@@ -332,10 +340,11 @@ function computeSignature(payload, cdpState, publicSettings) {
     hash += `${turn.turnIndex}:${turn.items.length}:${turn.isRunning}:${turn.hasError ? 1 : 0}:${turn.durationSec ?? ''}:`;
     for (const item of turn.items) {
       const len = item.kind === 'think' ? (item.thinking?.length || 0) : (item.detail?.length || 0);
+      const stepHint = item.kind === 'think' ? '' : sampleTextSig(item.liveDetail || item.summary);
       const tSig = sampleTextSig(item.translatedThinking);
       const fSig = sampleTextSig(item.fullTranslatedThinking);
       const nSig = sampleTextSig(item.narrativeSummary);
-      hash += `${item.id}/${item.status}/${len}/${tSig}/${item.translateStatus || ''}/${item.translatePhase || ''}/${item.translateModel || ''}/${item.translateError || ''}/${fSig}/${item.fullTranslateStatus || ''}/${item.fullTranslateModel || ''}/${item.fullTranslateError || ''}/${nSig}/${item.narrativeStatus || ''}/${item.narrativeModel || ''}/${item.narrativeError || ''}/${item.thinkingTokens || 0}/${item.durationSec ?? ''};`;
+      hash += `${item.id}/${item.status}/${len}/${stepHint}/${tSig}/${item.translateStatus || ''}/${item.translatePhase || ''}/${item.translateModel || ''}/${item.translateError || ''}/${fSig}/${item.fullTranslateStatus || ''}/${item.fullTranslateModel || ''}/${item.fullTranslateError || ''}/${nSig}/${item.narrativeStatus || ''}/${item.narrativeModel || ''}/${item.narrativeError || ''}/${item.thinkingTokens || 0}/${item.durationSec ?? ''};`;
     }
   }
   return hash;
