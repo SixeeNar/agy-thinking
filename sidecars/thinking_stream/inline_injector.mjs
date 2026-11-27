@@ -362,45 +362,50 @@ function getClientBundle(owner) {
         content: "";
         position: absolute;
         top: 0;
-        bottom: 8px;
+        bottom: 6px;
         left: 16px;
         width: 1.5px;
         border-radius: 999px;
-        background: linear-gradient(180deg, rgba(77, 163, 255, 0.46) 0%, rgba(155, 114, 203, 0.36) 55%, rgba(232, 121, 168, 0.2) 88%, transparent 100%);
+        background: linear-gradient(180deg, rgba(77, 163, 255, 0.5) 0%, rgba(155, 114, 203, 0.4) 52%, rgba(232, 121, 168, 0.28) 100%);
+        -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 5%, #000 72%, rgba(0, 0, 0, 0.36) 88%, transparent 100%);
+        mask-image: linear-gradient(180deg, transparent 0%, #000 5%, #000 72%, rgba(0, 0, 0, 0.36) 88%, transparent 100%);
       }
       .xx-groups::after {
         content: "";
         display: none;
         position: absolute;
         top: 0;
-        bottom: 8px;
+        bottom: 6px;
         left: 16px;
         width: 1.5px;
         border-radius: 999px;
         background: linear-gradient(
           180deg,
           transparent 0%,
-          transparent 36%,
-          rgba(77, 163, 255, 0.95) 45%,
-          rgba(155, 114, 203, 1) 50%,
-          rgba(232, 121, 168, 0.95) 55%,
-          transparent 64%,
+          transparent 32%,
+          rgba(77, 163, 255, 0.2) 40%,
+          rgba(116, 138, 232, 0.62) 50%,
+          rgba(155, 114, 203, 0.92) 58%,
+          rgba(232, 121, 168, 1) 62%,
+          rgba(255, 228, 245, 0.96) 64.5%,
+          rgba(232, 121, 168, 0.32) 66.5%,
+          transparent 68%,
           transparent 100%
         );
-        background-size: 100% 260%;
+        background-size: 100% 340%;
         background-repeat: no-repeat;
-        filter: drop-shadow(0 0 2.5px rgba(155, 114, 203, 0.58));
+        filter: drop-shadow(0 0 3px rgba(155, 114, 203, 0.62));
+        -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 5%, #000 72%, rgba(0, 0, 0, 0.36) 88%, transparent 100%);
+        mask-image: linear-gradient(180deg, transparent 0%, #000 5%, #000 72%, rgba(0, 0, 0, 0.36) 88%, transparent 100%);
         pointer-events: none;
       }
       .xx-wrap[data-running="true"] .xx-groups::after {
         display: block;
-        animation: xx-rail-beam 1.95s linear infinite;
+        animation: xx-rail-beam 2.2s cubic-bezier(0.35, 0.05, 0.45, 0.95) infinite;
       }
       @keyframes xx-rail-beam {
-        0% { background-position: 0 100%; opacity: 0.25; }
-        10% { opacity: 1; }
-        90% { opacity: 1; }
-        100% { background-position: 0 0%; opacity: 0.25; }
+        0% { background-position: 0 100%; }
+        100% { background-position: 0 0%; }
       }
 
       /* ─── Layer 2: 二级过程组（DSH 分组头 + 图标↔箭头淡切 + 400px 限高渐隐） ─── */
