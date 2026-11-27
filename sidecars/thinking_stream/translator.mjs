@@ -471,8 +471,8 @@ export function evaluateModelForTranslation(modelId, baseUrl = '', rawItem = nul
           value = Math.min(value, 72);
         }
         overall = Math.min(98, Math.round(natural * 0.62 + value * 0.38));
-      } else if (costTone === 'free') {
-        costTone = 'cheap';
+      } else if (costTone === 'free' || /¥/.test(costTag)) {
+        costTone = costTone === 'slow' ? 'slow' : 'cheap';
         costTag = '收费 · 低价';
       }
     }
@@ -543,6 +543,12 @@ export function evaluateModelForTranslation(modelId, baseUrl = '', rawItem = nul
       costTag = '官方免费';
       costTone = 'free';
       reason = '腾讯混元官方免费轻量档，中文顺畅、自动低并发防限流';
+    } else if (/^hunyuan-turbos/i.test(id)) {
+      isFree = false;
+      priceIn = 0.8;
+      priceOut = 2.0;
+      costTag = '收费 · ¥0.8/¥2';
+      costTone = 'cheap';
     } else if (/^hunyuan-turbo/i.test(id)) {
       isFree = false;
       priceIn = 0.8;
