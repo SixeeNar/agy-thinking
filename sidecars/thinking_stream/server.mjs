@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
+import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, watch } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -249,6 +250,44 @@ function pickActiveConversation(conversations, requestedId, hostConvId) {
   return conversations[0]?.id || '';
 }
 
+const ALLOWED_EXTERNAL_HOSTS = new Set([
+  'cloud.siliconflow.cn',
+  'cloud.siliconflow.com',
+  'platform.deepseek.com',
+  'open.bigmodel.cn',
+  'bigmodel.cn',
+  'bailian.console.aliyun.com',
+  'openrouter.ai',
+  'ollama.com',
+]);
+
+function openOfficialExternalUrl(rawUrl) {
+  let parsed;
+  try {
+    parsed = new URL(String(rawUrl || '').trim());
+  } catch {
+    throw new Error('无效的网址格式');
+  }
+  if (parsed.protocol !== 'https:' || !ALLOWED_EXTERNAL_HOSTS.has(parsed.hostname.toLowerCase())) {
+    throw new Error('仅允许打开官方白名单服务商控制台页面');
+  }
+  const safeUrl = parsed.toString();
+  let child;
+  if (process.platform === 'win32') {
+    child = spawn('rundll32.exe', ['url.dll,FileProtocolHandler', safeUrl], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+  } else if (process.platform === 'darwin') {
+    child = spawn('open', [safeUrl], { detached: true, stdio: 'ignore' });
+  } else {
+    child = spawn('xdg-open', [safeUrl], { detached: true, stdio: 'ignore' });
+  }
+  child.unref();
+  return safeUrl;
+}
+
 function attachRuntimeMeta(payload) {
   const tStats = translator.getStats();
   payload.runtime = {
@@ -257,6 +296,7 @@ function attachRuntimeMeta(payload) {
     cacheEpoch: tStats.cacheEpoch,
     activeModel: tStats.activeModel,
     inFlightTranslations: tStats.inFlightCount,
+    usage: tStats.usage,
     lsListCalls: runtimeStats.lsListCalls,
     lsTrajCalls: runtimeStats.lsTrajCalls,
   };
@@ -335,7 +375,9 @@ function computeSignature(payload, cdpState, publicSettings) {
     .slice(0, 30)
     .map((c) => `${c.id}:${c.summary}:${c.status}`)
     .join(',');
-  let hash = `${payload.activeId}|${payload.activeStatus}|${cdpState}|${payload.runtime?.pollMode || ''}|${payload.runtime?.cacheCount || 0}|${payload.runtime?.cacheEpoch || 0}|${payload.runtime?.activeModel || ''}|${convSig}|${JSON.stringify(publicSettings)}|`;
+  const uTot = payload.runtime?.usage?.total;
+  const usageSig = uTot ? `${uTot.requests}:${uTot.cacheHits}:${uTot.inputTokens}:${uTot.outputTokens}:${uTot.updatedAt}` : '0';
+  let hash = `${payload.activeId}|${payload.activeStatus}|${cdpState}|${payload.runtime?.pollMode || ''}|${payload.runtime?.cacheCount || 0}|${payload.runtime?.cacheEpoch || 0}|${payload.runtime?.activeModel || ''}|${usageSig}|${convSig}|${JSON.stringify(publicSettings)}|`;
   for (const turn of payload.turns) {
     hash += `${turn.turnIndex}:${turn.items.length}:${turn.isRunning}:${turn.hasError ? 1 : 0}:${turn.durationSec ?? ''}:`;
     for (const item of turn.items) {
@@ -717,6 +759,55 @@ function startServer() {
         inlineInjector?.pushCached?.(true);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ ok: true, cacheCount: 0 }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/translate/usage') {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: true, usage: translator.getUsageSummary() }));
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/translate/usage/reset') {
+      try {
+        translator.resetUsageStats();
+        broadcastCachedToClients(false);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: true, usage: translator.getUsageSummary() }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/translate/balance') {
+      try {
+        const body = await readJsonBody(req);
+        const override = validateSettings(body);
+        if (typeof body?.translateBaseUrl === 'string' && body.translateBaseUrl.trim() && !override.translateBaseUrl) {
+          throw new Error('API Base URL 格式无效，请以 http:// 或 https:// 开头');
+        }
+        const result = await translator.fetchAccountBalance(override);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/open-url') {
+      try {
+        const body = await readJsonBody(req);
+        const opened = openOfficialExternalUrl(body?.url);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: true, url: opened }));
       } catch (err) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ ok: false, error: err.message }));

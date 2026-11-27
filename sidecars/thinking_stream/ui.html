@@ -1056,11 +1056,91 @@
       font-weight: 560;
       border: 1px solid transparent;
     }
-    .cost-tag.free { color: var(--ok-clr); background: rgba(52, 211, 153, 0.11); border-color: rgba(52, 211, 153, 0.24); }
-    .cost-tag.cheap { color: rgb(var(--c1-rgb)); background: rgba(var(--c1-rgb), 0.11); border-color: rgba(var(--c1-rgb), 0.24); }
-    .cost-tag.mid { color: var(--tool-clr); background: rgba(var(--c3-rgb), 0.11); border-color: rgba(var(--c3-rgb), 0.24); }
-    .cost-tag.slow { color: var(--err-clr); background: rgba(251, 113, 133, 0.1); border-color: rgba(251, 113, 133, 0.24); }
+    .cost-tag.free { color: var(--ok-clr); background: rgba(52, 211, 153, 0.13); border-color: rgba(52, 211, 153, 0.3); }
+    .cost-tag.cheap { color: rgb(var(--c1-rgb)); background: rgba(var(--c1-rgb), 0.12); border-color: rgba(var(--c1-rgb), 0.28); }
+    .cost-tag.mid { color: #f59e0b; background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.28); }
+    .cost-tag.slow { color: var(--err-clr); background: rgba(251, 113, 133, 0.11); border-color: rgba(251, 113, 133, 0.26); }
     .cost-tag.neutral { color: var(--fg-muted); background: var(--surface-2); border-color: var(--hairline); }
+
+    .preset-row .pill-btn.is-current {
+      border-color: rgba(var(--c2-rgb), 0.52);
+      background: var(--gem-grad-soft);
+      color: var(--fg-base);
+      font-weight: 580;
+    }
+
+    /* ─── 花费与余额监控栏（紧凑高可读，折叠/展开均可见） ─── */
+    .cost-bar {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px 12px;
+      border-top: 1px solid var(--hairline);
+      background: linear-gradient(135deg, rgba(var(--c1-rgb), 0.045), rgba(var(--c2-rgb), 0.025) 60%, transparent);
+    }
+    .cost-bar-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .cost-metrics {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 10.7px;
+      color: var(--fg-muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .cost-metric {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .cost-k { color: var(--fg-dim); }
+    .cost-v { color: var(--fg-base); font-weight: 580; font-family: var(--font-mono); }
+    .cost-v.free { color: var(--ok-clr); }
+    .cost-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .cost-mini-btn {
+      padding: 2px 7px;
+      border-radius: 5px;
+      border: 1px solid var(--hairline);
+      background: var(--surface-2);
+      color: var(--fg-muted);
+      font: inherit;
+      font-size: 10.2px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+    }
+    .cost-mini-btn:hover:not(:disabled) {
+      background: var(--surface-3);
+      border-color: rgba(var(--c2-rgb), 0.36);
+      color: var(--fg-base);
+    }
+    .cost-mini-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .cost-mini-btn.accent {
+      border-color: rgba(var(--c2-rgb), 0.34);
+      background: rgba(var(--c2-rgb), 0.1);
+      color: var(--fg-base);
+    }
+    .cost-balance {
+      font-size: 10.6px;
+      color: var(--fg-muted);
+      line-height: 1.42;
+      font-variant-numeric: tabular-nums;
+    }
+    .cost-balance:empty { display: none; }
+    .cost-balance.ok { color: var(--ok-clr); }
+    .cost-balance.err { color: var(--err-clr); }
 
     .model-reason {
       margin-top: 3px;
@@ -2169,9 +2249,10 @@
               <div class="field-group">
                 <div class="field-label-row">
                   <label class="field-label" for="optApiKey">API Key</label>
-                  <div style="display:inline-flex;gap:5px;">
-                    <button type="button" id="clearKeyBtn" class="pill-btn danger" style="padding:2px 7px;font-size:10.4px;display:none;">清空 Key</button>
-                    <button type="button" id="detectModelsBtn" class="pill-btn recommend" style="padding:2px 8px;font-size:10.5px;">识别模型</button>
+                  <div style="display:inline-flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;">
+                    <button type="button" id="openKeyConsoleBtn" class="pill-btn recommend" style="padding:2px 8px;font-size:10.4px;" title="打开当前服务商官网创建 API Key">获取 Key ↗</button>
+                    <button type="button" id="clearKeyBtn" class="pill-btn danger" style="padding:2px 7px;font-size:10.4px;display:none;">清空</button>
+                    <button type="button" id="detectModelsBtn" class="pill-btn" style="padding:2px 8px;font-size:10.4px;">识别模型</button>
                   </div>
                 </div>
                 <div class="input-wrap">
@@ -2187,7 +2268,8 @@
                     模型列表
                     <span id="modelListMeta" class="model-picker-meta">精选参考</span>
                   </span>
-                  <div style="display:inline-flex;gap:5px;">
+                  <div style="display:inline-flex;gap:4px;flex-wrap:wrap;">
+                    <button type="button" id="filterFreeBtn" class="pill-btn" style="padding:2px 7px;font-size:10.4px;" title="只显示经核实的免费模型">只看免费</button>
                     <button type="button" id="filterRecBtn" class="pill-btn active" style="padding:2px 7px;font-size:10.4px;">只看高分</button>
                     <button type="button" id="pickTop3Btn" class="pill-btn" style="padding:2px 7px;font-size:10.4px;">选 Top 3</button>
                   </div>
@@ -2233,8 +2315,26 @@
             <div style="display:inline-flex;gap:5px;flex-wrap:wrap;">
               <button type="button" id="quickTestBtn" class="pill-btn recommend" style="padding:3px 9px;font-size:10.6px;">测速</button>
               <button type="button" id="quickRetryBtn" class="pill-btn" style="padding:3px 9px;font-size:10.6px;">重试失败</button>
+              <button type="button" id="quickOpenConsoleBtn" class="pill-btn" style="padding:3px 9px;font-size:10.6px;" title="打开当前服务商官网创建 API Key">官网 Key ↗</button>
             </div>
             <span style="font-size:10.4px;color:var(--fg-dim);">展开切换 Key 与模型</span>
+          </div>
+
+          <!-- 花费与余额监控栏 -->
+          <div class="cost-bar" id="costBar">
+            <div class="cost-bar-top">
+              <div class="cost-metrics">
+                <span class="cost-metric" title="本次运行累计消耗 Token 与预估翻译费用"><span class="cost-k">本次</span><span id="usageSessionVal" class="cost-v free">¥0.00</span></span>
+                <span class="cost-metric" title="本机持久化累计 Token 与预估费用"><span class="cost-k">累计</span><span id="usageTotalVal" class="cost-v free">¥0.00 · 0 tok</span></span>
+                <span class="cost-metric" title="命中本地译文缓存省下的 API 请求次数"><span class="cost-k">缓存省</span><span id="usageCacheSaved" class="cost-v">0 次</span></span>
+              </div>
+              <div class="cost-actions">
+                <button type="button" id="checkBalanceBtn" class="cost-mini-btn accent" title="查询当前服务商官方账户剩余额度">查余额</button>
+                <button type="button" id="openBillingBtn" class="cost-mini-btn" title="打开当前服务商官方账单/控制台">账单 ↗</button>
+                <button type="button" id="resetUsageBtn" class="cost-mini-btn" title="清零本地统计记录">清零</button>
+              </div>
+            </div>
+            <div id="balanceReadout" class="cost-balance"></div>
           </div>
           <div id="testStatus" class="test-status"></div>
         </div>
@@ -2346,12 +2446,15 @@
       const optBaseUrl = document.getElementById('optBaseUrl');
       const optApiKey = document.getElementById('optApiKey');
       const toggleKeyEye = document.getElementById('toggleKeyEye');
+      const openKeyConsoleBtn = document.getElementById('openKeyConsoleBtn');
+      const quickOpenConsoleBtn = document.getElementById('quickOpenConsoleBtn');
       const clearKeyBtn = document.getElementById('clearKeyBtn');
       const detectModelsBtn = document.getElementById('detectModelsBtn');
       const optModels = document.getElementById('optModels');
       const modelListEl = document.getElementById('modelList');
       const modelListMeta = document.getElementById('modelListMeta');
       const modelSearchInput = document.getElementById('modelSearchInput');
+      const filterFreeBtn = document.getElementById('filterFreeBtn');
       const filterRecBtn = document.getElementById('filterRecBtn');
       const pickTop3Btn = document.getElementById('pickTop3Btn');
       const saveTransBtn = document.getElementById('saveTransBtn');
@@ -2359,6 +2462,13 @@
       const retryFailedBtn = document.getElementById('retryFailedBtn');
       const clearCacheBtn = document.getElementById('clearCacheBtn');
       const testStatus = document.getElementById('testStatus');
+      const usageSessionVal = document.getElementById('usageSessionVal');
+      const usageTotalVal = document.getElementById('usageTotalVal');
+      const usageCacheSaved = document.getElementById('usageCacheSaved');
+      const checkBalanceBtn = document.getElementById('checkBalanceBtn');
+      const openBillingBtn = document.getElementById('openBillingBtn');
+      const resetUsageBtn = document.getElementById('resetUsageBtn');
+      const balanceReadout = document.getElementById('balanceReadout');
       const healthPoll = document.getElementById('healthPoll');
       const healthCdp = document.getElementById('healthCdp');
       const healthCache = document.getElementById('healthCache');
@@ -2368,69 +2478,93 @@
       for (const sp of document.querySelectorAll('[data-spark]')) sp.innerHTML = ICONS.star;
       for (const ch of document.querySelectorAll('[data-chev]')) ch.innerHTML = ICONS.chev;
 
-      // ─── 平台预设 & 内置三维评分参考模型库 ───
+      // ─── 平台预设 & 经核实的免费/收费三维评分参考模型库 ───
       const PRESETS = {
         siliconflow: {
+          name: '硅基流动',
           baseUrl: 'https://api.siliconflow.cn/v1',
-          models: 'Qwen/Qwen2.5-7B-Instruct, THUDM/glm-4-9b-chat, tencent/Hunyuan-MT-7B',
-          hint: '已切换硅基流动预设（支持免费主力模型，粘贴 Key 自动识别全量并按三维度评分）。',
+          consoleUrl: 'https://cloud.siliconflow.cn/account/ak',
+          billingUrl: 'https://cloud.siliconflow.cn/account/ak',
+          consoleLabel: '硅基流动 Key ↗',
+          models: 'Qwen/Qwen2.5-7B-Instruct, THUDM/glm-4-9b-chat, Qwen/Qwen3-8B',
+          hint: '已切换硅基流动：非 Pro 的 7B/8B/9B 为平台免费档（有限速）；DeepSeek-V3 与 Pro/ 为收费档（Pro/ 需真实充值余额）。',
           curated: [
-            { id: 'deepseek-ai/DeepSeek-V3', overall: 98, value: 94, natural: 99, costTag: '极低价', costTone: 'cheap', reason: '外译中母语级自然，几乎零机翻味（新户送额度）' },
-            { id: 'Qwen/Qwen2.5-7B-Instruct', overall: 95, value: 99, natural: 93, costTag: '免费', costTone: 'free', reason: '平台常驻免费，中文技术语感自然、代码零误翻' },
-            { id: 'THUDM/glm-4-9b-chat', overall: 95, value: 100, natural: 91, costTag: '免费', costTone: 'free', reason: '平台常驻免费，口语流畅稳定、低延迟' },
-            { id: 'Qwen/Qwen3-8B', overall: 94, value: 98, natural: 93, costTag: '免费 / 轻量', costTone: 'free', reason: '新一代轻量通义，关思考后速度快、译文自然' },
-            { id: 'tencent/Hunyuan-MT-7B', overall: 85, value: 96, natural: 78, costTag: '免费 / 专译', costTone: 'free', reason: '专职翻译极快，但偏书面腔，推荐放备选位' },
+            { id: 'Qwen/Qwen2.5-7B-Instruct', overall: 96, value: 99, natural: 93, isFree: true, costTag: '平台免费', costTone: 'free', reason: '非 Pro 长期免费档，中文技术语感自然、代码零误翻' },
+            { id: 'THUDM/glm-4-9b-chat', overall: 95, value: 99, natural: 91, isFree: true, costTag: '平台免费', costTone: 'free', reason: '非 Pro 长期免费档，口语流畅稳定、低延迟' },
+            { id: 'Qwen/Qwen3-8B', overall: 95, value: 99, natural: 93, isFree: true, costTag: '平台免费', costTone: 'free', reason: '非 Pro 免费档，自动关思考后速度快、译文自然' },
+            { id: 'deepseek-ai/DeepSeek-V3', overall: 95, value: 88, natural: 99, isFree: false, costTag: '收费 · ¥2/¥8', costTone: 'cheap', reason: '外译中母语级自然，可用充值或赠送金，按量计费' },
+            { id: 'tencent/Hunyuan-MT-7B', overall: 87, value: 99, natural: 78, isFree: true, costTag: '平台免费', costTone: 'free', reason: '免费专职翻译极快，但略偏书面腔，适合做兜底备选' },
           ],
         },
         deepseek: {
+          name: 'DeepSeek',
           baseUrl: 'https://api.deepseek.com/v1',
+          consoleUrl: 'https://platform.deepseek.com/api_keys',
+          billingUrl: 'https://platform.deepseek.com/usage',
+          consoleLabel: 'DeepSeek Key ↗',
           models: 'deepseek-chat',
-          hint: '已切换 DeepSeek 官方预设：deepseek-chat (V3) 自然感与综合推荐双料第一。',
+          hint: '已切换 DeepSeek 官方（全系按量收费，无免费档）：支持自动前缀缓存与空闲时段 5 折，译文自然度天花板。',
           curated: [
-            { id: 'deepseek-chat', overall: 98, value: 94, natural: 99, costTag: '极低价·缓存省', costTone: 'cheap', reason: '外译中自然感天花板，最像中国人说话、毫无机翻腔' },
+            { id: 'deepseek-chat', overall: 98, value: 94, natural: 99, isFree: false, costTag: '收费 · 缓存省', costTone: 'cheap', reason: '官方直连母语级自然，支持自动前缀缓存与空闲 5 折' },
           ],
         },
         zhipu: {
+          name: '智谱 GLM',
           baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-          models: 'glm-4.5-flash, glm-4-flash',
-          hint: '已切换智谱 GLM 预设：Flash 系列官方常驻完全免费，性价比拉满。',
+          consoleUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
+          billingUrl: 'https://open.bigmodel.cn/finance-center/resource-package/package-mgmt',
+          consoleLabel: '智谱 Key ↗',
+          models: 'glm-4.7-flash, glm-4.5-flash, glm-4-flash',
+          hint: '已切换智谱 GLM：Flash 系列官方输入输出全免费，插件已自动切单并发防 429 限流（智谱不开放 /models，直接点下方列表勾选即可）。',
           curated: [
-            { id: 'glm-4.7-flash', overall: 96, value: 100, natural: 92, costTag: '官方免费', costTone: 'free', reason: '最新免费 Flash 档，中文表达更细腻顺畅' },
-            { id: 'glm-4.5-flash', overall: 96, value: 100, natural: 91, costTag: '官方免费', costTone: 'free', reason: '官方常驻免费主力，关思考后极速自然' },
-            { id: 'glm-4-flash', overall: 94, value: 100, natural: 89, costTag: '官方免费', costTone: 'free', reason: '经典免费标杆，响应稳、零成本翻译' },
-            { id: 'glm-4.5-air', overall: 87, value: 86, natural: 90, costTag: '高性价比', costTone: 'cheap', reason: '进阶轻量版，复杂技术长句理解更稳' },
+            { id: 'glm-4.7-flash', overall: 97, value: 100, natural: 92, isFree: true, costTag: '官方免费', costTone: 'free', reason: '最新官方免费 Flash 档，插件自动单并发防限流' },
+            { id: 'glm-4.5-flash', overall: 96, value: 100, natural: 91, isFree: true, costTag: '官方免费', costTone: 'free', reason: '官方常驻免费主力，关思考后流畅自然' },
+            { id: 'glm-4-flash', overall: 94, value: 100, natural: 89, isFree: true, costTag: '官方免费', costTone: 'free', reason: '经典免费标杆，响应稳、零成本翻译' },
+            { id: 'glm-4.5-air', overall: 87, value: 84, natural: 90, isFree: false, costTag: '收费 · 轻量', costTone: 'cheap', reason: '付费轻量档，并发更宽、复杂长句更稳' },
           ],
         },
         qwen: {
+          name: '阿里云百炼',
           baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-          models: 'qwen-flash, qwen-mt-plus, qwen-turbo',
-          hint: '已切换阿里云百炼预设：qwen-flash 约 ¥0.15/M 性价比炸裂，qwen-mt-plus 专职高质量翻译。',
+          consoleUrl: 'https://bailian.console.aliyun.com/?tab=model#/api-key',
+          billingUrl: 'https://bailian.console.aliyun.com/?tab=model#/model-usage',
+          consoleLabel: '百炼 Key ↗',
+          models: 'qwen-flash, qwen-turbo, qwen-mt-plus',
+          hint: '已切换阿里云百炼（按量收费，新户常含限时体验额度）：qwen-flash 约 ¥0.15/M 起，性价比极高。',
           curated: [
-            { id: 'qwen-flash', overall: 95, value: 98, natural: 93, costTag: '¥0.15/M 极低', costTone: 'cheap', reason: '白菜价通用快模，配合口语提示词译文极自然' },
-            { id: 'qwen-turbo', overall: 94, value: 97, natural: 91, costTag: '¥0.3/M 极低', costTone: 'cheap', reason: '经典超低价快模，响应极快、代码格式稳' },
-            { id: 'qwen-mt-plus', overall: 93, value: 88, natural: 96, costTag: '¥1.8/M 专译', costTone: 'cheap', reason: '高质量专职翻译，复杂语境与术语极准' },
-            { id: 'qwen-mt-flash', overall: 88, value: 93, natural: 84, costTag: '¥0.7/M 专译', costTone: 'cheap', reason: '专职极速快译，便宜稳定、风格略工整' },
+            { id: 'qwen-flash', overall: 95, value: 94, natural: 93, isFree: false, costTag: '收费 · ¥0.15起', costTone: 'cheap', reason: '白菜价通用快模（非永久免费，新户常含体验额度）' },
+            { id: 'qwen-turbo', overall: 93, value: 92, natural: 91, isFree: false, costTag: '收费 · ¥0.3起', costTone: 'cheap', reason: '经典超低价快模，响应极快、代码格式稳' },
+            { id: 'qwen-mt-plus', overall: 92, value: 84, natural: 96, isFree: false, costTag: '收费 · ¥1.8/M', costTone: 'cheap', reason: '高质量专职翻译，复杂语境与术语极准' },
+            { id: 'qwen-mt-flash', overall: 87, value: 88, natural: 84, isFree: false, costTag: '收费 · ¥0.7/M', costTone: 'cheap', reason: '专职极速快译，便宜稳定、风格略工整' },
           ],
         },
         openrouter: {
+          name: 'OpenRouter',
           baseUrl: 'https://openrouter.ai/api/v1',
-          models: 'deepseek/deepseek-chat, google/gemini-2.5-flash-lite, openai/gpt-4o-mini',
-          hint: '已切换 OpenRouter 预设，填入 Key 后自动识别你账号可用的全量模型并按三维度评分。',
+          consoleUrl: 'https://openrouter.ai/settings/keys',
+          billingUrl: 'https://openrouter.ai/settings/credits',
+          consoleLabel: 'OpenRouter Key ↗',
+          models: 'deepseek/deepseek-chat, google/gemini-2.5-flash-lite',
+          hint: '已切换 OpenRouter：填入 Key 后自动拉取官方真实单价（只有 :free 或标价 $0 才是免费模型）。',
           curated: [
-            { id: 'deepseek/deepseek-chat', overall: 98, value: 94, natural: 99, costTag: '极低价', costTone: 'cheap', reason: '外译中母语级自然，几乎零机翻味' },
-            { id: 'google/gemini-2.5-flash-lite', overall: 91, value: 96, natural: 88, costTag: '地板价·超快', costTone: 'cheap', reason: '极低单价、吞吐极快，长思考也不卡顿' },
-            { id: 'qwen/qwen-2.5-7b-instruct', overall: 94, value: 97, natural: 93, costTag: '极低价', costTone: 'cheap', reason: '中文技术思考语感顺滑、便宜稳定' },
-            { id: 'anthropic/claude-3.5-haiku', overall: 89, value: 78, natural: 97, costTag: '中等价位', costTone: 'mid', reason: '自然感顶级有网感，但单价略高于国产' },
+            { id: 'deepseek/deepseek-chat', overall: 96, value: 90, natural: 99, isFree: false, costTag: '收费 · 极低价', costTone: 'cheap', reason: '外译中母语级自然，识别模型后显示官方实时美元单价' },
+            { id: 'google/gemini-2.5-flash-lite', overall: 91, value: 93, natural: 88, isFree: false, costTag: '收费 · 极低价', costTone: 'cheap', reason: '超低单价、吞吐极快，长思考也不卡顿' },
+            { id: 'qwen/qwen-2.5-7b-instruct', overall: 92, value: 91, natural: 93, isFree: false, costTag: '收费 · 低价', costTone: 'cheap', reason: '中文技术语感顺滑（OpenRouter 上该 ID 收费，找免费请点「识别模型」+「只看免费」）' },
+            { id: 'anthropic/claude-3.5-haiku', overall: 88, value: 74, natural: 97, isFree: false, costTag: '收费 · 中等', costTone: 'mid', reason: '自然感顶级有网感，但美元单价明显偏高' },
           ],
         },
         local: {
+          name: '本地 Ollama',
           baseUrl: 'http://127.0.0.1:11434/v1',
+          consoleUrl: 'https://ollama.com/download',
+          billingUrl: 'https://ollama.com/library',
+          consoleLabel: '下载 Ollama ↗',
           models: 'qwen2.5:7b, gemma3:4b',
-          hint: '已切换本地网关预设（默认 Ollama 11434；LM Studio 请改为 1234），免 Key 可直接点「自动识别模型」。',
+          hint: '已切换本地网关（默认 Ollama 11434；LM Studio 请改 1234），纯本机永久免费，免 Key 点「识别模型」即可。',
           curated: [
-            { id: 'qwen2.5:7b', overall: 96, value: 100, natural: 93, costTag: '本机免费', costTone: 'free', reason: '本机 7B 中文自然度最佳、速度与质量最均衡' },
-            { id: 'qwen3:8b', overall: 96, value: 100, natural: 93, costTag: '本机免费', costTone: 'free', reason: '新一代本机通义，自动关思考后响应很快' },
-            { id: 'gemma3:4b', overall: 87, value: 100, natural: 82, costTag: '本机超轻', costTone: 'free', reason: '低显存机器首选，速度快、日常翻译够用' },
+            { id: 'qwen2.5:7b', overall: 96, value: 100, natural: 93, isFree: true, costTag: '本机免费', costTone: 'free', reason: '本机 7B 中文自然度最佳、速度与质量最均衡' },
+            { id: 'qwen3:8b', overall: 96, value: 100, natural: 93, isFree: true, costTag: '本机免费', costTone: 'free', reason: '新一代本机通义，自动关思考后响应很快' },
+            { id: 'gemma3:4b', overall: 87, value: 100, natural: 82, isFree: true, costTag: '本机免费', costTone: 'free', reason: '低显存机器首选，速度快、日常翻译够用' },
           ],
         },
       };
@@ -2460,6 +2594,7 @@
       let discoveredModels = null;
       let recDim = 'overall'; // 'overall' | 'value' | 'natural'
       let onlyHighRec = true;
+      let onlyFreeOnly = false;
       let modelSearch = '';
       let autoDetectTimer = null;
       let discoverReqSeq = 0;
@@ -2701,18 +2836,47 @@
         return { grade: 'B', cls: 'b-tier' };
       }
 
+      function isModelFree(m) {
+        return Boolean(m?.isFree || m?.costTone === 'free');
+      }
+
+      function isModelPro(m) {
+        return Boolean(m?.isPro || /^Pro\//i.test(m?.id || ''));
+      }
+
       function getSortedCatalog() {
         const presetKey = inferPresetByUrl(optBaseUrl.value);
-        const base = Array.isArray(discoveredModels)
+        const hasDiscovered = Array.isArray(discoveredModels) && discoveredModels.length > 0;
+        const base = hasDiscovered
           ? discoveredModels
           : ((presetKey && PRESETS[presetKey]?.curated) || []);
-        return [...base].sort((a, b) => scoreOf(b, recDim) - scoreOf(a, recDim) || scoreOf(b, 'overall') - scoreOf(a, 'overall') || a.id.localeCompare(b.id));
+        return [...base].sort((a, b) =>
+          Number(isModelPro(a)) - Number(isModelPro(b)) ||
+          scoreOf(b, recDim) - scoreOf(a, recDim) ||
+          scoreOf(b, 'overall') - scoreOf(a, 'overall') ||
+          a.id.localeCompare(b.id)
+        );
       }
 
       function getCurrentTop3Ids() {
         const sorted = getSortedCatalog();
-        const high = sorted.filter((m) => scoreOf(m, recDim) >= 84).slice(0, 3).map((m) => m.id);
-        return high.length > 0 ? high : sorted.slice(0, 3).map((m) => m.id);
+        const pool = sorted.filter((m) => {
+          if (isModelPro(m)) return false;
+          if (onlyFreeOnly && !isModelFree(m)) return false;
+          if (onlyHighRec && scoreOf(m, recDim) < 84) return false;
+          return true;
+        });
+        const source = pool.length > 0 ? pool : sorted.filter((m) => !isModelPro(m) && (!onlyFreeOnly || isModelFree(m)));
+        const picked = [];
+        const seenCanon = new Set();
+        for (const m of source) {
+          const canon = String(m.id || '').replace(/^Pro\//i, '').toLowerCase();
+          if (seenCanon.has(canon)) continue;
+          seenCanon.add(canon);
+          picked.push(m.id);
+          if (picked.length >= 3) break;
+        }
+        return picked;
       }
 
       function isTop3Selected(selectedList, top3Ids) {
@@ -2723,8 +2887,12 @@
         const top3Ids = getCurrentTop3Ids();
         const active = isTop3Selected(selectedList, top3Ids);
         pickTop3Btn.classList.toggle('active', active);
-        pickTop3Btn.textContent = active ? `✓ 已选 Top ${top3Ids.length}` : `选推荐 Top ${top3Ids.length || 3}`;
-        pickTop3Btn.title = active ? '再次点击取消选中这组推荐模型' : `按当前「${DIM_LABELS[recDim]}」维度一键选中前 3 名`;
+        const tag = onlyFreeOnly ? '免费' : '推荐';
+        pickTop3Btn.textContent = active ? `✓ 已选 Top ${top3Ids.length}` : (top3Ids.length > 0 ? `选${tag} Top ${top3Ids.length}` : '选 Top 3');
+        pickTop3Btn.disabled = top3Ids.length === 0;
+        pickTop3Btn.title = active
+          ? '再次点击取消选中这组推荐模型'
+          : `按当前「${DIM_LABELS[recDim]}」${onlyFreeOnly ? '免费' : ''}筛选一键选中前 ${top3Ids.length || 3} 名（自动排除 Pro 重复项）`;
       }
 
       function renderModelList() {
@@ -2737,24 +2905,30 @@
 
         const filtered = catalog.filter((m) => {
           const dimScore = scoreOf(m, recDim);
+          if (onlyFreeOnly && !selectedIndexMap.has(m.id) && !isModelFree(m)) return false;
           if (onlyHighRec && !selectedIndexMap.has(m.id) && dimScore < 84) return false;
           if (!q) return true;
           return m.id.toLowerCase().includes(q) || (m.reason || '').toLowerCase().includes(q) || (m.costTag || '').toLowerCase().includes(q);
         });
 
-        if (Array.isArray(discoveredModels)) {
+        const hasDiscovered = Array.isArray(discoveredModels) && discoveredModels.length > 0;
+        if (hasDiscovered) {
           const highCount = discoveredModels.filter((m) => scoreOf(m, recDim) >= 84).length;
-          modelListMeta.textContent = `已识别 ${discoveredModels.length} 个 · ${highCount} 个高分`;
+          const freeCount = discoveredModels.filter((m) => isModelFree(m)).length;
+          modelListMeta.textContent = `已识别 ${discoveredModels.length} 个 · ${freeCount} 免费 · ${highCount} 高分`;
         } else if (inferPresetByUrl(optBaseUrl.value)) {
-          modelListMeta.textContent = '精选参考 · 填 Key 自动识别全量';
+          const freeCount = catalog.filter((m) => isModelFree(m)).length;
+          modelListMeta.textContent = freeCount > 0 ? `核实参考 · ${freeCount} 免费` : '核实参考 · 全系收费';
         } else {
-          modelListMeta.textContent = '自定义网关 · 填 Key 后自动识别模型';
+          modelListMeta.textContent = '自定义网关 · 填 Key 后识别模型';
         }
 
         if (filtered.length === 0) {
-          const emptyMsg = !Array.isArray(discoveredModels) && !inferPresetByUrl(optBaseUrl.value)
-            ? '自定义网关请填完 API Key 点「自动识别模型」，或直接在下方输入模型名'
-            : (onlyHighRec ? '当前维度下暂无 ≥84 分模型，点上方取消「只看高分」查看全部' : '没有匹配的模型');
+          const emptyMsg = !hasDiscovered && !inferPresetByUrl(optBaseUrl.value)
+            ? '自定义网关请填完 API Key 点「识别模型」，或直接在下方输入模型名'
+            : onlyFreeOnly
+              ? '当前渠道下暂无核实免费模型，点上方取消「只看免费」查看低价收费档'
+              : (onlyHighRec ? '当前维度下暂无 ≥84 分模型，点上方取消「只看高分」查看全部' : '没有匹配的模型');
           modelListEl.innerHTML = `<div class="model-empty">${emptyMsg}</div>`;
           return;
         }
@@ -2811,7 +2985,7 @@
           if (!silent) {
             testStatus.className = 'test-status err';
             testStatus.textContent = sameProvider
-              ? '请先粘贴 API Key，再点「自动识别模型」。'
+              ? '请先粘贴 API Key，再点「识别模型」（或点右侧「获取 Key ↗」前往官网创建）。'
               : '已切换服务商地址，请先粘贴该服务商的 API Key 再识别模型。';
           }
           return;
@@ -2822,34 +2996,85 @@
         detectModelsBtn.textContent = '识别中…';
         if (!silent) {
           testStatus.className = 'test-status';
-          testStatus.textContent = '正在拉取该 Key 下可用的翻译模型并计算综合 / 性价比 / 自然感三维评分…';
+          testStatus.textContent = '正在拉取可用文本模型并按渠道核实收费/免费标签与三维评分…';
         }
         try {
           const body = { translateBaseUrl: baseUrl };
           if (rawKey) body.translateApiKey = rawKey;
           const res = await postJson('/api/translate/models', body);
           if (reqSeq !== discoverReqSeq) return;
-          discoveredModels = Array.isArray(res.models) ? res.models : [];
-          if (discoveredModels.length > 0 && !discoveredModels.some((m) => scoreOf(m, recDim) >= 84)) {
+          const list = Array.isArray(res.models) ? res.models : [];
+          // 若网关未开放 /models 或返回空数组，保留内置核实精选列表不覆盖成白板
+          discoveredModels = list.length > 0 ? list : null;
+          if (list.length > 0 && !list.some((m) => scoreOf(m, recDim) >= 84)) {
             onlyHighRec = false;
             filterRecBtn.classList.remove('active');
           }
           renderModelList();
-          const highCount = discoveredModels.filter((m) => scoreOf(m, 'overall') >= 84).length;
           if (!silent) {
-            testStatus.className = 'test-status ok';
-            testStatus.textContent = `识别完成！该网关可用 ${discoveredModels.length} 个文本模型（${highCount} 个高推荐），可切换「综合 / 性价比 / 自然感」维度挑选。`;
+            if (res.fallbackCurated || list.length === 0) {
+              testStatus.className = 'test-status ok';
+              testStatus.textContent = res.notice || '该网关未返回可用模型列表，已保留下方核实精选参考（可直接勾选或手动填写）。';
+            } else {
+              const highCount = list.filter((m) => scoreOf(m, 'overall') >= 84).length;
+              const freeCount = list.filter((m) => isModelFree(m)).length;
+              testStatus.className = 'test-status ok';
+              testStatus.textContent = `识别完成！共 ${list.length} 个纯文本模型（${freeCount} 个核实免费 · ${highCount} 个高推荐），可点「只看免费」筛选零成本模型。`;
+            }
           }
         } catch (err) {
           if (reqSeq !== discoverReqSeq) return;
           if (!silent) {
             testStatus.className = 'test-status err';
-            testStatus.textContent = `${err.message}（部分代理网关未开放 /models，可直接点下方参考模型或手动输入）`;
+            testStatus.textContent = `${err.message}（部分渠道未开放 /models，可直接勾选下方参考模型或手动输入）`;
           }
         } finally {
           if (reqSeq === discoverReqSeq) {
             detectModelsBtn.disabled = false;
-            detectModelsBtn.textContent = '自动识别模型';
+            detectModelsBtn.textContent = '识别模型';
+          }
+        }
+      }
+
+      function syncProviderButtons() {
+        const key = inferPresetByUrl(optBaseUrl.value || currentState?.settings?.translateBaseUrl || '');
+        const p = key ? PRESETS[key] : null;
+        for (const btn of document.querySelectorAll('[data-preset]')) {
+          btn.classList.toggle('is-current', Boolean(key) && btn.dataset.preset === key);
+        }
+        if (openKeyConsoleBtn) {
+          openKeyConsoleBtn.style.display = p ? '' : 'none';
+          if (p) {
+            openKeyConsoleBtn.textContent = p.consoleLabel || '获取 Key ↗';
+            openKeyConsoleBtn.title = `在系统浏览器打开 ${p.name} 官方页面：${p.consoleUrl}`;
+          }
+        }
+        if (quickOpenConsoleBtn) {
+          quickOpenConsoleBtn.style.display = p ? '' : 'none';
+          if (p) {
+            quickOpenConsoleBtn.textContent = p.consoleLabel || '官网 Key ↗';
+            quickOpenConsoleBtn.title = `在系统浏览器打开 ${p.name} 官方页面：${p.consoleUrl}`;
+          }
+        }
+        if (openBillingBtn) {
+          openBillingBtn.style.display = p ? '' : 'none';
+          if (p) {
+            openBillingBtn.textContent = key === 'local' ? '模型库 ↗' : '账单 ↗';
+            openBillingBtn.title = `打开 ${p.name} 官方控制台：${p.billingUrl}`;
+          }
+        }
+      }
+
+      async function openOfficialUrl(targetUrl) {
+        if (!targetUrl) return;
+        try {
+          await postJson('/api/open-url', { url: targetUrl });
+        } catch (err) {
+          try {
+            window.open(targetUrl, '_blank', 'noopener,noreferrer');
+          } catch {
+            testStatus.className = 'test-status err';
+            testStatus.textContent = `无法自动打开浏览器：${err?.message || targetUrl}`;
           }
         }
       }
@@ -2870,6 +3095,7 @@
         } else {
           optApiKey.placeholder = '粘贴你的 sk-... 密钥（本地免鉴权可留空）';
         }
+        syncProviderButtons();
       }
 
       const DISPLAY_LEVEL_HINTS = {
@@ -2974,6 +3200,56 @@
         }
       }
 
+      function formatTokenShort(n) {
+        const v = Number(n || 0);
+        if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+        if (v >= 1e3) return `${(v / 1e3).toFixed(1)}k`;
+        return String(Math.round(v));
+      }
+
+      function formatCostText(bucket) {
+        if (!bucket) return '¥0.00';
+        const cny = Number(bucket.costCny || 0);
+        const usd = Number(bucket.costUsd || 0);
+        const parts = [];
+        const fmtMoney = (sym, val) => {
+          if (val <= 0) return `${sym}0.00`;
+          if (val < 0.01) return `${sym}${val.toFixed(4)}`;
+          return `${sym}${val.toFixed(2)}`;
+        };
+        if (cny > 0) parts.push(fmtMoney('¥', cny));
+        if (usd > 0) parts.push(fmtMoney('$', usd));
+        if (parts.length === 0) return '¥0.00';
+        return parts.join(' + ');
+      }
+
+      function updateUsagePanel(usage) {
+        if (!usage) return;
+        const sess = usage.session || {};
+        const tot = usage.total || {};
+        const sessTok = (sess.inputTokens || 0) + (sess.outputTokens || 0);
+        const totTok = (tot.inputTokens || 0) + (tot.outputTokens || 0);
+        const sessPaid = (sess.costCny || 0) + (sess.costUsd || 0) > 0;
+        const totPaid = (tot.costCny || 0) + (tot.costUsd || 0) > 0;
+
+        if (usageSessionVal) {
+          usageSessionVal.textContent = `${formatCostText(sess)}${sessTok > 0 ? ' · ' + formatTokenShort(sessTok) : ''}`;
+          usageSessionVal.className = `cost-v${sessPaid ? '' : ' free'}`;
+          usageSessionVal.title = `本次请求 ${sess.requests || 0} 次（免费 ${sess.freeRequests || 0} 次），输入 ${sess.inputTokens || 0} / 输出 ${sess.outputTokens || 0} tok${sess.cachedInputTokens ? `，缓存命中 ${sess.cachedInputTokens} tok` : ''}`;
+        }
+        if (usageTotalVal) {
+          usageTotalVal.textContent = `${formatCostText(tot)} · ${formatTokenShort(totTok)} tok`;
+          usageTotalVal.className = `cost-v${totPaid ? '' : ' free'}`;
+          const topModels = (usage.byModel || []).slice(0, 4).map((m) =>
+            `${shortModelName(m.model)}: ${m.requests}次 ${m.isFree ? '免费' : (m.currency === 'USD' ? '$' : '¥') + Number(m.cost || 0).toFixed(4)}`
+          ).join('\n');
+          usageTotalVal.title = `累计请求 ${tot.requests || 0} 次（输入 ${tot.inputTokens || 0} / 输出 ${tot.outputTokens || 0} tok）${topModels ? '\n' + topModels : ''}`;
+        }
+        if (usageCacheSaved) {
+          usageCacheSaved.textContent = `${tot.cacheHits || 0} 次`;
+        }
+      }
+
       function updateHealthPanel(state) {
         const rt = state.runtime || {};
         const modeMap = {
@@ -3009,6 +3285,7 @@
         healthCache.textContent = `${rt.cacheCount ?? 0} 条`;
         healthModel.textContent = rt.activeModel ? shortModelName(rt.activeModel) : '—';
         healthModel.title = rt.activeModel || '';
+        if (rt.usage) updateUsagePanel(rt.usage);
       }
 
       function buildChipsHtml(item, running, wantFullDetail) {
@@ -3956,7 +4233,7 @@
         clearTimeout(autoDetectTimer);
         discoverReqSeq += 1;
         detectModelsBtn.disabled = false;
-        detectModelsBtn.textContent = '自动识别模型';
+        detectModelsBtn.textContent = '识别模型';
       }
 
       paneSettings.addEventListener('click', (ev) => {
@@ -3970,6 +4247,8 @@
           if (urlChanged) {
             optApiKey.value = '';
             optModels.value = '';
+            balanceReadout.className = 'cost-balance';
+            balanceReadout.textContent = '';
           }
           modelSearch = '';
           modelSearchInput.value = '';
@@ -3996,10 +4275,67 @@
         }
       });
 
+      filterFreeBtn?.addEventListener('click', () => {
+        onlyFreeOnly = !onlyFreeOnly;
+        filterFreeBtn.classList.toggle('active', onlyFreeOnly);
+        renderModelList();
+      });
+
       filterRecBtn.addEventListener('click', () => {
         onlyHighRec = !onlyHighRec;
         filterRecBtn.classList.toggle('active', onlyHighRec);
         renderModelList();
+      });
+
+      const handleOpenConsole = () => {
+        const key = inferPresetByUrl(optBaseUrl.value || currentState?.settings?.translateBaseUrl || '');
+        const p = key ? PRESETS[key] : null;
+        if (p?.consoleUrl) void openOfficialUrl(p.consoleUrl);
+      };
+      openKeyConsoleBtn?.addEventListener('click', handleOpenConsole);
+      quickOpenConsoleBtn?.addEventListener('click', handleOpenConsole);
+      openBillingBtn?.addEventListener('click', () => {
+        const key = inferPresetByUrl(optBaseUrl.value || currentState?.settings?.translateBaseUrl || '');
+        const p = key ? PRESETS[key] : null;
+        if (p?.billingUrl) void openOfficialUrl(p.billingUrl);
+      });
+
+      checkBalanceBtn?.addEventListener('click', async () => {
+        const baseUrl = sanitizeBaseUrl(optBaseUrl.value || currentState?.settings?.translateBaseUrl || '');
+        const rawKey = optApiKey.value.trim();
+        checkBalanceBtn.disabled = true;
+        checkBalanceBtn.textContent = '查询中…';
+        balanceReadout.className = 'cost-balance';
+        balanceReadout.textContent = '正在查询当前渠道官方余额…';
+        try {
+          const body = {};
+          if (baseUrl) body.translateBaseUrl = baseUrl;
+          if (rawKey) body.translateApiKey = rawKey;
+          const res = await postJson('/api/translate/balance', body);
+          balanceReadout.className = res.supported ? 'cost-balance ok' : 'cost-balance';
+          balanceReadout.textContent = res.summary || '查询完成';
+        } catch (err) {
+          balanceReadout.className = 'cost-balance err';
+          balanceReadout.textContent = `余额查询失败：${err.message}`;
+        } finally {
+          checkBalanceBtn.disabled = false;
+          checkBalanceBtn.textContent = '查余额';
+        }
+      });
+
+      resetUsageBtn?.addEventListener('click', async () => {
+        resetUsageBtn.disabled = true;
+        try {
+          const res = await postJson('/api/translate/usage/reset', {});
+          if (res.usage) updateUsagePanel(res.usage);
+          balanceReadout.className = 'cost-balance';
+          balanceReadout.textContent = '本地翻译用量与预估花费统计已清零。';
+        } catch (err) {
+          balanceReadout.className = 'cost-balance err';
+          balanceReadout.textContent = `清零失败：${err.message}`;
+        } finally {
+          resetUsageBtn.disabled = false;
+        }
       });
 
       // 支持再次点击取消选中推荐 Top 3！
@@ -4413,7 +4749,11 @@
 
       async function bootstrapSettings() {
         try {
-          const settings = await getJson('/api/settings');
+          const [settings, usageRes] = await Promise.all([
+            getJson('/api/settings'),
+            getJson('/api/translate/usage').catch(() => null),
+          ]);
+          if (usageRes?.usage) updateUsagePanel(usageRes.usage);
           if (!settings || typeof settings !== 'object') return;
           if (!currentState) currentState = { settings, turns: [], conversations: [] };
           else if (!currentState.settings) currentState.settings = settings;
@@ -4421,6 +4761,7 @@
         } catch {}
       }
 
+      syncProviderButtons();
       renderModelList();
       void bootstrapSettings();
       connectStream();

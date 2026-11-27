@@ -80,16 +80,47 @@ const NARRATIVE_PROMPTS = {
 const MAX_CONCURRENCY = 4;
 
 /**
- * 过滤掉明显不是对话/翻译模型的 ID（嵌入、重排、文生图、语音、视频、审核等）
+ * 过滤掉明显不是纯文本对话/翻译模型的 ID（嵌入、重排、文生图、视觉多模态、语音、视频、审核、微调 LoRA 等）
  */
 const NON_TRANSLATION_RE =
-  /(embed|bge-|rerank|whisper|tts|speech|audio|voice|flux|stable-diffusion|sdxl|sd3|kolors|dall-e|midjourney|cogvideo|cogview|wan2\.|wanx|sora|veo|imagen|janus|moderation|guard|ocr|realtime|live-|transcribe|music|paint|sketch|upscale|inpaint|clip-|siglip|cosyvoice|fish-speech|sensevoice|funasr|paraformer|sambert)/i;
+  /(embed|bge-|rerank|whisper|tts|speech|audio|voice|flux|stable-diffusion|sdxl|sd3|kolors|dall-e|midjourney|cogvideo|cogview|wan2\.|wanx|sora|veo|imagen|janus|moderation|guard|ocr|realtime|live-|transcribe|music|paint|sketch|upscale|inpaint|clip-|siglip|cosyvoice|fish-speech|sensevoice|funasr|paraformer|sambert|(^|\/)lora\/|^ft:|-vl(\b|-)|vl-|vision|multimodal|omni|qvq|glm-4v|glm-4\.1v|glm-4\.5v|internvl|minicpm-v|pixtral|llava|molmo)/i;
 
 /**
- * 三维翻译模型评估规则：
- * - overall: 综合推荐分（兼顾性价比与自然使用感）
- * - value:   性价比分（免费额度 / 单价 / 缓存省钱）
- * - natural: 自然感与使用感分（无机翻味、口语流畅度、代码标识符保持、首字延迟）
+ * 硅基流动长期免费模型白名单（仅限非 Pro/ 通道，具体仍以官网模型广场实时标注为准）
+ */
+const SILICONFLOW_FREE_RE =
+  /^(qwen\/qwen2\.5-7b-instruct|qwen\/qwen3-8b|qwen\/qwen3-4b|qwen\/qwen2-7b-instruct|qwen\/qwen2\.5-3b-instruct|qwen\/qwen2\.5-1\.5b-instruct|thudm\/glm-4-9b-chat|thudm\/glm-4-9b-0414|zai-org\/glm-4-9b-0414|tencent\/hunyuan-mt-7b|internlm\/internlm2_5-7b-chat|01-ai\/yi-1\.5-9b-chat-16k)$/i;
+
+/**
+ * 智谱开放平台官方常驻免费 Flash 模型（不含付费版 glm-4-flashx / air / plus）
+ */
+const ZHIPU_FREE_RE = /^(glm-4\.7-flash|glm-4\.5-flash|glm-4-flash)(-\d{4})?$/i;
+
+export function detectProviderKey(baseUrl) {
+  const clean = String(baseUrl || '').trim();
+  if (!clean) return 'custom';
+  if (isLocalGatewayUrl(clean)) return 'local';
+  const host = getHostnameSafe(clean);
+  if (/(^|\.)siliconflow\.(cn|com)$/i.test(host)) return 'siliconflow';
+  if (/(^|\.)deepseek\.com$/i.test(host)) return 'deepseek';
+  if (/(^|\.)bigmodel\.cn$/i.test(host)) return 'zhipu';
+  if (/(^|\.)dashscope\.aliyuncs\.com$/i.test(host)) return 'qwen';
+  if (/(^|\.)openrouter\.ai$/i.test(host)) return 'openrouter';
+  return 'custom';
+}
+
+function formatUsdRateTag(inPerM, outPerM) {
+  const fmt = (v) => {
+    if (!Number.isFinite(v) || v <= 0) return '0';
+    if (v < 0.01) return v.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+    if (v < 1) return v.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    return v.toFixed(2).replace(/\.00$/, '');
+  };
+  return `$${fmt(inPerM)}/$${fmt(outPerM)}`;
+}
+
+/**
+ * 三维翻译模型评估规则（基础语义手感与参考单价；免费/收费与 Pro 标签由渠道感知层精确核定）
  */
 const MODEL_RATING_RULES = [
   {
@@ -99,151 +130,208 @@ const MODEL_RATING_RULES = [
     natural: 62,
     costTag: '推理型·偏慢',
     costTone: 'slow',
-    reason: '自带内部思考链，首字延迟高，不适合做实时译者',
+    priceIn: 4,
+    priceOut: 16,
+    reason: '自带长思考链，首字延迟高，不适合做实时译者',
   },
   {
-    match: /(^|\/)deepseek-chat$|(^|\/)deepseek-v3(\.\d)?$/i,
-    overall: 98,
-    value: 94,
-    natural: 99,
-    costTag: '极低价·缓存省',
-    costTone: 'cheap',
-    reason: '外译中母语级自然，几乎零机翻味，缓存命中极省钱',
-  },
-  {
-    match: /(^|\/)(glm-4\.7-flash|glm-4\.5-flash|glm-4-flash|glm-4-9b-chat)/i,
+    match: /(^|\/)(deepseek-chat|deepseek-flash|deepseek-v3(\.\d+)?)$/i,
     overall: 96,
-    value: 100,
-    natural: 91,
-    costTag: '免费',
-    costTone: 'free',
-    reason: '官方/平台常驻免费，中文表达顺滑自然，零成本首选',
+    value: 88,
+    natural: 99,
+    costTag: '收费 · ¥2/¥8',
+    costTone: 'cheap',
+    priceIn: 2,
+    priceOut: 8,
+    cacheIn: 0.04,
+    reason: '外译中母语级自然、几乎零机翻味，按量计费',
   },
   {
-    match: /(^|\/)(qwen3\.5-flash|qwen-flash|qwen-?2\.5[-:]7b(-instruct)?|qwen3[-:]8b|qwen3[-:]4b)/i,
+    match: /(^|\/)(glm-4\.7-flash|glm-4\.5-flash|glm-4-flash)(-\d{4})?$/i,
+    overall: 96,
+    value: 92,
+    natural: 91,
+    costTag: '收费 · 低价',
+    costTone: 'cheap',
+    priceIn: 0.5,
+    priceOut: 0.5,
+    reason: '轻量高速 GLM Flash，中文表达顺滑自然',
+  },
+  {
+    match: /(^|\/)(glm-4-9b-chat|glm-4-9b-0414)$/i,
+    overall: 94,
+    value: 90,
+    natural: 91,
+    costTag: '收费 · 低价',
+    costTone: 'cheap',
+    priceIn: 0.5,
+    priceOut: 0.5,
+    reason: '经典 9B 开源对话模型，口语流畅稳定、低延迟',
+  },
+  {
+    match: /(^|\/)(qwen3\.5-flash|qwen-flash)$/i,
     overall: 95,
-    value: 98,
+    value: 94,
     natural: 93,
-    costTag: '免费 / 极低价',
-    costTone: 'free',
-    reason: '技术语感极佳、代码零误翻，免费或白菜价且首字快',
+    costTag: '收费 · ¥0.15起',
+    costTone: 'cheap',
+    priceIn: 0.15,
+    priceOut: 1.5,
+    reason: '超低价通用快模，技术语感佳、首字极快（非永久免费）',
+  },
+  {
+    match: /(^|\/)(qwen-?2\.5[-:]7b(-instruct)?|qwen3[-:]8b|qwen3[-:]4b)/i,
+    overall: 94,
+    value: 91,
+    natural: 93,
+    costTag: '收费 · 极低价',
+    costTone: 'cheap',
+    priceIn: 0.35,
+    priceOut: 0.7,
+    reason: '中文技术语感自然、代码标识符零误翻，首字响应快',
   },
   {
     match: /(^|\/)qwen-turbo/i,
-    overall: 94,
-    value: 97,
+    overall: 93,
+    value: 92,
     natural: 91,
-    costTag: '¥0.3/M 极低',
+    costTag: '收费 · ¥0.3起',
     costTone: 'cheap',
-    reason: '百炼经典经济快模，延迟极低、技术表达干净利落',
+    priceIn: 0.3,
+    priceOut: 0.6,
+    reason: '经济高速通用模型，延迟低、技术表达干净利落',
   },
   {
     match: /(^|\/)qwen-mt-plus/i,
-    overall: 93,
-    value: 88,
+    overall: 92,
+    value: 84,
     natural: 96,
-    costTag: '¥1.8/M 专译',
+    costTag: '收费 · ¥1.8/M',
     costTone: 'cheap',
-    reason: '高质量专职翻译，复杂语境与专业术语拿捏很准',
+    priceIn: 1.8,
+    priceOut: 5.4,
+    reason: '高质量专职翻译模型，复杂语境与专业术语极准',
   },
   {
     match: /(^|\/)deepseek-v3/i,
     overall: 94,
-    value: 91,
+    value: 86,
     natural: 97,
-    costTag: '极低价',
+    costTag: '收费 · ¥2/¥8',
     costTone: 'cheap',
+    priceIn: 2,
+    priceOut: 8,
     reason: 'DeepSeek V3 衍生版，中文自然顺口、极少翻译腔',
   },
   {
-    match: /(^|\/)(claude-haiku|claude-3-5-haiku|claude-3\.5-haiku)/i,
-    overall: 89,
-    value: 78,
+    match: /(^|\/)(claude-haiku|claude-3-5-haiku|claude-3\.5-haiku|claude-haiku-4)/i,
+    overall: 88,
+    value: 74,
     natural: 97,
-    costTag: '中等价位',
+    costTag: '收费 · 中等',
     costTone: 'mid',
-    reason: '中文表达极自然有网感，使用感顶级，但单价略高',
+    priceIn: 5.8,
+    priceOut: 29,
+    reason: '中文表达极自然有网感，但单价偏高',
   },
   {
-    match: /(^|\/)gemini-2\.5-flash-lite|(^|\/)gemini-2\.5-flash$|(^|\/)gemini-2\.0-flash/i,
+    match: /(^|\/)(gemini-2\.5-flash-lite|gemini-2\.5-flash$|gemini-2\.0-flash)/i,
     overall: 91,
-    value: 96,
+    value: 92,
     natural: 88,
-    costTag: '地板价·超快',
+    costTag: '收费 · 极低价',
     costTone: 'cheap',
-    reason: '吞吐极快、单价极薄，配合口语提示词流畅度很好',
+    priceIn: 0.7,
+    priceOut: 2.8,
+    reason: '吞吐极快、单价极薄，长思考流也不易卡顿',
   },
   {
     match: /(^|\/)(qwen2\.5-14b|qwen2\.5-32b|qwen3-14b|qwen3-30b-a3b|qwen-plus)/i,
-    overall: 91,
-    value: 87,
+    overall: 90,
+    value: 84,
     natural: 94,
-    costTag: '高性价比',
+    costTag: '收费 · 适中',
     costTone: 'cheap',
+    priceIn: 0.8,
+    priceOut: 2.4,
     reason: '中大参数通义，长难句拆解稳、行文自然不生硬',
   },
   {
     match: /(^|\/)(qwen-mt-flash|qwen-mt-turbo|qwen-mt-lite)/i,
-    overall: 88,
-    value: 93,
+    overall: 87,
+    value: 88,
     natural: 84,
-    costTag: '¥0.7/M 专译',
+    costTag: '收费 · ¥0.7/M',
     costTone: 'cheap',
+    priceIn: 0.7,
+    priceOut: 2.1,
     reason: '专职快译便宜高速，风格略工整偏直白',
   },
   {
     match: /(^|\/)(hunyuan-mt|hy-mt)/i,
     overall: 85,
-    value: 96,
+    value: 90,
     natural: 78,
-    costTag: '免费 / 轻量',
-    costTone: 'free',
-    reason: '免费专职快译、速度极快，但略带书面翻译腔',
+    costTag: '收费 · 轻量',
+    costTone: 'cheap',
+    priceIn: 0.5,
+    priceOut: 1.0,
+    reason: '专职多语快译、速度极快，但略带书面翻译腔',
   },
   {
-    match: /(^|\/)(glm-4\.5-air|glm-4-air|glm-4\.6|glm-4\.5$)/i,
+    match: /(^|\/)(glm-4\.5-air|glm-4-air|glm-4-flashx|glm-4\.6|glm-4\.5$)/i,
     overall: 87,
-    value: 86,
+    value: 84,
     natural: 90,
-    costTag: '高性价比',
+    costTag: '收费 · 轻量',
     costTone: 'cheap',
-    reason: '智谱轻量/标准主力，中文语感自然、延迟较低',
+    priceIn: 0.8,
+    priceOut: 2.0,
+    reason: '智谱付费轻量/主力档，中文语感自然、并发限制较宽',
   },
   {
     match: /(^|\/)(gpt-4\.1-mini|gpt-4\.1-nano|gpt-4o-mini)/i,
     overall: 85,
-    value: 86,
+    value: 84,
     natural: 85,
-    costTag: '低价稳健',
+    costTag: '收费 · 低价',
     costTone: 'cheap',
+    priceIn: 1.1,
+    priceOut: 4.4,
     reason: '语法严谨、代码格式稳定，中文略保守直白',
   },
   {
     match: /(^|\/)(doubao.*lite|doubao.*mini|minimax|kimi|moonshot|internlm|yi-|step-1-flash|ernie-speed|ernie-lite|gemma)/i,
     overall: 84,
-    value: 88,
+    value: 86,
     natural: 84,
-    costTag: '低价流畅',
+    costTag: '收费 · 轻量',
     costTone: 'cheap',
+    priceIn: 0.6,
+    priceOut: 1.8,
     reason: '轻量中文友好模型，适合日常流式翻译',
   },
   {
     match: /(^|\/)(qwen2-7b|qwen1\.5-7b|qwen2\.5-3b|qwen2\.5-1\.5b)/i,
-    overall: 81,
-    value: 94,
+    overall: 80,
+    value: 88,
     natural: 75,
-    costTag: '免费 / 极轻',
-    costTone: 'free',
-    reason: '免费轻量小模型，速度快但偶有语句略平淡',
+    costTag: '收费 · 极轻',
+    costTone: 'cheap',
+    priceIn: 0.2,
+    priceOut: 0.4,
+    reason: '轻量小参数模型，速度快但偶有语句略平淡',
   },
   {
-    match: /(gpt-4o$|gpt-4\.1$|gpt-5|claude-sonnet|claude-opus|claude-3-7|qwen-max|qwen3-235b|glm-4-plus|gemini-2\.5-pro)/i,
-    overall: 79,
-    value: 58,
+    match: /(gpt-4o$|gpt-4\.1$|gpt-5|claude-sonnet|claude-opus|claude-3-7|qwen-max|qwen3-235b|glm-4-plus|gemini-2\.5-pro|deepseek-v4-pro)/i,
+    overall: 78,
+    value: 56,
     natural: 96,
-    costTag: '旗舰·偏贵',
+    costTag: '收费 · 旗舰贵',
     costTone: 'mid',
-    reason: '译文自然度顶级，但实时翻思考流成本太高',
+    priceIn: 10,
+    priceOut: 30,
+    reason: '译文自然度顶级，但用于实时翻思考流成本偏高',
   },
 ];
 
@@ -255,48 +343,180 @@ function gradeFromScore(score) {
   return 'B';
 }
 
-export function evaluateModelForTranslation(modelId, baseUrl = '') {
+export function evaluateModelForTranslation(modelId, baseUrl = '', rawItem = null) {
   const id = String(modelId || '').trim();
-  const isLocal = isLocalGatewayUrl(baseUrl);
+  const provider = detectProviderKey(baseUrl);
+  const isLocal = provider === 'local';
+  const isSiliconPro = provider === 'siliconflow' && /^Pro\//i.test(id);
+  const matchId = isSiliconPro ? id.replace(/^Pro\//i, '') : id;
+
+  let base = null;
   for (const rule of MODEL_RATING_RULES) {
-    if (rule.match.test(id)) {
-      const value = isLocal ? 100 : rule.value;
-      const overall = isLocal ? Math.min(99, Math.round(rule.natural * 0.65 + value * 0.35)) : rule.overall;
-      return {
-        id,
-        overall,
-        value,
-        natural: rule.natural,
-        score: overall,
-        grade: gradeFromScore(overall),
-        costTag: isLocal ? '本机免费' : rule.costTag,
-        costTone: isLocal ? 'free' : rule.costTone,
-        reason: rule.reason,
-        recommended: overall >= 84,
+    if (rule.match.test(matchId)) {
+      base = { ...rule };
+      break;
+    }
+  }
+  if (!base) {
+    const lower = matchId.toLowerCase();
+    if (/(flash|lite|mini|nano|turbo|7b|8b|9b)/i.test(lower)) {
+      base = {
+        overall: 80,
+        value: 84,
+        natural: 78,
+        costTag: provider === 'custom' ? '轻量快模' : '收费 · 轻量',
+        costTone: 'cheap',
+        priceIn: 0.5,
+        priceOut: 1.5,
+        reason: '轻量快速模型，适合实时流式翻译实测',
+      };
+    } else {
+      base = {
+        overall: 72,
+        value: 70,
+        natural: 74,
+        costTag: provider === 'custom' ? '按网关计费' : '收费 · 通用',
+        costTone: 'neutral',
+        priceIn: 2,
+        priceOut: 6,
+        reason: '平台可用对话模型，可勾选实测翻译手感',
       };
     }
   }
-  const lower = id.toLowerCase();
-  if (/(flash|lite|mini|nano|turbo|7b|8b|9b)/i.test(lower)) {
-    const value = isLocal ? 100 : 84;
-    const natural = 78;
-    const overall = isLocal ? 86 : 80;
-    return {
-      id,
-      overall,
-      value,
-      natural,
-      score: overall,
-      grade: gradeFromScore(overall),
-      costTag: isLocal ? '本机免费' : '轻量快速',
-      costTone: isLocal ? 'free' : 'cheap',
-      reason: '轻量快速模型，适合实时流式翻译实测',
-      recommended: overall >= 84,
-    };
+
+  let { overall, value, natural, costTag, costTone, reason } = base;
+  let priceIn = Number(base.priceIn || 0);
+  let priceOut = Number(base.priceOut || 0);
+  let cacheIn = Number(base.cacheIn || 0);
+  let currency = provider === 'openrouter' ? 'USD' : 'CNY';
+  let isFree = false;
+
+  if (isLocal) {
+    isFree = true;
+    priceIn = 0;
+    priceOut = 0;
+    cacheIn = 0;
+    currency = 'CNY';
+    value = 100;
+    overall = Math.min(99, Math.round(natural * 0.65 + value * 0.35));
+    costTag = '本机免费';
+    costTone = 'free';
+  } else if (provider === 'openrouter') {
+    currency = 'USD';
+    const rawPrompt = rawItem?.pricing?.prompt;
+    const rawComp = rawItem?.pricing?.completion;
+    const hasLivePricing = rawPrompt !== undefined && rawPrompt !== null && rawComp !== undefined && rawComp !== null;
+    const pIn = hasLivePricing ? Number(rawPrompt) * 1e6 : (priceIn / 7.2);
+    const pOut = hasLivePricing ? Number(rawComp) * 1e6 : (priceOut / 7.2);
+    const liveFree = /:free$/i.test(id) || (hasLivePricing && pIn === 0 && pOut === 0);
+    if (liveFree) {
+      isFree = true;
+      priceIn = 0;
+      priceOut = 0;
+      cacheIn = 0;
+      value = 98;
+      overall = Math.min(97, Math.round(natural * 0.62 + value * 0.38));
+      costTag = '平台免费';
+      costTone = 'free';
+      reason = `${reason}（OpenRouter 免费通道，有限速）`;
+    } else {
+      isFree = false;
+      priceIn = Number.isFinite(pIn) && pIn > 0 ? pIn : 0.3;
+      priceOut = Number.isFinite(pOut) && pOut > 0 ? pOut : 0.9;
+      cacheIn = 0;
+      if (hasLivePricing) {
+        costTag = `收费 · ${formatUsdRateTag(priceIn, priceOut)}`;
+        if (priceOut <= 1.2) {
+          costTone = costTone === 'slow' ? 'slow' : 'cheap';
+          value = Math.max(value, 90);
+        } else if (priceOut <= 5) {
+          costTone = costTone === 'slow' ? 'slow' : 'cheap';
+        } else {
+          costTone = costTone === 'slow' ? 'slow' : 'mid';
+          value = Math.min(value, 72);
+        }
+        overall = Math.min(98, Math.round(natural * 0.62 + value * 0.38));
+      } else if (costTone === 'free') {
+        costTone = 'cheap';
+        costTag = '收费 · 低价';
+      }
+    }
+  } else if (provider === 'siliconflow') {
+    if (isSiliconPro) {
+      isFree = false;
+      costTag = 'Pro · 需充值';
+      costTone = costTone === 'slow' ? 'slow' : 'mid';
+      value = Math.max(52, value - 12);
+      overall = Math.max(60, Math.round(natural * 0.56 + value * 0.44));
+      reason = '需真实充值余额（不可用赠送金/免费额度），高并发独享通道';
+    } else if (SILICONFLOW_FREE_RE.test(id)) {
+      isFree = true;
+      priceIn = 0;
+      priceOut = 0;
+      cacheIn = 0;
+      value = 99;
+      overall = Math.min(97, Math.round(natural * 0.58 + value * 0.42));
+      costTag = '平台免费';
+      costTone = 'free';
+      reason = `${reason}（硅基流动非 Pro 免费档，有限速）`;
+    } else if (/(^|\/)deepseek-v3(\.\d+)?$/i.test(id)) {
+      isFree = false;
+      priceIn = 2;
+      priceOut = 8;
+      cacheIn = 0;
+      value = 88;
+      overall = 95;
+      costTag = '收费 · ¥2/¥8';
+      costTone = 'cheap';
+      reason = '外译中母语级自然，可用充值余额或赠送金，按量计费';
+    }
+  } else if (provider === 'zhipu') {
+    if (ZHIPU_FREE_RE.test(id)) {
+      isFree = true;
+      priceIn = 0;
+      priceOut = 0;
+      cacheIn = 0;
+      value = 100;
+      overall = Math.min(97, Math.round(natural * 0.58 + value * 0.42));
+      costTag = '官方免费';
+      costTone = 'free';
+      reason = '官方输入输出全免费，插件自动单并发防 429 限流';
+    }
+  } else if (provider === 'deepseek') {
+    if (/^(deepseek-chat|deepseek-flash)$/i.test(id)) {
+      isFree = false;
+      priceIn = 2;
+      priceOut = 8;
+      cacheIn = 0.04;
+      value = 94;
+      overall = 98;
+      costTag = '收费 · 缓存省';
+      costTone = 'cheap';
+      reason = '官方直连母语级自然，支持自动前缀缓存与空闲时段 5 折';
+    }
+  } else if (provider === 'qwen') {
+    if (/^(qwen-flash|qwen3\.5-flash)$/i.test(id)) {
+      isFree = false;
+      priceIn = 0.15;
+      priceOut = 1.5;
+      costTag = '收费 · ¥0.15起';
+      costTone = 'cheap';
+      reason = '百炼白菜价通用快模，新户常含限时体验额度，用完按量计费';
+    }
+  } else {
+    // 自定义第三方网关：除明确带 :free 后缀外绝不虚标免费
+    if (/:free$/i.test(id)) {
+      isFree = true;
+      priceIn = 0;
+      priceOut = 0;
+      costTag = '标注免费';
+      costTone = 'free';
+    } else if (costTone === 'free') {
+      costTone = 'neutral';
+      costTag = '按网关计费';
+    }
   }
-  const value = isLocal ? 96 : 70;
-  const natural = 74;
-  const overall = isLocal ? 82 : 72;
+
   return {
     id,
     overall,
@@ -304,10 +524,16 @@ export function evaluateModelForTranslation(modelId, baseUrl = '') {
     natural,
     score: overall,
     grade: gradeFromScore(overall),
-    costTag: isLocal ? '本机模型' : '通用模型',
-    costTone: isLocal ? 'free' : 'neutral',
-    reason: '平台可用对话模型，可勾选实测翻译手感',
-    recommended: false,
+    costTag,
+    costTone,
+    isFree,
+    isPro: isSiliconPro,
+    priceIn,
+    priceOut,
+    cacheIn,
+    currency,
+    reason,
+    recommended: overall >= 84 && !isSiliconPro,
   };
 }
 
@@ -320,6 +546,18 @@ export function isUsableTranslationModel(modelId) {
 
 function getCachePath() {
   return join(homedir(), '.gemini', 'config', 'agy-thinking', 'translation-cache.json');
+}
+
+function getUsagePath() {
+  return join(homedir(), '.gemini', 'config', 'agy-thinking', 'usage-stats.json');
+}
+
+function estimateTokenCount(text) {
+  const s = String(text || '');
+  if (!s) return 0;
+  const cjk = (s.match(/[\u3400-\u9fff\uf900-\ufaff]/g) || []).length;
+  const rest = Math.max(0, s.length - cjk);
+  return Math.max(1, Math.round(cjk * 1.45 + rest / 3.6));
 }
 
 function hashText(text) {
@@ -443,6 +681,7 @@ export function buildTranslateRequestBody({
   disableTranslatorThinking = true,
   translateStyle = 'natural',
   promptMode = 'full',
+  includeUsage = true,
 }) {
   if (isQwenMtModel(model)) {
     // DashScope qwen-mt 专用翻译接口要求使用 translation_options，不支持 system 角色
@@ -464,12 +703,14 @@ export function buildTranslateRequestBody({
       : promptMode === 'narrative'
         ? `${NARRATIVE_PROMPTS[translateStyle] || NARRATIVE_PROMPTS.natural}\n\n${text}`
         : `把下面的文本翻译成自然口语化的简体中文，避免书面翻译腔，原样保留所有 Markdown 格式、反引号代码、路径和专有名词，不要额外解释。\n${text}`;
-    return {
+    const body = {
       model,
       messages: [{ role: 'user', content: userPrompt }],
       temperature: promptMode === 'full' ? 0.25 : 0.2,
       stream: true,
     };
+    if (includeUsage) body.stream_options = { include_usage: true };
+    return body;
   }
 
   if (promptMode === 'distill') {
@@ -482,6 +723,7 @@ export function buildTranslateRequestBody({
       temperature: 0.2,
       stream: true,
     };
+    if (includeUsage) body.stream_options = { include_usage: true };
     if (disableTranslatorThinking !== false) {
       if (isLocalGatewayUrl(baseUrl)) body.reasoning_effort = 'none';
       else if (supportsZhipuThinkingDisable(baseUrl, model)) body.thinking = { type: 'disabled' };
@@ -501,6 +743,7 @@ export function buildTranslateRequestBody({
     temperature: translateStyle === 'natural' ? 0.3 : 0.2,
     stream: true,
   };
+  if (includeUsage) body.stream_options = { include_usage: true };
 
   if (disableTranslatorThinking !== false) {
     if (isLocalGatewayUrl(baseUrl)) {
@@ -523,6 +766,7 @@ async function streamChatCompletion({
   disableTranslatorThinking,
   translateStyle,
   promptMode = 'full',
+  includeUsage = true,
   onChunk,
   signal,
 }) {
@@ -534,6 +778,7 @@ async function streamChatCompletion({
     disableTranslatorThinking,
     translateStyle,
     promptMode,
+    includeUsage,
   });
   const startedAt = Date.now();
 
@@ -565,6 +810,28 @@ async function streamChatCompletion({
   let lastClean = '';
   let ttftMs = null;
   let sawSseData = false;
+  let usageInfo = null;
+
+  const extractUsage = (parsed) => {
+    const u = parsed?.usage;
+    if (!u || typeof u !== 'object') return;
+    const promptTokens = Number(u.prompt_tokens ?? u.input_tokens ?? 0);
+    const completionTokens = Number(u.completion_tokens ?? u.output_tokens ?? 0);
+    const cachedTokens = Number(
+      u.prompt_cache_hit_tokens ??
+      u.prompt_tokens_details?.cached_tokens ??
+      u.cached_tokens ??
+      0
+    );
+    if (promptTokens > 0 || completionTokens > 0) {
+      usageInfo = {
+        promptTokens: Math.max(0, promptTokens),
+        completionTokens: Math.max(0, completionTokens),
+        cachedTokens: Math.max(0, Math.min(promptTokens, cachedTokens)),
+        estimated: false,
+      };
+    }
+  };
 
   const processLine = (line) => {
     const trimmed = line.trim();
@@ -578,6 +845,7 @@ async function streamChatCompletion({
         const msg = typeof parsed.error === 'string' ? parsed.error : (parsed.error.message || JSON.stringify(parsed.error));
         throw new Error(msg);
       }
+      extractUsage(parsed);
       const delta = parsed?.choices?.[0]?.delta?.content ?? parsed?.choices?.[0]?.message?.content;
       if (typeof delta === 'string' && delta) {
         rawFull += delta;
@@ -625,6 +893,7 @@ async function streamChatCompletion({
         const msg = typeof parsed.error === 'string' ? parsed.error : (parsed.error.message || JSON.stringify(parsed.error));
         throw new Error(msg);
       }
+      extractUsage(parsed);
       const msgContent = parsed?.choices?.[0]?.message?.content;
       if (typeof msgContent === 'string' && msgContent) {
         rawFull += msgContent;
@@ -636,18 +905,30 @@ async function streamChatCompletion({
 
   const finalClean = stripThinkTags(rawFull, true).trim();
   const totalMs = Date.now() - startedAt;
-  return { text: finalClean, ttftMs: ttftMs ?? totalMs, totalMs };
+  if (!usageInfo) {
+    const sysText = Array.isArray(body.messages) ? body.messages.map((m) => m.content || '').join('\n') : String(text || '');
+    usageInfo = {
+      promptTokens: estimateTokenCount(sysText),
+      completionTokens: estimateTokenCount(rawFull || finalClean),
+      cachedTokens: 0,
+      estimated: true,
+    };
+  }
+  return { text: finalClean, ttftMs: ttftMs ?? totalMs, totalMs, usage: usageInfo };
 }
 
 export function createTranslator(getSettings, onProgress) {
   const cachePath = getCachePath();
+  const usagePath = getUsagePath();
   const diskCache = new Map();
+  const livePricingMap = new Map(); // `${provider}:${modelId}` -> { priceIn, priceOut, cacheIn, currency, isFree }
   const liveStates = new Map();
   const distillStates = new Map(); // itemId -> 长思考结束后的整篇去重提炼状态（合并成 3~6 步）
   const fullDetailStates = new Map(); // itemId -> 按需点击「看完整」时生成的全量自然译文状态
   const narrativeStates = new Map(); // itemId -> { sourceHash, sourceLen, text, status, error, model, lastReqAt, inFlight, seq, controller }
   const fullRequestedIds = new Set(); // 在「分步脉络」模式下用户按需点开「看完整」的 itemId
   const modelCooldownUntil = new Map();
+  const rateLimitHits = new Map(); // model -> consecutive 429 count
   const segmentMap = new Map();
   const latestItemSnapshots = new Map(); // itemId -> { rawText, fullKey, style, isGenerating, paragraphs }
   const itemEpochs = new Map(); // itemId -> number
@@ -655,6 +936,135 @@ export function createTranslator(getSettings, onProgress) {
   let globalEpoch = 0;
   let cacheEpoch = 0;
   let lastActiveModel = '';
+
+  const emptyUsageBucket = () => ({
+    requests: 0,
+    freeRequests: 0,
+    cacheHits: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedInputTokens: 0,
+    costCny: 0,
+    costUsd: 0,
+    hasEstimated: false,
+    updatedAt: 0,
+  });
+  const sessionUsage = emptyUsageBucket();
+  let totalUsage = emptyUsageBucket();
+  let byModelUsage = {};
+
+  try {
+    const rawUsage = JSON.parse(readFileSync(usagePath, 'utf-8'));
+    if (rawUsage && typeof rawUsage === 'object') {
+      if (rawUsage.total && typeof rawUsage.total === 'object') {
+        totalUsage = { ...emptyUsageBucket(), ...rawUsage.total };
+      }
+      if (rawUsage.byModel && typeof rawUsage.byModel === 'object') {
+        byModelUsage = rawUsage.byModel;
+      }
+    }
+  } catch {}
+
+  let usageSaveTimer = null;
+  let usageDirty = false;
+  const flushUsageNow = () => {
+    clearTimeout(usageSaveTimer);
+    usageSaveTimer = null;
+    if (!usageDirty) return;
+    usageDirty = false;
+    const tmp = `${usagePath}.${process.pid}.${Date.now()}.tmp`;
+    try {
+      mkdirSync(dirname(usagePath), { recursive: true });
+      const serialized = JSON.stringify({ total: totalUsage, byModel: byModelUsage }, null, 2);
+      try {
+        writeFileSync(tmp, serialized, 'utf-8');
+        renameSync(tmp, usagePath);
+      } catch {
+        try { unlinkSync(tmp); } catch {}
+        writeFileSync(usagePath, serialized, 'utf-8');
+      }
+    } catch {
+      try { unlinkSync(tmp); } catch {}
+    }
+  };
+  const scheduleUsageSave = () => {
+    usageDirty = true;
+    if (usageSaveTimer) return;
+    usageSaveTimer = setTimeout(flushUsageNow, 1800);
+  };
+
+  const recordUsage = (baseUrl, model, usage) => {
+    if (!usage) return;
+    const provider = detectProviderKey(baseUrl);
+    const livePrice = livePricingMap.get(`${provider}:${model}`);
+    const evalInfo = livePrice || evaluateModelForTranslation(model, baseUrl);
+    const inTok = Math.max(0, Number(usage.promptTokens || 0));
+    const outTok = Math.max(0, Number(usage.completionTokens || 0));
+    const cachedTok = Math.max(0, Math.min(inTok, Number(usage.cachedTokens || 0)));
+    const uncachedIn = Math.max(0, inTok - cachedTok);
+    const isFree = Boolean(evalInfo.isFree);
+    const pIn = isFree ? 0 : Number(evalInfo.priceIn || 0);
+    const pOut = isFree ? 0 : Number(evalInfo.priceOut || 0);
+    const pCache = isFree ? 0 : (Number(evalInfo.cacheIn || 0) || pIn * 0.2);
+    const cost = isFree ? 0 : ((uncachedIn * pIn + cachedTok * pCache + outTok * pOut) / 1e6);
+    const isUsd = evalInfo.currency === 'USD';
+    const now = Date.now();
+
+    for (const bucket of [sessionUsage, totalUsage]) {
+      bucket.requests += 1;
+      if (isFree) bucket.freeRequests += 1;
+      bucket.inputTokens += inTok;
+      bucket.outputTokens += outTok;
+      bucket.cachedInputTokens += cachedTok;
+      if (isUsd) bucket.costUsd += cost;
+      else bucket.costCny += cost;
+      if (usage.estimated) bucket.hasEstimated = true;
+      bucket.updatedAt = now;
+    }
+
+    const mKey = `${provider}:${model}`;
+    const prevM = byModelUsage[mKey] || {
+      provider,
+      model,
+      isFree,
+      currency: isUsd ? 'USD' : 'CNY',
+      requests: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cost: 0,
+    };
+    prevM.requests += 1;
+    prevM.inputTokens += inTok;
+    prevM.outputTokens += outTok;
+    prevM.cost += cost;
+    prevM.isFree = isFree;
+    byModelUsage[mKey] = prevM;
+    scheduleUsageSave();
+  };
+
+  const recordCacheHit = () => {
+    sessionUsage.cacheHits += 1;
+    totalUsage.cacheHits += 1;
+    totalUsage.updatedAt = Date.now();
+    scheduleUsageSave();
+  };
+
+  const getUsageSummary = () => ({
+    session: { ...sessionUsage },
+    total: { ...totalUsage },
+    byModel: Object.values(byModelUsage)
+      .sort((a, b) => (b.cost - a.cost) || (b.requests - a.requests))
+      .slice(0, 8),
+  });
+
+  const resetUsageStats = () => {
+    Object.assign(sessionUsage, emptyUsageBucket());
+    totalUsage = emptyUsageBucket();
+    byModelUsage = {};
+    usageDirty = true;
+    flushUsageNow();
+    onProgress?.();
+  };
 
   const MAX_LIVE_ITEMS = 200;
 
@@ -728,9 +1138,17 @@ export function createTranslator(getSettings, onProgress) {
 
   let runningJobs = 0;
   const pendingJobs = [];
+  const getMaxConcurrency = () => {
+    try {
+      const s = getSettings();
+      // 智谱免费 Flash 系列官方并发限制极严（常为 1 并发），自动降为单并发防止 429 限流雪崩
+      if (isZhipuUrl(s?.translateBaseUrl)) return 1;
+    } catch {}
+    return MAX_CONCURRENCY;
+  };
   const enqueueJob = (fn) => {
     const runNext = () => {
-      if (runningJobs >= MAX_CONCURRENCY || pendingJobs.length === 0) return;
+      if (runningJobs >= getMaxConcurrency() || pendingJobs.length === 0) return;
       const next = pendingJobs.shift();
       runningJobs += 1;
       void Promise.resolve()
@@ -844,7 +1262,7 @@ export function createTranslator(getSettings, onProgress) {
         abortErr.name = 'AbortError';
         throw abortErr;
       }
-      const runOnce = async (disableThink) => {
+      const runOnce = async (disableThink, includeUsage = true) => {
         const timeoutSig = AbortSignal.timeout(timeoutMs);
         const signal = externalSignal ? AbortSignal.any([externalSignal, timeoutSig]) : timeoutSig;
         return streamChatCompletion({
@@ -855,6 +1273,7 @@ export function createTranslator(getSettings, onProgress) {
           disableTranslatorThinking: disableThink,
           translateStyle: settings.translateStyle || 'natural',
           promptMode,
+          includeUsage,
           onChunk,
           signal,
         });
@@ -862,31 +1281,43 @@ export function createTranslator(getSettings, onProgress) {
 
       try {
         let res;
+        let wantDisableThink = settings.disableTranslatorThinking !== false;
+        let wantUsage = true;
         try {
-          res = await runOnce(settings.disableTranslatorThinking !== false);
+          res = await runOnce(wantDisableThink, wantUsage);
         } catch (err) {
-          // 兼容部分网关不支持 reasoning_effort / enable_thinking / thinking 参数返回 400/422：自动剥离重试一次
-          if (
-            (err?.status === 400 || err?.status === 422) &&
-            settings.disableTranslatorThinking !== false &&
-            !externalSignal?.aborted &&
-            /(reasoning_effort|enable_thinking|thinking|unknown|unrecognized|unsupported|extra_forbidden|不支持|无效参数|未知参数|非法参数)/i.test(err.responseText || err.message || '')
-          ) {
-            res = await runOnce(false);
+          // 兼容部分网关不支持 reasoning_effort / enable_thinking / thinking / stream_options 返回 400/422：自动剥离重试一次
+          const errStr = err?.responseText || err?.message || '';
+          const isBadParam = (err?.status === 400 || err?.status === 422) && !externalSignal?.aborted;
+          const badUsage = isBadParam && /(stream_options|include_usage)/i.test(errStr);
+          const badThink = isBadParam && wantDisableThink && /(reasoning_effort|enable_thinking|thinking|unknown|unrecognized|unsupported|extra_forbidden|不支持|无效参数|未知参数|非法参数)/i.test(errStr);
+          if (badUsage || badThink) {
+            if (badUsage) wantUsage = false;
+            if (badThink) wantDisableThink = false;
+            res = await runOnce(wantDisableThink, wantUsage);
           } else {
             throw err;
           }
         }
         if (res.text) {
           modelCooldownUntil.delete(model);
+          rateLimitHits.delete(model);
           lastActiveModel = model;
-          return { result: res.text, model, ttftMs: res.ttftMs, totalMs: res.totalMs };
+          recordUsage(settings.translateBaseUrl, model, res.usage);
+          return { result: res.text, model, ttftMs: res.ttftMs, totalMs: res.totalMs, usage: res.usage };
         }
         lastErr = new Error(`模型 ${model} 返回空译文`);
       } catch (err) {
         if (externalSignal?.aborted) throw err;
         lastErr = err;
-        if ([400, 401, 402, 403, 404, 422, 429].includes(err.status)) {
+        if (err.status === 429) {
+          const hits = (rateLimitHits.get(model) || 0) + 1;
+          rateLimitHits.set(model, hits);
+          const cooldownMs = Math.min(90000, hits === 1 ? 15000 : hits === 2 ? 30000 : 60000);
+          modelCooldownUntil.set(model, Date.now() + cooldownMs);
+          continue;
+        }
+        if ([400, 401, 402, 403, 404, 422].includes(err.status)) {
           modelCooldownUntil.set(model, Date.now() + 5 * 60 * 1000);
           continue;
         }
@@ -1169,6 +1600,10 @@ export function createTranslator(getSettings, onProgress) {
 
     const fullCached = diskCache.get(fullKey);
     if (fullCached) {
+      const prevSt = liveStates.get(item.id);
+      if (!prevSt || prevSt.sourceHash !== fullKey || prevSt.status !== 'done') {
+        recordCacheHit();
+      }
       liveStates.set(item.id, {
         sourceHash: fullKey,
         sourceLen: rawText.length,
@@ -1803,11 +2238,12 @@ export function createTranslator(getSettings, onProgress) {
   }
 
   /**
-   * 调用当前网关的 /models 接口，自动识别该 Key 下可用于翻译的对话模型并给出三维评分。
+   * 调用当前网关的 /models 接口（Ollama 兼容 /api/tags 回退），自动识别可用对话模型并按平台精确核定收费/免费与三维评分。
    */
   async function discoverModels(overrideSettings = {}) {
     const saved = getSettings();
     const baseUrl = (overrideSettings.translateBaseUrl || saved.translateBaseUrl || '').trim().replace(/\/+$/, '');
+    const provider = detectProviderKey(baseUrl);
     const sameProvider = normalizeBaseUrl(baseUrl) === normalizeBaseUrl(saved.translateBaseUrl);
     const hasExplicitKey = typeof overrideSettings.translateApiKey === 'string' && overrideSettings.translateApiKey.trim() !== '';
     const apiKey = hasExplicitKey
@@ -1824,19 +2260,59 @@ export function createTranslator(getSettings, onProgress) {
     const headers = { Accept: 'application/json' };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
-    const targetUrl = isSiliconFlowUrl(baseUrl) ? `${baseUrl}/models?type=text` : `${baseUrl}/models`;
-    const res = await fetch(targetUrl, {
-      method: 'GET',
-      headers,
-      signal: AbortSignal.timeout(12000),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      throw new Error(`拉取模型列表失败 (HTTP ${res.status}): ${errText.slice(0, 120)}`);
+    const candidateUrls = [];
+    if (provider === 'siliconflow') {
+      candidateUrls.push(`${baseUrl}/models?type=text&sub_type=chat`, `${baseUrl}/models?type=text`);
+    } else if (provider === 'local') {
+      candidateUrls.push(`${baseUrl}/models`);
+      try {
+        const origin = new URL(baseUrl).origin;
+        candidateUrls.push(`${origin}/v1/models`, `${origin}/api/tags`);
+      } catch {}
+    } else {
+      candidateUrls.push(`${baseUrl}/models`);
     }
 
-    const payload = await res.json();
+    let payload = null;
+    let lastStatus = 0;
+    let lastErrText = '';
+    for (const targetUrl of [...new Set(candidateUrls)]) {
+      try {
+        const res = await fetch(targetUrl, {
+          method: 'GET',
+          headers,
+          signal: AbortSignal.timeout(12000),
+        });
+        if (!res.ok) {
+          lastStatus = res.status;
+          lastErrText = await res.text().catch(() => '');
+          continue;
+        }
+        payload = await res.json();
+        break;
+      } catch (err) {
+        lastErrText = err?.message || String(err);
+      }
+    }
+
+    if (!payload) {
+      if (provider === 'zhipu' && (lastStatus === 404 || lastStatus === 405)) {
+        return {
+          ok: true,
+          baseUrl,
+          provider,
+          fallbackCurated: true,
+          notice: '智谱官方未开放 /models 枚举接口，已保留下方官方核实精选列表（免费 Flash 与付费档可直接勾选）。',
+          totalRaw: 0,
+          count: 0,
+          freeCount: 0,
+          models: [],
+        };
+      }
+      const statusLabel = lastStatus ? ` (HTTP ${lastStatus})` : '';
+      throw new Error(`拉取模型列表失败${statusLabel}: ${lastErrText.slice(0, 120)}`);
+    }
+
     const rawList = Array.isArray(payload?.data)
       ? payload.data
       : Array.isArray(payload?.models)
@@ -1850,16 +2326,110 @@ export function createTranslator(getSettings, onProgress) {
       if (!id || seen.has(id)) continue;
       seen.add(id);
       if (!isUsableTranslationModel(id)) continue;
-      rated.push(evaluateModelForTranslation(id, baseUrl));
+      const evaluated = evaluateModelForTranslation(id, baseUrl, item);
+      livePricingMap.set(`${provider}:${id}`, {
+        priceIn: evaluated.priceIn,
+        priceOut: evaluated.priceOut,
+        cacheIn: evaluated.cacheIn,
+        currency: evaluated.currency,
+        isFree: evaluated.isFree,
+      });
+      rated.push(evaluated);
     }
 
-    rated.sort((a, b) => b.overall - a.overall || a.id.localeCompare(b.id));
+    rated.sort((a, b) => Number(a.isPro) - Number(b.isPro) || b.overall - a.overall || a.id.localeCompare(b.id));
+    const freeCount = rated.filter((m) => m.isFree).length;
     return {
       ok: true,
       baseUrl,
+      provider,
+      fallbackCurated: rated.length === 0,
       totalRaw: rawList.length,
       count: rated.length,
+      freeCount,
       models: rated,
+    };
+  }
+
+  /**
+   * 对官方提供余额查询接口的平台（DeepSeek / 硅基流动 / OpenRouter）直查真实余额。
+   */
+  async function fetchAccountBalance(overrideSettings = {}) {
+    const saved = getSettings();
+    const baseUrl = (overrideSettings.translateBaseUrl || saved.translateBaseUrl || '').trim().replace(/\/+$/, '');
+    const provider = detectProviderKey(baseUrl);
+    const sameProvider = normalizeBaseUrl(baseUrl) === normalizeBaseUrl(saved.translateBaseUrl);
+    const hasExplicitKey = typeof overrideSettings.translateApiKey === 'string' && overrideSettings.translateApiKey.trim() !== '';
+    const apiKey = hasExplicitKey
+      ? overrideSettings.translateApiKey.trim()
+      : (sameProvider ? (saved.translateApiKey || '').trim() : '');
+
+    if (provider === 'local') {
+      return { ok: true, provider, supported: true, summary: '本地模型运行 · 零 API 费用' };
+    }
+    if (!apiKey) {
+      throw new Error('请先填写或保存该服务商的 API Key 再查询余额');
+    }
+
+    const headers = { Accept: 'application/json', Authorization: `Bearer ${apiKey}` };
+    if (provider === 'deepseek') {
+      const origin = new URL(baseUrl).origin;
+      const res = await fetch(`${origin}/user/balance`, { method: 'GET', headers, signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error(`DeepSeek 余额接口返回 HTTP ${res.status}`);
+      const data = await res.json();
+      const info = Array.isArray(data?.balance_infos) ? data.balance_infos[0] : null;
+      if (!info) throw new Error('未解析到 DeepSeek 余额字段');
+      const sym = info.currency === 'USD' ? '$' : '¥';
+      return {
+        ok: true,
+        provider,
+        supported: true,
+        summary: `余额 ${sym}${info.total_balance}（充 ${sym}${info.topped_up_balance} / 赠 ${sym}${info.granted_balance}）`,
+        raw: data,
+      };
+    }
+
+    if (provider === 'siliconflow') {
+      const origin = new URL(baseUrl).origin;
+      const res = await fetch(`${origin}/v1/user/info`, { method: 'GET', headers, signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error(`硅基流动用户信息接口返回 HTTP ${res.status}（请前往官网控制台核对）`);
+      const data = await res.json();
+      const d = data?.data || data || {};
+      const total = d.totalBalance ?? d.balance;
+      if (total === undefined || total === null) throw new Error('接口未返回余额字段，请前往官网控制台核对');
+      const charge = d.chargeBalance ?? '0';
+      const gift = d.balance ?? '0';
+      return {
+        ok: true,
+        provider,
+        supported: true,
+        summary: `总余额 ¥${total}（充 ¥${charge} / 赠 ¥${gift}）`,
+        raw: d,
+      };
+    }
+
+    if (provider === 'openrouter') {
+      const res = await fetch('https://openrouter.ai/api/v1/key', { method: 'GET', headers, signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error(`OpenRouter 额度接口返回 HTTP ${res.status}`);
+      const payload = await res.json();
+      const d = payload?.data || payload || {};
+      const used = Number(d.usage ?? 0);
+      const rem = d.limit_remaining;
+      const remTxt = rem !== null && rem !== undefined ? ` / 剩余 $${Number(rem).toFixed(4)}` : (d.is_free_tier ? ' / 免费档' : '');
+      return {
+        ok: true,
+        provider,
+        supported: true,
+        summary: `Key 已用 $${used.toFixed(4)}${remTxt}`,
+        raw: d,
+      };
+    }
+
+    return {
+      ok: true,
+      provider,
+      supported: false,
+      summary: '该渠道暂不开放单 Key 余额 API，已自动统计本地 Token 与预估花费（可点右侧前往官方账单核对）',
     };
   }
 
@@ -2049,12 +2619,14 @@ export function createTranslator(getSettings, onProgress) {
       activeModel: lastActiveModel,
       inFlightCount: runningJobs,
       queuedCount: pendingJobs.length,
+      usage: getUsageSummary(),
     };
   }
 
   return {
     enrichTurns,
     discoverModels,
+    fetchAccountBalance,
     testConnection,
     resetErrors,
     resetForConfigChange,
@@ -2062,7 +2634,12 @@ export function createTranslator(getSettings, onProgress) {
     requestFullTranslation,
     retryItem,
     clearCache,
-    flushCache: flushCacheNow,
+    flushCache: () => {
+      flushCacheNow();
+      flushUsageNow();
+    },
+    getUsageSummary,
+    resetUsageStats,
     getStats,
   };
 }
