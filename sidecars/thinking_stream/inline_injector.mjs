@@ -1008,6 +1008,107 @@ function getClientBundle(owner) {
         color: var(--xx-fg);
         border-color: rgba(155, 114, 203, 0.28);
       }
+
+      /* ─── 极简无框风格（Minimal Editorial Stream）：去大气泡、去方框、与星轨浑然一体 ─── */
+      .xx-wrap[data-card-style="minimal"] .xx-row[data-open="true"] {
+        background: transparent;
+        border-color: transparent;
+        box-shadow: none;
+        border-radius: 0;
+        margin: 0;
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-row[data-open="true"]::before { display: none; }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row[data-open="true"] > .xx-row-head {
+        min-height: 26px;
+        padding: 3px 4px 4px 4px;
+        background: transparent;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-radius: 6px;
+      }
+      .xx-wrap[data-theme="light"][data-card-style="minimal"] .xx-think-row[data-open="true"] > .xx-row-head {
+        background: transparent;
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row[data-open="true"] > .xx-row-head::after { display: none; }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row[data-open="true"] > .xx-row-head:hover {
+        background: var(--xx-surface-hover);
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row[data-open="true"] .xx-row-title {
+        font-size: 11.8px;
+        letter-spacing: 0.03em;
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row[data-open="true"][data-running="true"] .xx-row-title {
+        background: var(--xx-grad-flow);
+        background-size: 220% auto;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: xx-shimmer 2.2s linear infinite;
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row[data-open="true"] .xx-row-time {
+        background: transparent;
+        padding: 0 2px;
+        color: var(--xx-dim);
+        opacity: 0.72;
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-row-body {
+        padding: 4px 4px 8px 25px;
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-tool-row[data-open="true"] .xx-row-body {
+        padding: 4px 4px 6px 25px;
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-think-md {
+        color: rgba(214, 224, 246, 0.82);
+        line-height: 1.76;
+      }
+      .xx-wrap[data-theme="light"][data-card-style="minimal"] .xx-think-md {
+        color: rgba(34, 46, 72, 0.84);
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-think-md code {
+        border-color: transparent;
+        background: rgba(138, 174, 242, 0.09);
+      }
+      .xx-wrap[data-theme="light"][data-card-style="minimal"] .xx-think-md code {
+        background: rgba(66, 133, 244, 0.075);
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-row-foot {
+        margin-top: 7px;
+        padding-top: 2px;
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-row-foot::before { display: none; }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-foot-meta { gap: 0; }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-chip {
+        background: transparent;
+        padding: 0;
+        color: var(--xx-dim);
+        opacity: 0.78;
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-chip + .xx-chip::before {
+        content: "·";
+        margin: 0 6px;
+        opacity: 0.48;
+        color: var(--xx-dim);
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-chip.live {
+        color: var(--xx-accent-2);
+        opacity: 0.95;
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-chip.err {
+        color: var(--xx-err);
+        opacity: 0.95;
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-foot-actions { opacity: 0.42; }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row:hover .xx-foot-actions,
+      .xx-wrap[data-card-style="minimal"] .xx-think-row:focus-within .xx-foot-actions { opacity: 0.96; }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-btn {
+        padding: 1px 6px;
+        border-radius: 5px;
+        font-size: 10.6px;
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-btn:hover {
+        background: rgba(138, 174, 242, 0.1);
+        border-color: transparent;
+      }
     \`;
 
     function getBubblePromptForResponse(resp) {
@@ -1498,6 +1599,7 @@ function getClientBundle(owner) {
       wrap.dataset.error = String(Boolean(turn.hasError));
       wrap.dataset.compact = 'false';
       wrap.dataset.font = settings.fontSize || 'md';
+      wrap.dataset.cardStyle = settings.cardStyle === 'glass' ? 'glass' : 'minimal';
       wrap.dataset.thinkHeight = 'full';
 
       // 极简 2 档整轮开合：进行中（含步骤空窗期与翻译收尾）强制展开；

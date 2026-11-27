@@ -1693,6 +1693,109 @@
     :root[data-theme="light"] .step-card[data-kind="think"][data-open="true"] > .step-head:hover {
       background: rgba(240, 245, 255, 0.92);
     }
+
+    /* ─── 极简无框风格（Minimal Editorial Stream）：去大气泡、去方框、与星轨浑然一体 ─── */
+    body[data-card-style="minimal"] .step-card[data-open="true"] {
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
+      border-radius: 0;
+      margin: 0;
+    }
+    body[data-card-style="minimal"] .step-card[data-open="true"]::before { display: none; }
+    body[data-card-style="minimal"] .step-card[data-kind="think"][data-open="true"] > .step-head {
+      min-height: 26px;
+      padding: 3px 4px 4px 4px;
+      background: color-mix(in srgb, var(--bg-base) 82%, transparent);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-radius: 6px;
+    }
+    body[data-card-style="minimal"] .step-card[data-kind="think"][data-open="true"] > .step-head::after { display: none; }
+    body[data-card-style="minimal"] .step-card[data-kind="think"][data-open="true"] > .step-head:hover {
+      background: var(--bg-card-hover);
+    }
+    body[data-card-style="minimal"] .step-card[data-kind="think"][data-open="true"] .step-kind {
+      font-size: 11.8px;
+      letter-spacing: 0.03em;
+    }
+    body[data-card-style="minimal"] .step-card[data-kind="think"][data-open="true"][data-running="true"] .step-kind {
+      background: linear-gradient(90deg, var(--gem-blue) 0%, var(--gem-purple) 45%, var(--gem-pink) 75%, var(--gem-blue) 100%);
+      background-size: 220% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: shimmer 2.2s linear infinite;
+    }
+    body[data-card-style="minimal"] .step-card[data-kind="think"][data-open="true"] .step-time {
+      background: transparent;
+      padding: 0 2px;
+      color: var(--fg-dim);
+      opacity: 0.72;
+    }
+    body[data-card-style="minimal"] .step-card[data-kind="think"] .step-body {
+      padding: 4px 4px 8px 25px;
+    }
+    body[data-card-style="minimal"] .step-card[data-kind="think"] .think-md {
+      color: rgba(214, 224, 246, 0.82);
+      line-height: 1.76;
+    }
+    :root[data-theme="light"] body[data-card-style="minimal"] .step-card[data-kind="think"] .think-md {
+      color: rgba(34, 46, 72, 0.84);
+    }
+    body[data-card-style="minimal"] .step-card[data-kind="think"] .think-md code {
+      border-color: transparent;
+      background: rgba(138, 174, 242, 0.09);
+    }
+    :root[data-theme="light"] body[data-card-style="minimal"] .step-card[data-kind="think"] .think-md code {
+      background: rgba(66, 133, 244, 0.075);
+    }
+    body[data-card-style="minimal"] .step-card[data-kind="think"] .step-foot {
+      margin-top: 7px;
+      padding-top: 2px;
+    }
+    body[data-card-style="minimal"] .step-card[data-kind="think"] .step-foot::before { display: none; }
+    body[data-card-style="minimal"] .step-card[data-kind="think"] .foot-meta { gap: 0; }
+    body[data-card-style="minimal"] .step-card[data-kind="think"] .chip {
+      background: transparent;
+      padding: 0;
+      color: var(--fg-dim);
+      opacity: 0.78;
+    }
+    body[data-card-style="minimal"] .step-card[data-kind="think"] .chip + .chip::before {
+      content: "·";
+      margin: 0 6px;
+      opacity: 0.48;
+      color: var(--fg-dim);
+    }
+    body[data-card-style="minimal"] .step-card[data-kind="think"] .chip.live {
+      color: var(--gem-pink);
+      opacity: 0.95;
+    }
+    body[data-card-style="minimal"] .step-card[data-kind="think"] .chip.err {
+      color: var(--err-clr);
+      opacity: 0.95;
+    }
+    body[data-card-style="minimal"] .step-card[data-kind="think"] .foot-actions { opacity: 0.42; }
+    body[data-card-style="minimal"] .step-card[data-kind="think"]:hover .foot-actions,
+    body[data-card-style="minimal"] .step-card[data-kind="think"]:focus-within .foot-actions { opacity: 0.96; }
+    body[data-card-style="minimal"] .step-card[data-kind="think"] .copy-btn {
+      padding: 1px 6px;
+      border-radius: 5px;
+      font-size: 10.6px;
+    }
+    body[data-card-style="minimal"] .step-card[data-kind="think"] .copy-btn:hover {
+      background: rgba(138, 174, 242, 0.1);
+      border-color: transparent;
+    }
+    body[data-card-style="minimal"] .expand-full-btn {
+      background: transparent;
+      border-color: rgba(138, 174, 242, 0.18);
+      padding: 1.5px 10px;
+    }
+    body[data-card-style="minimal"] .step-card:not([data-kind="think"])[data-open="true"] .step-body {
+      padding: 4px 4px 6px 25px;
+    }
     .step-card[data-preview="false"] .step-sep,
     .step-card[data-preview="false"] .step-sum { display: none; }
     .step-card[data-streaming="true"] .step-sum {
@@ -1816,6 +1919,14 @@
               <button type="button" class="seg-btn" data-val="sm">小</button>
               <button type="button" class="seg-btn" data-val="md">标准</button>
               <button type="button" class="seg-btn" data-val="lg">大</button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <span class="field-label">思考框风格</span>
+            <div class="seg-group full" id="segCardStyle">
+              <button type="button" class="seg-btn" data-val="minimal">极简无框（流式手记）</button>
+              <button type="button" class="seg-btn" data-val="glass">极光玻璃（卡片）</button>
             </div>
           </div>
         </div>
@@ -2541,12 +2652,14 @@
         }
 
         document.body.dataset.font = settings.fontSize || 'md';
+        document.body.dataset.cardStyle = settings.cardStyle === 'glass' ? 'glass' : 'minimal';
         document.body.dataset.compact = 'false';
         document.body.dataset.thinkHeight = 'full';
 
         setSegmentedActive('segDisplayMode', settings.displayMode || 'zh');
         setSegmentedActive('segTranslateStyle', nextStyle);
         setSegmentedActive('segFontSize', settings.fontSize || 'md');
+        setSegmentedActive('segCardStyle', settings.cardStyle === 'glass' ? 'glass' : 'minimal');
 
         if (!tabInitialized) {
           tabInitialized = true;
@@ -3512,6 +3625,10 @@
       bindSegmented('segFontSize', (val) => {
         document.body.dataset.font = val;
         void saveQuickSetting({ fontSize: val });
+      });
+      bindSegmented('segCardStyle', (val) => {
+        document.body.dataset.cardStyle = val;
+        void saveQuickSetting({ cardStyle: val });
       });
       bindSegmented('segFeedKind', (val) => {
         feedKindFilter = val;

@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   hideSummaryWhenOpen: true,
   smoothStream: true,
   fontSize: 'md', // 'sm' | 'md' | 'lg'
+  cardStyle: 'minimal', // 'minimal'（极简无框）| 'glass'（极光卡片）
   translateEnabled: true,
   summaryEnabled: false, // 分步脉络首条标题即摘要，默认关闭额外摘要请求省额度
   disableTranslatorThinking: true,
@@ -81,6 +82,9 @@ export function validateSettings(raw) {
   }
   if (['sm', 'md', 'lg'].includes(raw.fontSize)) {
     clean.fontSize = raw.fontSize;
+  }
+  if (raw.cardStyle === 'minimal' || raw.cardStyle === 'glass') {
+    clean.cardStyle = raw.cardStyle;
   }
   if (typeof raw.translateBaseUrl === 'string' && raw.translateBaseUrl.trim()) {
     const normalizedUrl = normalizeApiBaseUrl(raw.translateBaseUrl);
