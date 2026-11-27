@@ -84,22 +84,62 @@ function getClientBundle(owner) {
 
     ${SHARED_RENDER_SOURCE}
 
-    function parseOpaqueRgb(bg) {
+    function parseRgba(bg) {
       const m = String(bg || '').match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)(?:,\\s*([\\d.]+))?\\)/i);
       if (!m) return null;
-      if (m[4] !== undefined && Number(m[4]) === 0) return null;
-      return [Number(m[1]), Number(m[2]), Number(m[3])];
+      const a = m[4] === undefined ? 1 : Number(m[4]);
+      return [Number(m[1]), Number(m[2]), Number(m[3]), Number.isFinite(a) ? a : 1];
     }
 
-    function detectTheme() {
-      const rgb =
-        parseOpaqueRgb(getComputedStyle(document.body).backgroundColor) ||
-        parseOpaqueRgb(getComputedStyle(document.documentElement).backgroundColor);
-      if (!rgb) {
-        return window.matchMedia?.('(prefers-color-scheme: light)')?.matches ? 'light' : 'dark';
+    function rgbLuminance(rgb) {
+      return (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+    }
+
+    /**
+     * 沿着实际挂载节点一路向上探测宿主真实背景色与文字色，
+     * 避免 body 背景透明时回退到系统浅色模式，导致暗黑 IDE 中误用深黑文字看不清。
+     */
+    function detectHostAppearance(anchorEl) {
+      let hostBg = null;
+      let el = anchorEl || document.body;
+      while (el && el.nodeType === 1) {
+        const bg = parseRgba(getComputedStyle(el).backgroundColor);
+        if (bg && bg[3] >= 0.45) {
+          hostBg = bg;
+          break;
+        }
+        el = el.parentElement;
       }
-      const lum = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
-      return lum < 0.5 ? 'dark' : 'light';
+      if (!hostBg) {
+        const docBg = parseRgba(getComputedStyle(document.documentElement).backgroundColor);
+        if (docBg && docBg[3] >= 0.45) hostBg = docBg;
+      }
+
+      if (hostBg) {
+        const theme = rgbLuminance(hostBg) < 0.52 ? 'dark' : 'light';
+        return { theme, hostBg };
+      }
+
+      // 背景全透明时，改用锚点真实前景色反推明暗：浅字必暗底，深字必亮底
+      const fgTarget = anchorEl || document.body || document.documentElement;
+      const fg = fgTarget ? parseRgba(getComputedStyle(fgTarget).color) : null;
+      if (fg && fg[3] >= 0.4) {
+        const fgLum = rgbLuminance(fg);
+        if (fgLum > 0.55) return { theme: 'dark', hostBg: null };
+        if (fgLum < 0.45) return { theme: 'light', hostBg: null };
+      }
+
+      const cls = ((document.documentElement.className || '') + ' ' + (document.body?.className || '')).toLowerCase();
+      const dt = (document.documentElement.dataset?.theme || document.body?.dataset?.theme || '').toLowerCase();
+      if (dt.includes('dark') || /\\b(dark|vs-dark|vscode-dark|hc-black)\\b/.test(cls)) {
+        return { theme: 'dark', hostBg: null };
+      }
+      if (dt.includes('light') || /\\b(light|vs|vscode-light|hc-light)\\b/.test(cls)) {
+        return { theme: 'light', hostBg: null };
+      }
+
+      const prefersLight = window.matchMedia?.('(prefers-color-scheme: light)')?.matches;
+      return { theme: prefersLight ? 'light' : 'dark', hostBg: null };
     }
 
     function detectConversationId() {
@@ -136,14 +176,15 @@ function getClientBundle(owner) {
         margin: 4px 0 12px;
         font-family: "PingFang SC", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
         --xx-bg-sticky: #0d111b;
-        --xx-fg: rgba(240, 244, 255, 0.94);
-        --xx-muted: rgba(182, 196, 224, 0.84);
-        --xx-dim: rgba(146, 165, 200, 0.62);
-        --xx-surface: rgba(77, 163, 255, 0.052);
-        --xx-surface-hover: rgba(155, 114, 203, 0.11);
+        --xx-host-bg-translucent: rgba(13, 17, 27, 0.88);
+        --xx-fg: rgba(244, 247, 255, 0.96);
+        --xx-muted: rgba(206, 217, 238, 0.88);
+        --xx-dim: rgba(164, 179, 208, 0.76);
+        --xx-surface: rgba(77, 163, 255, 0.06);
+        --xx-surface-hover: rgba(155, 114, 203, 0.13);
         --xx-card: rgba(14, 19, 34, 0.56);
-        --xx-border: rgba(138, 174, 242, 0.16);
-        --xx-border-strong: rgba(155, 114, 203, 0.44);
+        --xx-border: rgba(138, 174, 242, 0.18);
+        --xx-border-strong: rgba(155, 114, 203, 0.46);
         --xx-line: rgba(138, 174, 242, 0.24);
         --xx-code-bg: rgba(7, 10, 20, 0.44);
         --xx-accent: #4da3ff;
@@ -165,14 +206,15 @@ function getClientBundle(owner) {
       }
       .xx-wrap[data-theme="light"] {
         --xx-bg-sticky: #f6f8fe;
-        --xx-fg: rgba(15, 23, 42, 0.92);
-        --xx-muted: rgba(68, 84, 116, 0.86);
-        --xx-dim: rgba(100, 116, 148, 0.72);
-        --xx-surface: rgba(66, 133, 244, 0.055);
+        --xx-host-bg-translucent: rgba(248, 250, 255, 0.9);
+        --xx-fg: rgba(15, 23, 42, 0.95);
+        --xx-muted: rgba(51, 65, 85, 0.88);
+        --xx-dim: rgba(100, 116, 139, 0.82);
+        --xx-surface: rgba(66, 133, 244, 0.06);
         --xx-surface-hover: rgba(139, 92, 246, 0.10);
-        --xx-card: rgba(255, 255, 255, 0.86);
-        --xx-border: rgba(66, 133, 244, 0.16);
-        --xx-border-strong: rgba(139, 92, 246, 0.42);
+        --xx-card: rgba(255, 255, 255, 0.88);
+        --xx-border: rgba(66, 133, 244, 0.18);
+        --xx-border-strong: rgba(139, 92, 246, 0.44);
         --xx-line: rgba(66, 133, 244, 0.22);
         --xx-code-bg: rgba(66, 133, 244, 0.07);
         --xx-accent: #4285f4;
@@ -1009,7 +1051,49 @@ function getClientBundle(owner) {
         border-color: rgba(155, 114, 203, 0.28);
       }
 
-      /* ─── 极简无框风格（Minimal Editorial Stream）：去大气泡、去方框、与星轨浑然一体 ─── */
+      /* ─── 极简无框风格（Minimal Editorial Stream）：全链路去气泡、融背景、高对比易读 ─── */
+      .xx-wrap[data-card-style="minimal"] .xx-turn-bar {
+        background: transparent;
+        border-color: transparent;
+        box-shadow: none;
+        padding: 3px 8px 3px 4px;
+        border-radius: 8px;
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-turn-bar::after { display: none; }
+      .xx-wrap[data-card-style="minimal"] .xx-turn-bar:not(:disabled):hover {
+        background: var(--xx-surface-hover);
+        border-color: transparent;
+        box-shadow: none;
+      }
+      .xx-wrap[data-card-style="minimal"][data-turn-open="true"] .xx-turn-bar {
+        background: transparent;
+        border-color: transparent;
+      }
+      .xx-wrap[data-card-style="minimal"][data-running="true"] .xx-turn-bar {
+        border-color: transparent;
+        box-shadow: none;
+      }
+
+      /* 工具聚合组：彻底去掉长条圆角气泡框，改为干净的纯文本微交互行 */
+      .xx-wrap[data-card-style="minimal"] .xx-group-head {
+        align-self: flex-start;
+        width: fit-content;
+        padding: 3px 7px 3px 4px;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        background: transparent;
+        color: var(--xx-muted);
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-group-head:hover {
+        color: var(--xx-fg);
+        background: var(--xx-surface-hover);
+        border-color: transparent;
+      }
+      .xx-wrap[data-card-style="minimal"] .xx-group-title {
+        font-weight: 500;
+      }
+
+      /* 单条思考行 & 工具行：全部去方框、去阴影、去气泡 */
       .xx-wrap[data-card-style="minimal"] .xx-row[data-open="true"] {
         background: transparent;
         border-color: transparent;
@@ -1018,24 +1102,25 @@ function getClientBundle(owner) {
         margin: 0;
       }
       .xx-wrap[data-card-style="minimal"] .xx-row[data-open="true"]::before { display: none; }
+      .xx-wrap[data-card-style="minimal"] .xx-row-head {
+        padding: 3px 6px 3px 4px;
+        border-radius: 7px;
+      }
       .xx-wrap[data-card-style="minimal"] .xx-think-row[data-open="true"] > .xx-row-head {
         min-height: 26px;
-        padding: 3px 4px 4px 4px;
-        background: transparent;
+        padding: 3px 6px 4px 4px;
+        background: var(--xx-host-bg-translucent);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
         border-radius: 6px;
-      }
-      .xx-wrap[data-theme="light"][data-card-style="minimal"] .xx-think-row[data-open="true"] > .xx-row-head {
-        background: transparent;
       }
       .xx-wrap[data-card-style="minimal"] .xx-think-row[data-open="true"] > .xx-row-head::after { display: none; }
       .xx-wrap[data-card-style="minimal"] .xx-think-row[data-open="true"] > .xx-row-head:hover {
         background: var(--xx-surface-hover);
       }
       .xx-wrap[data-card-style="minimal"] .xx-think-row[data-open="true"] .xx-row-title {
-        font-size: 11.8px;
-        letter-spacing: 0.03em;
+        font-size: 12px;
+        letter-spacing: 0.02em;
       }
       .xx-wrap[data-card-style="minimal"] .xx-think-row[data-open="true"][data-running="true"] .xx-row-title {
         background: var(--xx-grad-flow);
@@ -1049,64 +1134,60 @@ function getClientBundle(owner) {
         background: transparent;
         padding: 0 2px;
         color: var(--xx-dim);
-        opacity: 0.72;
       }
       .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-row-body {
         padding: 4px 4px 8px 25px;
       }
       .xx-wrap[data-card-style="minimal"] .xx-tool-row[data-open="true"] .xx-row-body {
-        padding: 4px 4px 6px 25px;
+        padding: 4px 4px 8px 25px;
       }
       .xx-wrap[data-card-style="minimal"] .xx-think-md {
-        color: rgba(214, 224, 246, 0.82);
+        color: rgba(232, 239, 252, 0.9);
         line-height: 1.76;
       }
       .xx-wrap[data-theme="light"][data-card-style="minimal"] .xx-think-md {
-        color: rgba(34, 46, 72, 0.84);
+        color: rgba(24, 34, 56, 0.9);
       }
       .xx-wrap[data-card-style="minimal"] .xx-think-md code {
         border-color: transparent;
-        background: rgba(138, 174, 242, 0.09);
+        background: rgba(138, 174, 242, 0.12);
       }
       .xx-wrap[data-theme="light"][data-card-style="minimal"] .xx-think-md code {
-        background: rgba(66, 133, 244, 0.075);
+        background: rgba(66, 133, 244, 0.09);
       }
-      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-row-foot {
+      .xx-wrap[data-card-style="minimal"] .xx-row-foot {
         margin-top: 7px;
         padding-top: 2px;
       }
-      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-row-foot::before { display: none; }
-      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-foot-meta { gap: 0; }
-      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-chip {
+      .xx-wrap[data-card-style="minimal"] .xx-row-foot::before { display: none; }
+      .xx-wrap[data-card-style="minimal"] .xx-foot-meta { gap: 0; }
+      .xx-wrap[data-card-style="minimal"] .xx-chip {
         background: transparent;
         padding: 0;
         color: var(--xx-dim);
-        opacity: 0.78;
       }
-      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-chip + .xx-chip::before {
+      .xx-wrap[data-card-style="minimal"] .xx-chip + .xx-chip::before {
         content: "·";
         margin: 0 6px;
-        opacity: 0.48;
+        opacity: 0.55;
         color: var(--xx-dim);
       }
-      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-chip.live {
+      .xx-wrap[data-card-style="minimal"] .xx-chip.live {
         color: var(--xx-accent-2);
-        opacity: 0.95;
       }
-      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-chip.err {
+      .xx-wrap[data-card-style="minimal"] .xx-chip.err {
         color: var(--xx-err);
-        opacity: 0.95;
       }
-      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-foot-actions { opacity: 0.42; }
-      .xx-wrap[data-card-style="minimal"] .xx-think-row:hover .xx-foot-actions,
-      .xx-wrap[data-card-style="minimal"] .xx-think-row:focus-within .xx-foot-actions { opacity: 0.96; }
-      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-btn {
+      .xx-wrap[data-card-style="minimal"] .xx-foot-actions { opacity: 0.56; }
+      .xx-wrap[data-card-style="minimal"] .xx-row:hover .xx-foot-actions,
+      .xx-wrap[data-card-style="minimal"] .xx-row:focus-within .xx-foot-actions { opacity: 1; }
+      .xx-wrap[data-card-style="minimal"] .xx-btn {
         padding: 1px 6px;
         border-radius: 5px;
-        font-size: 10.6px;
+        font-size: 10.8px;
       }
-      .xx-wrap[data-card-style="minimal"] .xx-think-row .xx-btn:hover {
-        background: rgba(138, 174, 242, 0.1);
+      .xx-wrap[data-card-style="minimal"] .xx-btn:hover {
+        background: rgba(138, 174, 242, 0.12);
         border-color: transparent;
       }
     \`;
@@ -1380,7 +1461,9 @@ function getClientBundle(owner) {
       return rec;
     }
 
-    function renderTurnIntoHost(host, turn, isLastTurn, settings, theme) {
+    function renderTurnIntoHost(host, turn, isLastTurn, settings, appearance) {
+      const theme = typeof appearance === 'string' ? appearance : (appearance?.theme || 'dark');
+      const hostBg = typeof appearance === 'object' ? appearance?.hostBg : null;
       let shadow = host.shadowRoot;
       if (!shadow) {
         shadow = host.attachShadow({ mode: 'open' });
@@ -1595,6 +1678,13 @@ function getClientBundle(owner) {
 
       const turnActive = Boolean(turn.isRunning || isTurnTranslating(turn, settings));
       wrap.dataset.theme = theme;
+      if (hostBg) {
+        wrap.style.setProperty('--xx-host-bg-translucent', 'rgba(' + hostBg[0] + ',' + hostBg[1] + ',' + hostBg[2] + ',0.9)');
+        wrap.style.setProperty('--xx-bg-sticky', 'rgb(' + hostBg[0] + ',' + hostBg[1] + ',' + hostBg[2] + ')');
+      } else {
+        wrap.style.removeProperty('--xx-host-bg-translucent');
+        wrap.style.removeProperty('--xx-bg-sticky');
+      }
       wrap.dataset.running = String(turnActive);
       wrap.dataset.error = String(Boolean(turn.hasError));
       wrap.dataset.compact = 'false';
@@ -2165,7 +2255,7 @@ function getClientBundle(owner) {
       }
       if (responses.length === 0) return { ok: false };
 
-      const theme = detectTheme();
+      const appearance = detectHostAppearance(responses[responses.length - 1] || responses[0]);
       const paired = pairResponsesToTurns(responses, turns);
 
       for (let i = 0; i < paired.length; i++) {
@@ -2183,7 +2273,7 @@ function getClientBundle(owner) {
           resp.prepend(host);
         }
         const lastTurnIndex = turns.length > 0 ? turns[turns.length - 1].turnIndex : -1;
-        renderTurnIntoHost(host, turn, turn.turnIndex === lastTurnIndex, lastSettings, theme);
+        renderTurnIntoHost(host, turn, turn.turnIndex === lastTurnIndex, lastSettings, appearance);
       }
 
       let hostCount = 0;

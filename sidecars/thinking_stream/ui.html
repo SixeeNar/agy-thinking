@@ -1694,7 +1694,39 @@
       background: rgba(240, 245, 255, 0.92);
     }
 
-    /* ─── 极简无框风格（Minimal Editorial Stream）：去大气泡、去方框、与星轨浑然一体 ─── */
+    /* ─── 极简无框风格（Minimal Editorial Stream）：全链路去气泡、融背景、高对比易读 ─── */
+    body[data-card-style="minimal"] .turn-bar {
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
+      padding: 3px 8px 3px 4px;
+      border-radius: 8px;
+    }
+    body[data-card-style="minimal"] .turn-bar::after { display: none; }
+    body[data-card-style="minimal"] .turn-bar:hover {
+      background: var(--bg-card-hover);
+      border-color: transparent;
+      box-shadow: none;
+    }
+    body[data-card-style="minimal"] .turn-block[data-running="true"] .turn-bar {
+      border-color: transparent;
+      box-shadow: none;
+    }
+    body[data-card-style="minimal"] .proc-group-head {
+      align-self: flex-start;
+      width: fit-content;
+      padding: 3px 7px 3px 4px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--fg-muted);
+    }
+    body[data-card-style="minimal"] .proc-group-head:hover {
+      color: var(--fg-base);
+      background: var(--bg-card-hover);
+      border-color: transparent;
+    }
+    body[data-card-style="minimal"] .proc-group-title { font-weight: 500; }
     body[data-card-style="minimal"] .step-card[data-open="true"] {
       background: transparent;
       border-color: transparent;
@@ -1703,12 +1735,16 @@
       margin: 0;
     }
     body[data-card-style="minimal"] .step-card[data-open="true"]::before { display: none; }
+    body[data-card-style="minimal"] .step-head {
+      padding: 3px 6px 3px 4px;
+      border-radius: 7px;
+    }
     body[data-card-style="minimal"] .step-card[data-kind="think"][data-open="true"] > .step-head {
       min-height: 26px;
-      padding: 3px 4px 4px 4px;
-      background: color-mix(in srgb, var(--bg-base) 82%, transparent);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      padding: 3px 6px 4px 4px;
+      background: color-mix(in srgb, var(--bg-base) 88%, transparent);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       border-radius: 6px;
     }
     body[data-card-style="minimal"] .step-card[data-kind="think"][data-open="true"] > .step-head::after { display: none; }
@@ -1716,8 +1752,8 @@
       background: var(--bg-card-hover);
     }
     body[data-card-style="minimal"] .step-card[data-kind="think"][data-open="true"] .step-kind {
-      font-size: 11.8px;
-      letter-spacing: 0.03em;
+      font-size: 12px;
+      letter-spacing: 0.02em;
     }
     body[data-card-style="minimal"] .step-card[data-kind="think"][data-open="true"][data-running="true"] .step-kind {
       background: linear-gradient(90deg, var(--gem-blue) 0%, var(--gem-purple) 45%, var(--gem-pink) 75%, var(--gem-blue) 100%);
@@ -1731,70 +1767,57 @@
       background: transparent;
       padding: 0 2px;
       color: var(--fg-dim);
-      opacity: 0.72;
     }
-    body[data-card-style="minimal"] .step-card[data-kind="think"] .step-body {
+    body[data-card-style="minimal"] .step-card .step-body {
       padding: 4px 4px 8px 25px;
     }
     body[data-card-style="minimal"] .step-card[data-kind="think"] .think-md {
-      color: rgba(214, 224, 246, 0.82);
+      color: var(--fg-base);
+      opacity: 0.9;
       line-height: 1.76;
-    }
-    :root[data-theme="light"] body[data-card-style="minimal"] .step-card[data-kind="think"] .think-md {
-      color: rgba(34, 46, 72, 0.84);
     }
     body[data-card-style="minimal"] .step-card[data-kind="think"] .think-md code {
       border-color: transparent;
-      background: rgba(138, 174, 242, 0.09);
+      background: rgba(138, 174, 242, 0.12);
     }
     :root[data-theme="light"] body[data-card-style="minimal"] .step-card[data-kind="think"] .think-md code {
-      background: rgba(66, 133, 244, 0.075);
+      background: rgba(66, 133, 244, 0.09);
     }
-    body[data-card-style="minimal"] .step-card[data-kind="think"] .step-foot {
+    body[data-card-style="minimal"] .step-foot {
       margin-top: 7px;
       padding-top: 2px;
     }
-    body[data-card-style="minimal"] .step-card[data-kind="think"] .step-foot::before { display: none; }
-    body[data-card-style="minimal"] .step-card[data-kind="think"] .foot-meta { gap: 0; }
-    body[data-card-style="minimal"] .step-card[data-kind="think"] .chip {
+    body[data-card-style="minimal"] .step-foot::before { display: none; }
+    body[data-card-style="minimal"] .foot-meta { gap: 0; }
+    body[data-card-style="minimal"] .chip {
       background: transparent;
       padding: 0;
       color: var(--fg-dim);
-      opacity: 0.78;
     }
-    body[data-card-style="minimal"] .step-card[data-kind="think"] .chip + .chip::before {
+    body[data-card-style="minimal"] .chip + .chip::before {
       content: "·";
       margin: 0 6px;
-      opacity: 0.48;
+      opacity: 0.55;
       color: var(--fg-dim);
     }
-    body[data-card-style="minimal"] .step-card[data-kind="think"] .chip.live {
-      color: var(--gem-pink);
-      opacity: 0.95;
-    }
-    body[data-card-style="minimal"] .step-card[data-kind="think"] .chip.err {
-      color: var(--err-clr);
-      opacity: 0.95;
-    }
-    body[data-card-style="minimal"] .step-card[data-kind="think"] .foot-actions { opacity: 0.42; }
-    body[data-card-style="minimal"] .step-card[data-kind="think"]:hover .foot-actions,
-    body[data-card-style="minimal"] .step-card[data-kind="think"]:focus-within .foot-actions { opacity: 0.96; }
-    body[data-card-style="minimal"] .step-card[data-kind="think"] .copy-btn {
+    body[data-card-style="minimal"] .chip.live { color: var(--gem-pink); }
+    body[data-card-style="minimal"] .chip.err { color: var(--err-clr); }
+    body[data-card-style="minimal"] .foot-actions { opacity: 0.56; }
+    body[data-card-style="minimal"] .step-card:hover .foot-actions,
+    body[data-card-style="minimal"] .step-card:focus-within .foot-actions { opacity: 1; }
+    body[data-card-style="minimal"] .copy-btn {
       padding: 1px 6px;
       border-radius: 5px;
-      font-size: 10.6px;
+      font-size: 10.8px;
     }
-    body[data-card-style="minimal"] .step-card[data-kind="think"] .copy-btn:hover {
-      background: rgba(138, 174, 242, 0.1);
+    body[data-card-style="minimal"] .copy-btn:hover {
+      background: rgba(138, 174, 242, 0.12);
       border-color: transparent;
     }
     body[data-card-style="minimal"] .expand-full-btn {
       background: transparent;
-      border-color: rgba(138, 174, 242, 0.18);
+      border-color: rgba(138, 174, 242, 0.22);
       padding: 1.5px 10px;
-    }
-    body[data-card-style="minimal"] .step-card:not([data-kind="think"])[data-open="true"] .step-body {
-      padding: 4px 4px 6px 25px;
     }
     .step-card[data-preview="false"] .step-sep,
     .step-card[data-preview="false"] .step-sum { display: none; }
@@ -2280,15 +2303,26 @@
       const streamShownMap = new Map();
 
       function syncHostTheme() {
-        const parseBg = (bg) => {
+        const parseRgba = (bg) => {
           const m = String(bg || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/i);
-          if (!m || (m[4] !== undefined && Number(m[4]) === 0)) return null;
-          return [Number(m[1]), Number(m[2]), Number(m[3])];
+          if (!m) return null;
+          const a = m[4] === undefined ? 1 : Number(m[4]);
+          return [Number(m[1]), Number(m[2]), Number(m[3]), Number.isFinite(a) ? a : 1];
         };
-        const rgb = parseBg(getComputedStyle(document.body).backgroundColor) || parseBg(getComputedStyle(document.documentElement).backgroundColor);
-        if (!rgb) return;
-        const lum = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
-        document.documentElement.dataset.theme = lum < 0.5 ? 'dark' : 'light';
+        const lumOf = (rgb) => (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+        const bodyBg = parseRgba(getComputedStyle(document.body).backgroundColor);
+        const docBg = parseRgba(getComputedStyle(document.documentElement).backgroundColor);
+        const bg = (bodyBg && bodyBg[3] >= 0.45) ? bodyBg : ((docBg && docBg[3] >= 0.45) ? docBg : null);
+        if (bg) {
+          document.documentElement.dataset.theme = lumOf(bg) < 0.52 ? 'dark' : 'light';
+          return;
+        }
+        const fg = parseRgba(getComputedStyle(document.body).color);
+        if (fg && fg[3] >= 0.4) {
+          const fgLum = lumOf(fg);
+          if (fgLum > 0.55) { document.documentElement.dataset.theme = 'dark'; return; }
+          if (fgLum < 0.45) { document.documentElement.dataset.theme = 'light'; return; }
+        }
       }
       syncHostTheme();
       try {
