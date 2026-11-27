@@ -207,11 +207,15 @@ async function fetchTrajectoryCached(activeId, options = {}) {
       runtimeStats.lsTrajCalls += 1;
       const data = await callLs('GetCascadeTrajectory', { cascadeId: activeId });
       const steps = Array.isArray(data?.trajectory?.steps) ? data.trajectory.steps : [];
-      const isRunning = steps.some((st) =>
-        st?.status === 'CORTEX_STEP_STATUS_GENERATING' ||
-        st?.status === 'CORTEX_STEP_STATUS_RUNNING' ||
-        st?.status === 'CORTEX_STEP_STATUS_PENDING'
-      );
+      const trajStatus = data?.status || data?.trajectory?.status || '';
+      const isRunning =
+        trajStatus === 'CASCADE_RUN_STATUS_RUNNING' ||
+        steps.some((st) =>
+          st?.status === 'CORTEX_STEP_STATUS_GENERATING' ||
+          st?.status === 'CORTEX_STEP_STATUS_RUNNING' ||
+          st?.status === 'CORTEX_STEP_STATUS_PENDING' ||
+          st?.status === 'CORTEX_STEP_STATUS_WAITING'
+        );
       updateConvActivity(activeId, isRunning);
       // 先删后插实现真正 LRU，确保最新访问的对话排在队尾，避免误删活跃对话或卡住清理循环
       trajectoryCache.delete(activeId);
@@ -277,9 +281,20 @@ async function fetchSnapshot(requestedId = 'auto', hostConvId = DEFAULT_CONV_ID,
     return attachRuntimeMeta(buildTurnsPayload(conversations, '', null, settings));
   }
 
+  const wasActive = activeConvMap.has(activeId);
   const trajectoryData = await fetchTrajectoryCached(activeId, { force: Boolean(options.force) });
-  const payload = buildTurnsPayload(conversations, activeId, trajectoryData, settings);
-  const liveRunning = payload.isGenerating || (payload.turns.length === 0 && payload.activeStatus === 'CASCADE_RUN_STATUS_RUNNING');
+  let payload = buildTurnsPayload(conversations, activeId, trajectoryData, settings);
+
+  // 内嵌模式按 UUID 跳过了会话列表时，若对话疑似刚从运行态结束，强制向 LS 复核一次整体状态，
+  // 防止工具与下一次思考之间的衔接空窗误判为已完成并触发提前收起
+  if (!needList && wasActive && !payload.isGenerating) {
+    try {
+      conversations = await listConversationsCached({ force: true });
+      payload = buildTurnsPayload(conversations, activeId, trajectoryData, settings);
+    } catch {}
+  }
+
+  const liveRunning = payload.isGenerating || payload.activeStatus === 'CASCADE_RUN_STATUS_RUNNING';
   updateConvActivity(activeId, liveRunning);
   translator.enrichTurns(payload.turns, { triggerNew: options.triggerNew !== false });
   return attachRuntimeMeta(payload);

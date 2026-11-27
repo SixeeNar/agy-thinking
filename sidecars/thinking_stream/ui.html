@@ -1056,7 +1056,7 @@
     .turn-block[data-running="true"] .turn-star::before {
       animation: shimmer 2.2s linear infinite;
     }
-    .turn-label { font-weight: 550; white-space: nowrap; }
+    .turn-label { font-weight: 550; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .turn-block[data-running="true"] .turn-label {
       background: linear-gradient(90deg, var(--gem-blue) 0%, var(--gem-purple) 45%, var(--gem-pink) 75%, var(--gem-blue) 100%);
       background-size: 220% auto;
@@ -1852,7 +1852,7 @@
     (function () {
       const {
         escapeHtml, renderMarkdown, renderThinkingSteps, countThinkingSteps, thinkSummary, shortModelName, formatDurationParts,
-        getPresentationPolicy, classifyToolActivity, activityIconKey, buildProcessGroups, formatProcessGroupTitle, ICONS,
+        getPresentationPolicy, classifyToolActivity, activityIconKey, buildProcessGroups, formatProcessGroupTitle, isTurnTranslating, formatTurnBarLabel, ICONS,
       } = window.__agyThinkingShared;
       const params = new URLSearchParams(window.location.search);
       const token = params.get('token') || '';
@@ -2004,6 +2004,18 @@
       const openMap = new Map();
       const userPinnedMap = new Map();
       const turnSettledSet = new Set();
+      const seenActiveTurns = new Set();
+      const pendingFoldTimers = new Map();
+      const AUTO_FOLD_GRACE_MS = 2000;
+      const clearFoldTimer = (turnKey) => {
+        const tid = pendingFoldTimers.get(turnKey);
+        if (tid) clearTimeout(tid);
+        pendingFoldTimers.delete(turnKey);
+      };
+      const clearAllFoldTimers = () => {
+        for (const tid of pendingFoldTimers.values()) clearTimeout(tid);
+        pendingFoldTimers.clear();
+      };
       const rawOverrideMap = new Map();
       const fullDetailMap = new Map();
       const expandedFullMap = new Map();
@@ -2502,21 +2514,8 @@
         bodyEl.classList.toggle('fade-bottom', canDown);
       }
 
-      function renderTurnLabelHtml(turn) {
-        const durNum = turn.isRunning && turn.startedAtMs
-          ? Math.max(1, (Date.now() - turn.startedAtMs) / 1000)
-          : (typeof turn.durationSec === 'number' ? turn.durationSec : null);
-        const parts = typeof durNum === 'number' ? formatDurationParts(durNum, turn.isRunning) : [];
-        const durHtml = parts.map((p) =>
-          p.numeric ? `<span class="turn-num">${escapeHtml(p.text)}</span>` : escapeHtml(p.text)
-        ).join('');
-        if (turn.isRunning) {
-          return durHtml ? `正在深度思考，已用时 ${durHtml} ···` : '正在深度思考 ···';
-        }
-        if (turn.hasError) {
-          return durHtml ? `处理异常，用时 ${durHtml}` : '处理异常';
-        }
-        return durHtml ? `已完成，用时 ${durHtml}` : '已完成';
+      function renderTurnLabelInfo(turn, settings = currentState?.settings) {
+        return formatTurnBarLabel(turn, settings, 'turn-num');
       }
 
       function computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail) {
@@ -2623,27 +2622,51 @@
 
       function resolveTurnOpenState(turnKey, turn, isLast, settings) {
         const policy = getPresentationPolicy(settings);
-        const forceOpen = Boolean(turn.isRunning || searchQuery.trim());
+        const turnActive = Boolean(turn.isRunning || isTurnTranslating(turn, settings));
+        const forceOpen = Boolean(turnActive || searchQuery.trim());
         const canCollapse = !forceOpen && Boolean(turn.hasProcess !== false);
         let open;
         if (forceOpen) {
           open = true;
-          if (turn.isRunning) turnSettledSet.delete(turnKey);
+          if (turnActive) {
+            seenActiveTurns.add(turnKey);
+            clearFoldTimer(turnKey);
+            turnSettledSet.delete(turnKey);
+          }
         } else if (userPinnedMap.get(turnKey)) {
+          clearFoldTimer(turnKey);
           open = openMap.get(turnKey) === true;
         } else if (!policy.foldCompletedTurns || turn.hasError) {
+          clearFoldTimer(turnKey);
           open = true;
           openMap.set(turnKey, true);
           turnSettledSet.delete(turnKey);
         } else {
           if (!turnSettledSet.has(turnKey)) {
-            turnSettledSet.add(turnKey);
-            openMap.set(turnKey, false);
-            resetTurnInnerDisclosures(turnKey);
+            if (seenActiveTurns.has(turnKey)) {
+              openMap.set(turnKey, true);
+              if (!pendingFoldTimers.has(turnKey)) {
+                const tid = setTimeout(() => {
+                  pendingFoldTimers.delete(turnKey);
+                  if (userPinnedMap.get(turnKey) || turnSettledSet.has(turnKey)) return;
+                  const latestTurn = (currentState?.turns || []).find((t) => `${currentState?.activeId}:turn:${t.turnIndex}` === turnKey);
+                  if (latestTurn && (latestTurn.isRunning || isTurnTranslating(latestTurn, currentState?.settings))) return;
+                  turnSettledSet.add(turnKey);
+                  openMap.set(turnKey, false);
+                  resetTurnInnerDisclosures(turnKey);
+                  if (activeTab === 'feed') renderFeed();
+                }, AUTO_FOLD_GRACE_MS);
+                pendingFoldTimers.set(turnKey, tid);
+              }
+            } else {
+              turnSettledSet.add(turnKey);
+              openMap.set(turnKey, false);
+              resetTurnInnerDisclosures(turnKey);
+            }
           }
           open = openMap.get(turnKey) === true;
         }
-        return { open, canCollapse, policy };
+        return { open, canCollapse, policy, turnActive };
       }
 
       function getFilteredTurnEntries(allTurns) {
@@ -2678,6 +2701,8 @@
           openMap.clear();
           userPinnedMap.clear();
           turnSettledSet.clear();
+          seenActiveTurns.clear();
+          clearAllFoldTimers();
           groupFollowMap.clear();
           clearLiveTitleTimers();
           rawOverrideMap.clear();
@@ -2757,7 +2782,7 @@
         for (let i = 0; i < visibleEntries.length; i++) {
           const { turn, items, isLast } = visibleEntries[i];
           const turnKey = `${currentState.activeId}:turn:${turn.turnIndex}`;
-          const { open: turnOpen, canCollapse, policy } = resolveTurnOpenState(turnKey, turn, isLast, settings);
+          const { open: turnOpen, canCollapse, policy, turnActive } = resolveTurnOpenState(turnKey, turn, isLast, settings);
           if (canCollapse) {
             anyCollapsible = true;
             if (!turnOpen) anyRenderedClosed = true;
@@ -2779,7 +2804,7 @@
           }
 
           turnEl._turnData = turn;
-          turnEl.dataset.running = String(Boolean(turn.isRunning));
+          turnEl.dataset.running = String(Boolean(turnActive));
           turnEl.dataset.error = String(Boolean(turn.hasError));
           turnEl.dataset.turnOpen = String(Boolean(turnOpen));
 
@@ -2794,11 +2819,12 @@
           }
 
           const lblEl = turnEl.querySelector('.turn-label');
-          const labelHtml = renderTurnLabelHtml(turn);
-          if (lblEl && lblEl._lastHtml !== labelHtml) {
-            lblEl._lastHtml = labelHtml;
-            lblEl.innerHTML = labelHtml;
+          const labelInfo = renderTurnLabelInfo(turn, settings);
+          if (lblEl && lblEl._lastHtml !== labelInfo.html) {
+            lblEl._lastHtml = labelInfo.html;
+            lblEl.innerHTML = labelInfo.html;
           }
+          if (barBtn && barBtn.title !== labelInfo.title) barBtn.title = labelInfo.title;
 
           const groupsBox = turnEl.querySelector('.turn-groups');
           const groups = buildProcessGroups(items, turn.isRunning, mode, summaryEnabled);
@@ -3700,12 +3726,14 @@
           const turn = turnEl._turnData;
           if (!turn) continue;
           const lblEl = turnEl.querySelector('.turn-label');
+          const barBtn = turnEl.querySelector('.turn-bar');
           if (lblEl) {
-            const nextHtml = renderTurnLabelHtml(turn);
-            if (lblEl._lastHtml !== nextHtml) {
-              lblEl._lastHtml = nextHtml;
-              lblEl.innerHTML = nextHtml;
+            const info = renderTurnLabelInfo(turn, currentState?.settings);
+            if (lblEl._lastHtml !== info.html) {
+              lblEl._lastHtml = info.html;
+              lblEl.innerHTML = info.html;
             }
+            if (barBtn && barBtn.title !== info.title) barBtn.title = info.title;
           }
           for (const cardEl of turnEl.querySelectorAll('.step-card[data-running="true"]')) {
             const item = cardEl._itemData;

@@ -51,6 +51,18 @@ function getClientBundle(owner) {
     const openState = new Map();       // turnKey / turnKey:g:gKey / turnKey:th:id / turnKey:tl:id -> boolean
     const userPinnedSet = new Set();   // 用户手动点击过的 key
     const turnAutoFoldedSet = new Set(); // 已触发过自动折叠的 turnKey
+    const seenActiveTurns = new Set(); // 曾经处于运行/翻译态的 turnKey（用于防误收起冷却确认）
+    const pendingFoldTimers = new Map(); // turnKey -> timeoutId（完成态稳定 2s 后再自动收起）
+    const AUTO_FOLD_GRACE_MS = 2000;
+    const clearFoldTimer = (turnKey) => {
+      const tid = pendingFoldTimers.get(turnKey);
+      if (tid) clearTimeout(tid);
+      pendingFoldTimers.delete(turnKey);
+    };
+    const clearAllFoldTimers = () => {
+      for (const tid of pendingFoldTimers.values()) clearTimeout(tid);
+      pendingFoldTimers.clear();
+    };
     const groupFollowMap = new Map();  // groupOpenKey -> boolean (运行中组独立跟底开关)
     const liveTitleCache = new Map();  // groupOpenKey -> { title, iconKey, activity, committedAt, pending, timer }
     const rawOverrideMap = new Map();
@@ -279,7 +291,7 @@ function getClientBundle(owner) {
         0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
         50% { transform: scale(0.84) rotate(45deg); opacity: 0.72; }
       }
-      .xx-turn-label { font-weight: 550; white-space: nowrap; }
+      .xx-turn-label { font-weight: 550; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
       .xx-turn-num {
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-variant-numeric: tabular-nums;
@@ -971,22 +983,8 @@ function getClientBundle(owner) {
       return paired;
     }
 
-    function renderTurnLabelHtml(turn) {
-      let durNum = turn.durationSec;
-      if (turn.isRunning && turn.startedAtMs) {
-        durNum = Math.max(1, (Date.now() - turn.startedAtMs) / 1000);
-      }
-      const parts = typeof durNum === 'number' ? formatDurationParts(durNum, turn.isRunning) : [];
-      const durHtml = parts.map((p) =>
-        p.numeric ? '<span class="xx-turn-num">' + escapeHtml(p.text) + '</span>' : escapeHtml(p.text)
-      ).join('');
-      if (turn.isRunning) {
-        return durHtml ? ('正在深度思考，已用时 ' + durHtml + ' ···') : '正在深度思考 ···';
-      }
-      if (turn.hasError) {
-        return durHtml ? ('处理异常，用时 ' + durHtml) : '处理异常';
-      }
-      return durHtml ? ('已完成，用时 ' + durHtml) : '已完成';
+    function renderTurnLabelInfo(turn, settings = lastSettings) {
+      return formatTurnBarLabel(turn, settings, 'xx-turn-num');
     }
 
     function buildFootChips(item, running, wantFullDetail) {
@@ -1364,32 +1362,55 @@ function getClientBundle(owner) {
       const bar = shadow.querySelector('.xx-turn-bar');
       const groupsBox = shadow.querySelector('.xx-groups');
 
+      const turnActive = Boolean(turn.isRunning || isTurnTranslating(turn, settings));
       wrap.dataset.theme = theme;
-      wrap.dataset.running = String(Boolean(turn.isRunning));
+      wrap.dataset.running = String(turnActive);
       wrap.dataset.error = String(Boolean(turn.hasError));
       wrap.dataset.compact = 'false';
       wrap.dataset.font = settings.fontSize || 'md';
       wrap.dataset.thinkHeight = 'full';
 
-      // 极简 2 档整轮开合：进行中强制展开；结束后 focus 自动折起、expanded 或有异常默认展开（均支持手动点击开合）
-      const forceOpen = Boolean(turn.isRunning);
+      // 极简 2 档整轮开合：进行中（含步骤空窗期与翻译收尾）强制展开；
+      // 刚结束的活跃轮次需连续稳定 2s 后才自动收起，防止步骤衔接间隙提前闪折
+      const forceOpen = turnActive;
       const canCollapse = !forceOpen && Boolean(turn.hasProcess !== false);
 
       let turnOpen;
       if (forceOpen) {
         turnOpen = true;
+        seenActiveTurns.add(turnKey);
+        clearFoldTimer(turnKey);
         turnAutoFoldedSet.delete(turnKey);
       } else if (userPinnedSet.has(turnKey)) {
+        clearFoldTimer(turnKey);
         turnOpen = openState.get(turnKey) === true;
       } else if (!policy.foldCompletedTurns || turn.hasError) {
+        clearFoldTimer(turnKey);
         turnOpen = true;
         openState.set(turnKey, true);
         turnAutoFoldedSet.delete(turnKey);
       } else {
         if (!turnAutoFoldedSet.has(turnKey)) {
-          turnAutoFoldedSet.add(turnKey);
-          openState.set(turnKey, false);
-          resetTurnInnerDisclosures(turnKey);
+          if (seenActiveTurns.has(turnKey)) {
+            openState.set(turnKey, true);
+            if (!pendingFoldTimers.has(turnKey)) {
+              const tid = setTimeout(() => {
+                pendingFoldTimers.delete(turnKey);
+                if (userPinnedSet.has(turnKey) || turnAutoFoldedSet.has(turnKey)) return;
+                const latestTurn = (lastData?.turns || []).find((t) => ((lastData?.activeId || 'conv') + ':turn:' + t.turnIndex) === turnKey);
+                if (latestTurn && (latestTurn.isRunning || isTurnTranslating(latestTurn, lastSettings))) return;
+                turnAutoFoldedSet.add(turnKey);
+                openState.set(turnKey, false);
+                resetTurnInnerDisclosures(turnKey);
+                renderAll();
+              }, AUTO_FOLD_GRACE_MS);
+              pendingFoldTimers.set(turnKey, tid);
+            }
+          } else {
+            turnAutoFoldedSet.add(turnKey);
+            openState.set(turnKey, false);
+            resetTurnInnerDisclosures(turnKey);
+          }
         }
         turnOpen = openState.get(turnKey) === true;
       }
@@ -1398,11 +1419,12 @@ function getClientBundle(owner) {
       wrap.dataset.turnOpen = String(Boolean(turnOpen));
 
       const labelEl = bar.querySelector('.xx-turn-label');
-      const nextLabelHtml = renderTurnLabelHtml(turn);
-      if (labelEl && labelEl._lastHtml !== nextLabelHtml) {
-        labelEl._lastHtml = nextLabelHtml;
-        labelEl.innerHTML = nextLabelHtml;
+      const labelInfo = renderTurnLabelInfo(turn, settings);
+      if (labelEl && labelEl._lastHtml !== labelInfo.html) {
+        labelEl._lastHtml = labelInfo.html;
+        labelEl.innerHTML = labelInfo.html;
       }
+      if (bar.title !== labelInfo.title) bar.title = labelInfo.title;
 
       const mode = settings.displayMode || 'zh';
       const summaryEnabled = settings.summaryEnabled === true;
@@ -1880,6 +1902,8 @@ function getClientBundle(owner) {
         openState.clear();
         userPinnedSet.clear();
         turnAutoFoldedSet.clear();
+        seenActiveTurns.clear();
+        clearAllFoldTimers();
         groupFollowMap.clear();
         clearLiveTitleTimers();
         rawOverrideMap.clear();
@@ -1985,6 +2009,8 @@ function getClientBundle(owner) {
       openState.clear();
       userPinnedSet.clear();
       turnAutoFoldedSet.clear();
+      seenActiveTurns.clear();
+      clearAllFoldTimers();
       groupFollowMap.clear();
       rawOverrideMap.clear();
       fullDetailMap.clear();
@@ -2001,12 +2027,14 @@ function getClientBundle(owner) {
         const shadow = host.shadowRoot;
         if (!turn || !turn.isRunning || !shadow) continue;
         const labelEl = shadow.querySelector('.xx-turn-label');
+        const barEl = shadow.querySelector('.xx-turn-bar');
         if (labelEl) {
-          const nextHtml = renderTurnLabelHtml(turn);
-          if (labelEl._lastHtml !== nextHtml) {
-            labelEl._lastHtml = nextHtml;
-            labelEl.innerHTML = nextHtml;
+          const info = renderTurnLabelInfo(turn, lastSettings);
+          if (labelEl._lastHtml !== info.html) {
+            labelEl._lastHtml = info.html;
+            labelEl.innerHTML = info.html;
           }
+          if (barEl && barEl.title !== info.title) barEl.title = info.title;
         }
         for (const rowEl of shadow.querySelectorAll('.xx-row[data-running="true"]')) {
           const item = rowEl._thinkItem || rowEl._toolItem;

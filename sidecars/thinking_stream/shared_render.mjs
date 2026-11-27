@@ -586,6 +586,142 @@ function buildProcessGroups(items, turnIsRunning, displayMode, summaryEnabled) {
   return groups;
 }
 
+function clipBarText(raw, maxLen) {
+  const clean = stripSummaryDecor(raw);
+  if (!clean) return '';
+  return clean.length > maxLen ? (clean.slice(0, maxLen - 1).trimEnd() + '…') : clean;
+}
+
+function isTurnTranslating(turn, settings) {
+  if (!turn || settings?.translateEnabled === false || settings?.displayMode === 'raw') return false;
+  const items = Array.isArray(turn.items) ? turn.items : [];
+  return items.some(function (it) {
+    return it && it.kind === 'think' && it.translateStatus === 'translating';
+  });
+}
+
+function formatTurnBarLabel(turn, settings, numClass) {
+  const mode = settings?.displayMode || 'zh';
+  const summaryEnabled = settings?.summaryEnabled === true;
+  const items = Array.isArray(turn?.items)
+    ? turn.items.filter(function (it) { return it && it.kind !== 'reply-boundary'; })
+    : [];
+  const totalSteps = items.length;
+  const translating = isTurnTranslating(turn, settings);
+
+  let durNum = turn?.durationSec;
+  if (turn?.isRunning && turn?.startedAtMs) {
+    durNum = Math.max(1, (Date.now() - turn.startedAtMs) / 1000);
+  }
+  const parts = typeof durNum === 'number' ? formatDurationParts(durNum, Boolean(turn?.isRunning)) : [];
+  const durHtml = parts.map(function (p) {
+    return p.numeric
+      ? ('<span class="' + numClass + '">' + escapeHtml(p.text) + '</span>')
+      : escapeHtml(p.text);
+  }).join('');
+  const durPlain = parts.map(function (p) { return p.text; }).join('');
+
+  function pickThinkSnippet(it, running) {
+    const raw = it.thinking || '';
+    const zh = it.translatedThinking || '';
+    const text = mode !== 'raw'
+      ? ((summaryEnabled && it.narrativeSummary) || zh || raw)
+      : raw;
+    if (!text) return '';
+    const steps = parseThinkingSteps(text);
+    if (steps && steps.length > 0) {
+      const targetStep = running ? steps[steps.length - 1] : steps[0];
+      if (targetStep && targetStep.title && targetStep.title !== '思路概览') {
+        return clipBarText(targetStep.title, 22);
+      }
+    }
+    return clipBarText(thinkSummary(text, running) || firstLine(text), 22);
+  }
+
+  let mainText = '';
+  let fullTitle = '';
+
+  if (turn?.isRunning) {
+    let activeIdx = -1;
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (items[i].kind !== 'think' && items[i].status === 'running') { activeIdx = i; break; }
+    }
+    if (activeIdx === -1) {
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (items[i].kind === 'think' && items[i].status === 'generating') { activeIdx = i; break; }
+      }
+    }
+    if (activeIdx === -1 && translating) {
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (items[i].kind === 'think' && items[i].translateStatus === 'translating') { activeIdx = i; break; }
+      }
+    }
+
+    if (activeIdx !== -1) {
+      const cur = items[activeIdx];
+      const stepNo = activeIdx + 1;
+      if (cur.kind === 'think') {
+        const snip = pickThinkSnippet(cur, true);
+        mainText = snip ? ('步骤 ' + stepNo + ' · 思考：' + snip) : ('步骤 ' + stepNo + ' · 正在深度思考');
+        fullTitle = mainText;
+      } else {
+        const act = classifyToolActivity(cur);
+        const actLabel = STEP_LIVE_LABELS[act] || cur.label || '正在调用工具';
+        const rawDetail = cur.liveDetail || cur.summary || cur.toolName || '';
+        const detail = clipBarText(rawDetail, 22);
+        mainText = detail ? ('步骤 ' + stepNo + ' · ' + actLabel + '：' + detail) : ('步骤 ' + stepNo + ' · ' + actLabel);
+        fullTitle = rawDetail ? ('步骤 ' + stepNo + ' · ' + actLabel + '：' + rawDetail) : ('步骤 ' + stepNo + ' · ' + actLabel);
+      }
+    } else if (totalSteps > 0) {
+      mainText = '已完成 ' + totalSteps + ' 步 · 正在继续思考';
+      fullTitle = mainText;
+    } else {
+      mainText = '正在深度思考';
+      fullTitle = mainText;
+    }
+    const html = durHtml ? (escapeHtml(mainText) + ' · ' + durHtml) : (escapeHtml(mainText) + ' ···');
+    return { html, title: durPlain ? (fullTitle + ' · ' + durPlain) : fullTitle, active: true };
+  }
+
+  if (translating) {
+    const distilling = items.some(function (it) { return it.kind === 'think' && it.translatePhase === 'distilling'; });
+    const phaseTxt = distilling ? '正在整理思路脉络' : '正在同步中文译文';
+    mainText = totalSteps > 0 ? ('共 ' + totalSteps + ' 步 · ' + phaseTxt) : phaseTxt;
+    const html = durHtml ? (escapeHtml(mainText) + ' · ' + durHtml) : escapeHtml(mainText);
+    return { html, title: durPlain ? (mainText + ' · ' + durPlain) : mainText, active: true };
+  }
+
+  if (turn?.hasError) {
+    let errIdx = -1;
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (items[i].status === 'error') { errIdx = i; break; }
+    }
+    if (errIdx !== -1) {
+      const errItem = items[errIdx];
+      mainText = '步骤 ' + (errIdx + 1) + ' 异常（' + (errItem.label || '工具调用') + '）';
+    } else {
+      mainText = totalSteps > 0 ? ('处理异常 · 共 ' + totalSteps + ' 步') : '处理异常';
+    }
+    const html = durHtml ? (escapeHtml(mainText) + '，用时 ' + durHtml) : escapeHtml(mainText);
+    return { html, title: durPlain ? (mainText + '，用时 ' + durPlain) : mainText, active: false };
+  }
+
+  let lastDesc = '';
+  if (totalSteps > 0) {
+    const last = items[totalSteps - 1];
+    if (last.kind === 'think') {
+      lastDesc = pickThinkSnippet(last, false);
+    } else {
+      const act = classifyToolActivity(last);
+      lastDesc = STEP_DONE_LABELS[act] || last.label || '';
+    }
+  }
+  mainText = totalSteps > 0 ? ('已完成 · 共 ' + totalSteps + ' 步') : '已完成';
+  fullTitle = lastDesc ? (mainText + '（最后：' + lastDesc + '）') : mainText;
+  const html = durHtml ? (escapeHtml(mainText) + '，用时 ' + durHtml) : escapeHtml(mainText);
+  return { html, title: durPlain ? (fullTitle + '，用时 ' + durPlain) : fullTitle, active: false };
+}
+
 const ICONS = {
   star: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z"/></svg>',
   think: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M2.5 12h3M18.5 12h3M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>',
@@ -608,5 +744,5 @@ const ICONS = {
 `;
 
 export function buildSharedBrowserScript() {
-  return `(() => {\n${SHARED_RENDER_SOURCE}\nwindow.__agyThinkingShared = { escapeHtml, formatInline, renderMarkdown, parseThinkingSteps, countThinkingSteps, renderThinkingSteps, firstLine, latestCompletedParagraphFirstLine, latestParagraphFirstLine, thinkSummary, shortModelName, formatDurationHuman, formatDurationParts, getPresentationPolicy, classifyToolActivity, activityIconKey, buildProcessGroups, formatProcessGroupTitle, ICONS };\n})();\n`;
+  return `(() => {\n${SHARED_RENDER_SOURCE}\nwindow.__agyThinkingShared = { escapeHtml, formatInline, renderMarkdown, parseThinkingSteps, countThinkingSteps, renderThinkingSteps, firstLine, latestCompletedParagraphFirstLine, latestParagraphFirstLine, thinkSummary, shortModelName, formatDurationHuman, formatDurationParts, getPresentationPolicy, classifyToolActivity, activityIconKey, buildProcessGroups, formatProcessGroupTitle, isTurnTranslating, formatTurnBarLabel, ICONS };\n})();\n`;
 }

@@ -42,7 +42,8 @@ function isRunningStatus(status) {
   return (
     status === 'CORTEX_STEP_STATUS_RUNNING' ||
     status === 'CORTEX_STEP_STATUS_GENERATING' ||
-    status === 'CORTEX_STEP_STATUS_PENDING'
+    status === 'CORTEX_STEP_STATUS_PENDING' ||
+    status === 'CORTEX_STEP_STATUS_WAITING'
   );
 }
 
@@ -412,6 +413,7 @@ export function buildTurnsPayload(conversations, activeId, trajectoryData, optio
     const endMs = turn.completedAtMs;
     turn.thinkCount = thinkCount;
     turn.toolCount = toolCount;
+    turn.stepCount = thinkCount + toolCount;
     turn.hasProcess = thinkCount > 0 || toolCount > 0;
     turn.isRunning = running;
     turn.hasError = hasError;
@@ -424,12 +426,28 @@ export function buildTurnsPayload(conversations, activeId, trajectoryData, optio
   }
 
   const activeMeta = conversations.find((c) => c.id === activeId) || null;
-  const isGenerating = turns.some((t) => t.isRunning);
+  const activeStatus =
+    trajectoryData?.status ||
+    trajectoryData?.trajectory?.status ||
+    activeMeta?.status ||
+    '';
+
+  // 当会话整体仍处于 CASCADE_RUN_STATUS_RUNNING（例如工具刚执行完、下一次思考尚未落盘的空窗期），
+  // 保持最后一轮处于运行态，防止卡片在步骤衔接间隙误判完成并提前自动收起
+  if (activeStatus === 'CASCADE_RUN_STATUS_RUNNING' && turns.length > 0) {
+    const lastTurn = turns[turns.length - 1];
+    if (!lastTurn.isRunning) {
+      lastTurn.isRunning = true;
+      lastTurn.endReason = 'running';
+    }
+  }
+
+  const isGenerating = turns.some((t) => t.isRunning) || activeStatus === 'CASCADE_RUN_STATUS_RUNNING';
 
   return {
     activeId,
     activeTitle: activeMeta?.summary || '未命名对话',
-    activeStatus: activeMeta?.status || '',
+    activeStatus,
     isGenerating,
     conversations: conversations.slice(0, 30),
     turns,
