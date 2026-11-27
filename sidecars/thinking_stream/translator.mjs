@@ -413,7 +413,7 @@ export function stripThinkTags(raw, isFinal = false) {
     }
   }
   out = out.replace(/^(?:<\/think>\s*)+/i, '');
-  if (!isFinal && out.length < '<think>'.length) {
+  if (!isFinal && out.length < '</think>'.length) {
     const lower = out.toLowerCase();
     if ('<think>'.startsWith(lower) || '</think>'.startsWith(lower)) {
       return '';
@@ -1848,7 +1848,11 @@ export function createTranslator(getSettings, onProgress) {
     const settings = { ...saved, ...overrideSettings };
     const sameProvider = normalizeBaseUrl(settings.translateBaseUrl) === normalizeBaseUrl(saved.translateBaseUrl);
     const hasExplicitKey = typeof overrideSettings.translateApiKey === 'string' && overrideSettings.translateApiKey.trim() !== '';
-    if (!sameProvider && !hasExplicitKey) {
+    if (hasExplicitKey) {
+      settings.translateApiKey = overrideSettings.translateApiKey.trim();
+    } else if (sameProvider) {
+      settings.translateApiKey = (saved.translateApiKey || '').trim();
+    } else {
       settings.translateApiKey = '';
     }
     if (!settings.translateApiKey && !isLocalGatewayUrl(settings.translateBaseUrl)) {
@@ -1948,6 +1952,14 @@ export function createTranslator(getSettings, onProgress) {
   function requestFullTranslation(itemId) {
     if (!itemId) return;
     fullRequestedIds.add(itemId);
+    const prev = fullDetailStates.get(itemId);
+    if (prev && (prev.status === 'error' || prev.status === 'no-key')) {
+      const dk = detailTrackKey(itemId);
+      itemEpochs.set(dk, getItemEpoch(dk) + 1);
+      abortItemControllers(dk);
+      fullDetailStates.delete(itemId);
+      modelCooldownUntil.clear();
+    }
     onProgress?.();
   }
 

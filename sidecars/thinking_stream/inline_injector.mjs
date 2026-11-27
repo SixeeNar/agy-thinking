@@ -893,60 +893,80 @@ function getClientBundle(owner) {
       const paired = new Array(responses.length);
       const usedTurnIdx = new Set();
       const activePrefix = (lastData?.activeId || 'conv') + ':turn:';
+      const anchors = [];
 
-      // Pass 1: 优先锁死已挂载过同会话思考卡片的节点（按原 turnIndex 锚定），
+      // Pass 1: 优先锁死已挂载过同会话思考卡片的节点（按原 turnIndex 单调锚定），
       // 防止新发重复短句（如「继续」「好」）时，底部新占位节点抢走上一轮的思考卡
+      let lastAnchorTurn = -1;
       for (let i = 0; i < responses.length; i++) {
         const existingHost = responses[i].querySelector(':scope > .agy-thinking-inline-host');
         const key = existingHost?.dataset?.turnKey || '';
         if (!key.startsWith(activePrefix)) continue;
         const tIdxNum = Number(key.slice(activePrefix.length));
-        const j = turns.findIndex((t, idx) => !usedTurnIdx.has(idx) && t.turnIndex === tIdxNum);
+        const j = turns.findIndex((t, idx) => idx > lastAnchorTurn && !usedTurnIdx.has(idx) && t.turnIndex === tIdxNum);
         if (j !== -1) {
           usedTurnIdx.add(j);
+          lastAnchorTurn = j;
           paired[i] = { resp: responses[i], turn: turns[j] };
+          anchors.push({ r: i, t: j });
         }
       }
 
-      // Pass 2: 对尚未锚定的节点，通过相邻用户气泡文案匹配（自底向上，跳过已锁死的轮次）
-      let cursor = turns.length - 1;
-      for (let i = responses.length - 1; i >= 0; i--) {
-        if (paired[i]) continue;
-        const bubbleTxt = getBubblePromptForResponse(responses[i]);
-        let matchedIdx = -1;
-        if (bubbleTxt) {
-          for (let j = cursor; j >= 0; j--) {
+      // 将未锚定槽位按 Pass 1 锚点切分为严格单调区间 [rStart..rEnd] <-> [tStart..tEnd]，
+      // 杜绝 Pass 2/3 跨越已锚定轮次发生前后互换或底部新占位抢占旧轮次
+      const segments = [];
+      let prevR = -1;
+      let prevT = -1;
+      for (const a of anchors) {
+        segments.push({ rStart: prevR + 1, rEnd: a.r - 1, tStart: prevT + 1, tEnd: a.t - 1 });
+        prevR = a.r;
+        prevT = a.t;
+      }
+      segments.push({ rStart: prevR + 1, rEnd: responses.length - 1, tStart: prevT + 1, tEnd: turns.length - 1 });
+
+      for (const seg of segments) {
+        const rCount = seg.rEnd - seg.rStart + 1;
+        const tCount = seg.tEnd - seg.tStart + 1;
+        if (rCount <= 0) continue;
+
+        // 当段内响应节点多于轨迹轮次（常见于末尾刚挂载尚未落盘的新占位），
+        // 仅允许前 tCount 个槽位参与匹配，多出的尾部新占位一律置 null 避免整列错位
+        const matchEnd = rCount > tCount ? (seg.rStart + Math.max(0, tCount) - 1) : seg.rEnd;
+
+        // Pass 2: 区间内按相邻用户气泡文案自底向上单调匹配
+        let cursor = seg.tEnd;
+        for (let i = matchEnd; i >= seg.rStart; i--) {
+          if (paired[i] || cursor < seg.tStart) continue;
+          const bubbleTxt = getBubblePromptForResponse(responses[i]);
+          if (!bubbleTxt) continue;
+          for (let j = cursor; j >= seg.tStart; j--) {
             if (usedTurnIdx.has(j)) continue;
             if (isPromptMatch(turns[j].prompt, bubbleTxt)) {
-              matchedIdx = j;
+              usedTurnIdx.add(j);
+              paired[i] = { resp: responses[i], turn: turns[j] };
               cursor = j - 1;
               break;
             }
           }
         }
-        if (matchedIdx !== -1) {
-          usedTurnIdx.add(matchedIdx);
-          paired[i] = { resp: responses[i], turn: turns[matchedIdx] };
-        }
-      }
 
-      // Pass 3: 剩余未匹配槽位一律「从前往后」顺序对齐；
-      // 新发消息瞬间常出现 responses.length > turns.length（新回复占位已挂载，LS 轨迹尚未落盘），
-      // 严禁倒序把上一轮思考塞到最新的空白回复位上造成闪现！
-      let fwdCursor = 0;
-      for (let i = 0; i < responses.length; i++) {
-        if (paired[i]) continue;
-        if (responses.length > turns.length && i >= turns.length) {
-          paired[i] = { resp: responses[i], turn: null };
-          continue;
+        // Pass 3: 区间内剩余未匹配槽位按正序填齐，超额尾部新占位保持 turn: null
+        let fwdCursor = seg.tStart;
+        for (let i = seg.rStart; i <= seg.rEnd; i++) {
+          if (paired[i]) continue;
+          if (i > matchEnd) {
+            paired[i] = { resp: responses[i], turn: null };
+            continue;
+          }
+          const directIdx = seg.tStart + (i - seg.rStart);
+          let fallbackIdx = directIdx <= seg.tEnd && !usedTurnIdx.has(directIdx) ? directIdx : -1;
+          if (fallbackIdx === -1) {
+            while (fwdCursor <= seg.tEnd && usedTurnIdx.has(fwdCursor)) fwdCursor++;
+            if (fwdCursor <= seg.tEnd) fallbackIdx = fwdCursor++;
+          }
+          if (fallbackIdx !== -1) usedTurnIdx.add(fallbackIdx);
+          paired[i] = { resp: responses[i], turn: fallbackIdx !== -1 ? turns[fallbackIdx] : null };
         }
-        let fallbackIdx = !usedTurnIdx.has(i) && i < turns.length ? i : -1;
-        if (fallbackIdx === -1) {
-          while (fwdCursor < turns.length && usedTurnIdx.has(fwdCursor)) fwdCursor++;
-          if (fwdCursor < turns.length) fallbackIdx = fwdCursor++;
-        }
-        if (fallbackIdx !== -1) usedTurnIdx.add(fallbackIdx);
-        paired[i] = { resp: responses[i], turn: fallbackIdx !== -1 ? turns[fallbackIdx] : null };
       }
       return paired;
     }
@@ -1035,15 +1055,18 @@ function getClientBundle(owner) {
       }
     }
 
-    function computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled) {
+    function computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail) {
       if (effectiveMode !== 'raw' && summaryEnabled && item.narrativeSummary) {
         return item.narrativeSummary.replace(/\\*\\*/g, '').replace(/\\s+/g, ' ').trim();
       }
-      return thinkSummary(displayText || item.translatedThinking || item.thinking || '', isStreamingThink);
+      const fallbackText = effectiveMode === 'raw'
+        ? (item.thinking || '')
+        : ((wantFullDetail ? (item.fullTranslatedThinking || item.translatedThinking) : item.translatedThinking) || item.thinking || '');
+      return thinkSummary(displayText || fallbackText, isStreamingThink);
     }
 
     function updateThinkRowStreamDom(rowEl, displayText, item, effectiveMode, running, isStreamingThink, summaryEnabled, policy, useStepRender, wantFullDetail) {
-      const sumText = computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled);
+      const sumText = computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail);
       const showPreview = Boolean(sumText) && (isStreamingThink || policy.settledReasoningPreview);
       rowEl.dataset.preview = String(showPreview);
       const sumEl = rowEl.querySelector('.xx-row-sum');
@@ -1395,6 +1418,8 @@ function getClientBundle(owner) {
       }
 
       const nextGroupEls = [];
+      const activeLiveKeys = new Set();
+      const pendingMemberRenderers = [];
       let needsStreamMore = false;
 
       for (const group of groups) {
@@ -1426,6 +1451,7 @@ function getClientBundle(owner) {
         }
 
         const isLiveGroup = !group.closed;
+        if (isLiveGroup) activeLiveKeys.add(groupOpenKey);
         const groupOpen = !isGrouped || openState.get(groupOpenKey) === true;
         grpEl.dataset.grouped = String(isGrouped);
         grpEl.dataset.groupOpen = String(groupOpen);
@@ -1552,7 +1578,7 @@ function getClientBundle(owner) {
                 displayText = rec.text.slice(0, Math.min(rec.shownLen, rec.text.length));
               }
 
-              const sumText = computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled);
+              const sumText = computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail);
               const showPreview = Boolean(sumText) && (isStreamingThink || policy.settledReasoningPreview);
 
               rowEl.dataset.open = String(rowOpen);
@@ -1595,7 +1621,7 @@ function getClientBundle(owner) {
                   ? liveRec.text.slice(0, Math.min(liveRec.shownLen, liveRec.text.length))
                   : targetText;
                 const curStreaming = isStreamingThink || Boolean(liveRec && liveRec.shownLen < liveRec.text.length);
-                const bodySig = curDisplayText.length + ':' + curDisplayText.slice(-24) + '|' + rawText.length + '|' + effectiveMode + '|' + wantFullDetail + '|' + useStepRender + '|' + isBriefThink + '|' + (item.translateStatus || '') + '|' + (item.translatePhase || '') + '|' + (item.fullTranslateStatus || '') + '|' + (item.fullTranslateError || '') + '|' + (item.translateModel || '') + '|' + (item.translateError || '') + '|' + curStreaming + '|' + (settings.thinkHeightMode || 'full') + '|' + (item.thinkingTokens || 0) + '|' + (expandedFullMap.get(item.id) === true);
+                const bodySig = curDisplayText.length + ':' + curDisplayText.slice(-24) + '|' + rawText.length + '|' + effectiveMode + '|' + wantFullDetail + '|' + useStepRender + '|' + isBriefThink + '|' + (item.translateStatus || '') + '|' + (item.translatePhase || '') + '|' + (item.fullTranslateStatus || '') + '|' + (item.fullTranslateError || '') + '|' + (item.translateModel || '') + '|' + (item.translateError || '') + '|' + running + '|' + curStreaming + '|' + (settings.thinkHeightMode || 'full') + '|' + (item.thinkingTokens || 0) + '|' + (expandedFullMap.get(item.id) === true);
                 if (rowEl.dataset.bodySig === bodySig) return;
                 rowEl.dataset.bodySig = bodySig;
 
@@ -1628,7 +1654,7 @@ function getClientBundle(owner) {
 
                 const isFullNow = rowEl.dataset.full === 'true';
                 const canRetry = Boolean(settings.translateEnabled !== false && item.translateStatus !== 'off' && item.translateStatus !== 'no-key' && item.translateModel !== 'native-zh');
-                const detailBtn = !isStreamingThink && isStepsStyle && !isBriefThink && effectiveMode !== 'raw' && zhFull && item.translateModel !== 'native-zh'
+                const detailBtn = (wantFullDetail || !isStreamingThink) && isStepsStyle && !isBriefThink && effectiveMode !== 'raw' && zhFull && item.translateModel !== 'native-zh'
                   ? '<button class="xx-btn xx-toggle-detail" type="button">' + (wantFullDetail ? '看脉络' : '看完整') + '</button>'
                   : '';
                 const langBtn = zhFull && zhFull !== rawText
@@ -1648,7 +1674,6 @@ function getClientBundle(owner) {
               };
 
               rowEl._renderThinkBody = renderThinkBody;
-              if (rowOpen) renderThinkBody();
               nextRowEls.push(rowEl);
             } else {
               // 单条工具行（DSH 默认收起，点击展开参数/命令详情）
@@ -1731,7 +1756,6 @@ function getClientBundle(owner) {
               };
 
               rowEl._renderToolBody = renderToolBody;
-              if (rowOpen) renderToolBody();
               nextRowEls.push(rowEl);
             }
           }
@@ -1739,6 +1763,26 @@ function getClientBundle(owner) {
           const curRowEls = Array.from(bodyEl.children);
           const sameRows = curRowEls.length === nextRowEls.length && curRowEls.every((el, idx) => el === nextRowEls[idx]);
           if (!sameRows) bodyEl.replaceChildren(...nextRowEls);
+
+          // 节点已挂入真实 DOM 后再渲染正文与测量高度，避免游离态 clientHeight/scrollHeight 恒为 0 导致「展开全文」失效
+          const needDeferredMeasure = [];
+          for (const rowEl of nextRowEls) {
+            if (rowEl.dataset.open !== 'true') continue;
+            if (rowEl._renderThinkBody) {
+              rowEl._renderThinkBody();
+              const mdEl = rowEl.querySelector('.xx-think-md');
+              if (mdEl && mdEl.clientHeight < 40) needDeferredMeasure.push([rowEl, mdEl]);
+            } else if (rowEl._renderToolBody) {
+              rowEl._renderToolBody();
+            }
+          }
+          if (needDeferredMeasure.length > 0) {
+            setTimeout(() => {
+              for (const [rEl, mEl] of needDeferredMeasure) {
+                if (rEl.isConnected && rEl.dataset.open === 'true') syncThinkOverflow(rEl, mEl);
+              }
+            }, 220);
+          }
 
           const isGroupedNow = grpEl.dataset.grouped === 'true';
           const isGroupOpenNow = grpEl.dataset.groupOpen === 'true';
@@ -1755,13 +1799,24 @@ function getClientBundle(owner) {
         };
 
         grpEl._renderMembers = renderMembers;
-        if (turnOpen && groupOpen) renderMembers();
+        if (turnOpen && groupOpen) pendingMemberRenderers.push(renderMembers);
         nextGroupEls.push(grpEl);
+      }
+
+      // 清理该轮次因单个工具升级成连续工具胶囊（tl: -> tc:）而废弃的 liveTitleCache 条目
+      const turnGroupPrefix = turnKey + ':g:';
+      for (const [k, rec] of liveTitleCache.entries()) {
+        if (k.startsWith(turnGroupPrefix) && !activeLiveKeys.has(k)) {
+          if (rec?.timer) clearTimeout(rec.timer);
+          liveTitleCache.delete(k);
+        }
       }
 
       const curGroups = Array.from(groupsBox.children);
       const sameGroups = curGroups.length === nextGroupEls.length && curGroups.every((el, idx) => el === nextGroupEls[idx]);
       if (!sameGroups) groupsBox.replaceChildren(...nextGroupEls);
+
+      for (const runMembers of pendingMemberRenderers) runMembers();
 
       if (needsStreamMore) scheduleStreamTick();
     }
@@ -1785,7 +1840,11 @@ function getClientBundle(owner) {
         }
         lastStreamTickAt = ts;
         let hasMore = false;
-        for (const rec of streamShownMap.values()) {
+        for (const [itemId, rec] of streamShownMap.entries()) {
+          if (rec.rowEl && !rec.rowEl.isConnected) {
+            streamShownMap.delete(itemId);
+            continue;
+          }
           if (rec.shownLen < rec.text.length) {
             const delta = rec.text.length - rec.shownLen;
             const step = Math.max(2, Math.min(12, Math.ceil(delta / 5)));
@@ -2005,19 +2064,25 @@ export function startInlineInjector(
 
   const connect = async (target) => {
     const ws = new WebSocket(target.webSocketDebuggerUrl);
-    const entry = { ws, pending: new Map(), nextId: 1, lastSig: '', lastConvId: '', lastResponseCount: -1, lastHostCount: -1, visible: true };
+    const entry = { id: target.id, ws, pending: new Map(), nextId: 1, lastSig: '', lastConvId: '', lastResponseCount: -1, lastHostCount: -1, visible: true };
     await new Promise((resolve, reject) => {
+      let settled = false;
       const fail = (msg) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(t);
         retire(entry, target.id);
         reject(new Error(msg));
       };
       const t = setTimeout(() => fail('ws timeout'), 3000);
       ws.onopen = () => {
+        if (settled) return;
+        settled = true;
         clearTimeout(t);
         resolve();
       };
       ws.onerror = () => fail('ws error');
+      ws.onclose = () => fail('ws closed');
     });
     if (stopped) {
       retire(entry, target.id);
@@ -2034,20 +2099,35 @@ export function startInlineInjector(
       } catch {}
     };
     ws.onclose = () => retire(entry, target.id);
+    ws.onerror = () => retire(entry, target.id);
     sockets.set(target.id, entry);
     return entry;
   };
 
-  const evaluate = (entry, expression) =>
+  const evaluate = (entry, expression, opts = {}) =>
     new Promise((resolve) => {
-      if (entry.ws.readyState !== 1) return resolve(undefined);
+      const retireBad = () => {
+        if (opts.retireOnFail !== false && !entry.closed) {
+          retire(entry, entry.id);
+          lastListAt = 0;
+        }
+      };
+      if (entry.closed || entry.ws.readyState !== 1) {
+        retireBad();
+        return resolve(undefined);
+      }
       const id = entry.nextId++;
       const t = setTimeout(() => {
         entry.pending.delete(id);
+        retireBad();
         resolve(undefined);
       }, 3000);
       entry.pending.set(id, (msg) => {
         clearTimeout(t);
+        if (!msg || msg.error) {
+          retireBad();
+          return resolve(undefined);
+        }
         resolve(msg?.result?.result?.value);
       });
       try {
@@ -2061,9 +2141,16 @@ export function startInlineInjector(
       } catch {
         clearTimeout(t);
         entry.pending.delete(id);
+        retireBad();
         resolve(undefined);
       }
     });
+
+  const retireAllSockets = () => {
+    for (const [id, entry] of [...sockets]) {
+      retire(entry, id);
+    }
+  };
 
   const listPages = async (force = false) => {
     if (typeof WebSocket !== 'function') {
@@ -2076,6 +2163,9 @@ export function startInlineInjector(
       port = readFileSync(PORT_FILE, 'utf-8').split(/\r?\n/)[0].trim();
     } catch {
       cdpState = 'missing';
+      cachedPages = [];
+      lastListAt = 0;
+      retireAllSockets();
       return [];
     }
     try {
@@ -2100,6 +2190,9 @@ export function startInlineInjector(
       return cachedPages;
     } catch {
       cdpState = 'unreachable';
+      cachedPages = [];
+      lastListAt = 0;
+      retireAllSockets();
       return [];
     }
   };

@@ -31,6 +31,7 @@ let isPolling = false;
 let pendingPollDelay = null;
 let cachedBroadcastPending = false;
 let cachedBroadcastTriggerNew = false;
+let settingsVersion = 0;
 
 // ─── 单飞 + TTL 缓存层：彻底消灭高频重复调用 GetAllCascadeTrajectories / GetCascadeTrajectory ───
 const runtimeStats = {
@@ -417,10 +418,6 @@ async function pollAndBroadcast() {
 
   let anyChanged = false;
   try {
-    const rawSettings = settingsStore.read();
-    const publicSettings = settingsStore.readPublic();
-    const cdpState = inlineInjector?.status?.() ?? 'unknown';
-
     const groups = new Map();
     for (const client of clients) {
       const key = `${client.requestedId}::${client.hostConvId}`;
@@ -432,10 +429,19 @@ async function pollAndBroadcast() {
 
     for (const group of groups.values()) {
       try {
-        const payload = await fetchSnapshot(group.requestedId, group.hostConvId, rawSettings);
-        payload.cdpState = cdpState;
-        payload.settings = publicSettings;
-        const sig = computeSignature(payload, cdpState, publicSettings);
+        const verBefore = settingsVersion;
+        const rawSettings = settingsStore.read();
+        let payload = await fetchSnapshot(group.requestedId, group.hostConvId, rawSettings);
+        // 若在途 LS 轮询期间用户修改了设置，改用最新设置重算纯内存热快照，防止旧设置把界面开关弹回原状
+        if (settingsVersion !== verBefore) {
+          const refreshed = buildCachedSnapshot(group.requestedId, group.hostConvId, settingsStore.read(), false);
+          if (refreshed) payload = refreshed;
+        }
+        const latestPublicSettings = settingsStore.readPublic();
+        const latestCdpState = inlineInjector?.status?.() ?? 'unknown';
+        payload.cdpState = latestCdpState;
+        payload.settings = latestPublicSettings;
+        const sig = computeSignature(payload, latestCdpState, latestPublicSettings);
         let encoded = '';
         for (const client of group.list) {
           client.lastErr = '';
@@ -578,6 +584,7 @@ function startServer() {
             cleanedPatch.translateApiKey = '';
           }
           const next = settingsStore.update(cleanedPatch);
+          settingsVersion += 1;
           const styleChanged = Boolean(cleanedPatch.translateStyle && cleanedPatch.translateStyle !== prev.translateStyle);
           const translateConfigChanged =
             (cleanedPatch.translateBaseUrl !== undefined && cleanedPatch.translateBaseUrl !== prev.translateBaseUrl) ||

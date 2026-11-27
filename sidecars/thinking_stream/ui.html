@@ -36,7 +36,7 @@
       --tool-clr: #e879a8;
       --err-clr: #fb7185;
       --ok-clr: #34d399;
-      --font-sans: var(--font-sans, "PingFang SC", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif);
+      --ui-font-sans: var(--font-sans, "PingFang SC", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif);
       --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       --shadow-card: 0 6px 22px -10px rgba(3, 7, 18, 0.65);
     }
@@ -114,7 +114,7 @@
       background-color: var(--bg-base);
       background-image: var(--bg-mesh);
       color: var(--fg-base);
-      font-family: var(--font-sans);
+      font-family: var(--ui-font-sans);
       font-size: 13px;
       line-height: 1.56;
       -webkit-font-smoothing: antialiased;
@@ -1086,7 +1086,7 @@
       transition: grid-template-rows 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
     }
     .turn-block[data-turn-open="true"] .turn-steps-shell { grid-template-rows: 1fr; opacity: 1; }
-    .turn-steps-inner { overflow: hidden; }
+    .turn-steps-inner { overflow: clip; }
     @keyframes rail-beam {
       0% { background-position: 0 100%; opacity: 0.25; }
       10% { opacity: 1; }
@@ -1511,7 +1511,7 @@
       grid-template-rows: 1fr;
       opacity: 1;
     }
-    .proc-body-inner { overflow: hidden; }
+    .proc-body-inner { overflow: clip; }
     .proc-body {
       margin-top: 6px;
       padding: 0 4px 4px 2px;
@@ -2038,6 +2038,13 @@
         return token ? `${path}?token=${encodeURIComponent(token)}` : path;
       }
 
+      async function getJson(path) {
+        const res = await fetch(apiUrl(path), { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+      }
+
       async function postJson(path, body = {}) {
         const res = await fetch(apiUrl(path), {
           method: 'POST',
@@ -2201,6 +2208,7 @@
       }
 
       async function runDiscoverModels(silent = false) {
+        clearTimeout(autoDetectTimer);
         const baseUrl = optBaseUrl.value.trim();
         const rawKey = optApiKey.value.trim();
         const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(baseUrl);
@@ -2236,7 +2244,7 @@
           }
           renderModelList();
           const highCount = discoveredModels.filter((m) => scoreOf(m, 'overall') >= 84).length;
-          if (!silent || !testStatus.textContent) {
+          if (!silent) {
             testStatus.className = 'test-status ok';
             testStatus.textContent = `识别完成！该网关可用 ${discoveredModels.length} 个文本模型（${highCount} 个高推荐），可切换「综合 / 性价比 / 自然感」维度挑选。`;
           }
@@ -2511,11 +2519,14 @@
         return durHtml ? `已完成，用时 ${durHtml}` : '已完成';
       }
 
-      function computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled) {
+      function computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail) {
         if (effectiveMode !== 'raw' && summaryEnabled && item.narrativeSummary) {
           return item.narrativeSummary.replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
         }
-        return thinkSummary(displayText || item.translatedThinking || item.thinking || '', isStreamingThink);
+        const fallbackText = effectiveMode === 'raw'
+          ? (item.thinking || '')
+          : ((wantFullDetail ? (item.fullTranslatedThinking || item.translatedThinking) : item.translatedThinking) || item.thinking || '');
+        return thinkSummary(displayText || fallbackText, isStreamingThink);
       }
 
       function updateThinkLiveFade(cardEl, mdEl) {
@@ -2546,7 +2557,7 @@
 
       function updateThinkDom(cardEl, displayText, item, effectiveMode, isStreamingThink, summaryEnabled, policy, useStepRender, wantFullDetail) {
         const sumEl = cardEl.querySelector('.step-sum');
-        const nextSum = computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled);
+        const nextSum = computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail);
         const showPreview = Boolean(nextSum) && (isStreamingThink || policy.settledReasoningPreview);
         cardEl.dataset.preview = String(showPreview);
         if (sumEl && sumEl.textContent !== nextSum) sumEl.textContent = nextSum;
@@ -2737,6 +2748,7 @@
         }
 
         const nextTurnEls = [];
+        const pendingMemberRenderers = [];
         let needsStreamMore = false;
         let anyCollapsible = false;
         let anyRenderedClosed = false;
@@ -2797,6 +2809,7 @@
           }
 
           const nextGroupEls = [];
+          const activeLiveKeys = new Set();
           for (const group of groups) {
             const groupOpenKey = `${turnKey}:g:${group.key}`;
             const isGrouped = !hasSearch && Boolean(group.grouped);
@@ -2824,13 +2837,16 @@
             }
 
             const isLiveGroup = !group.closed;
+            if (isLiveGroup) activeLiveKeys.add(groupOpenKey);
             const groupOpen = !isGrouped || openMap.get(groupOpenKey) === true;
             grpEl.dataset.grouped = String(isGrouped);
             grpEl.dataset.groupOpen = String(groupOpen);
             grpEl.dataset.live = String(isLiveGroup);
 
             const rawTitleInfo = formatProcessGroupTitle(group.summary, group.closed, policy.liveProcessDetail);
-            const stableTitle = resolveStableGroupTitle(groupOpenKey, rawTitleInfo, isLiveGroup, () => renderFeed());
+            const stableTitle = resolveStableGroupTitle(groupOpenKey, rawTitleInfo, isLiveGroup, () => {
+              if (activeTab === 'feed') renderFeed();
+            });
 
             const headBtn = grpEl.querySelector('.proc-group-head');
             const leadBox = headBtn.querySelector('.lead-box');
@@ -2940,7 +2956,7 @@
                 }
 
                 const sum = item.kind === 'think'
-                  ? computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled)
+                  ? computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail)
                   : (item.summary || item.liveDetail || item.toolName || '');
                 const showPreview = item.kind === 'think'
                   ? (Boolean(sum) && (isStreamingThink || policy.settledReasoningPreview))
@@ -3001,7 +3017,7 @@
                     const rendered = renderThinkingSteps(curDisplayText, useStepRender);
                     const mdHtml = `${rendered || '<p>正在酝酿思路…</p>'}${cursor}${extra}`;
                     const chipsHtml = buildChipsHtml(item, running, wantFullDetail);
-                    const detailBtn = !isStreamingThink && isStepsStyle && !isBriefThink && effectiveMode !== 'raw' && zh && item.translateModel !== 'native-zh'
+                    const detailBtn = (wantFullDetail || !isStreamingThink) && isStepsStyle && !isBriefThink && effectiveMode !== 'raw' && zh && item.translateModel !== 'native-zh'
                       ? `<button class="copy-btn" type="button" data-action="toggle-detail" data-key="${escapeHtml(item.id)}">${wantFullDetail ? '看脉络' : '看完整'}</button>`
                       : '';
                     const langBtn = zh && zh !== raw
@@ -3069,13 +3085,31 @@
                 };
 
                 cardEl._renderBody = renderBody;
-                if (stepOpen) renderBody();
                 nextStepEls.push(cardEl);
               }
 
               const curStepEls = Array.from(bodyEl.children);
               const sameSteps = curStepEls.length === nextStepEls.length && curStepEls.every((el, idx) => el === nextStepEls[idx]);
               if (!sameSteps) bodyEl.replaceChildren(...nextStepEls);
+
+              // 节点挂入真实 DOM 后再渲染正文与测高度，避免游离态 clientHeight/scrollHeight 为 0 永久藏掉「展开全文」
+              const needDeferredMeasure = [];
+              for (const cardEl of nextStepEls) {
+                if (cardEl.dataset.open !== 'true') continue;
+                cardEl._renderBody?.();
+                if (cardEl.dataset.kind === 'think') {
+                  const mdEl = cardEl.querySelector('.think-md');
+                  if (mdEl && mdEl.clientHeight < 40) needDeferredMeasure.push([cardEl, mdEl]);
+                }
+              }
+              if (needDeferredMeasure.length > 0) {
+                setTimeout(() => {
+                  if (activeTab !== 'feed') return;
+                  for (const [cEl, mEl] of needDeferredMeasure) {
+                    if (cEl.isConnected && cEl.dataset.open === 'true') syncThinkOverflow(cEl, mEl);
+                  }
+                }, 220);
+              }
 
               const isGroupedNow = grpEl.dataset.grouped === 'true';
               const isGroupOpenNow = grpEl.dataset.groupOpen === 'true';
@@ -3090,8 +3124,16 @@
             };
 
             grpEl._renderMembers = renderMembers;
-            if (turnOpen && groupOpen) renderMembers();
+            if (turnOpen && groupOpen) pendingMemberRenderers.push(renderMembers);
             nextGroupEls.push(grpEl);
+          }
+
+          const turnGroupPrefix = `${turnKey}:g:`;
+          for (const [k, rec] of liveTitleCache.entries()) {
+            if (k.startsWith(turnGroupPrefix) && !activeLiveKeys.has(k)) {
+              if (rec?.timer) clearTimeout(rec.timer);
+              liveTitleCache.delete(k);
+            }
           }
 
           const curGroupEls = Array.from(groupsBox.children);
@@ -3111,6 +3153,8 @@
         const curTurnEls = Array.from(feed.children);
         const sameTurns = curTurnEls.length === nextTurnEls.length && curTurnEls.every((el, idx) => el === nextTurnEls[idx]);
         if (!sameTurns) feed.replaceChildren(...nextTurnEls);
+
+        for (const runMembers of pendingMemberRenderers) runMembers();
 
         if (!anyCollapsible) {
           toggleAllBtn.disabled = true;
@@ -3199,14 +3243,25 @@
 
       // ─── 交互事件绑定 ───
       for (const btn of navTabs) {
-        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        btn.addEventListener('click', () => {
+          tabInitialized = true;
+          switchTab(btn.dataset.tab);
+        });
       }
 
       function saveQuickSetting(patch) {
-        return saveSetting(patch).catch((err) => {
-          testStatus.className = 'test-status err';
-          testStatus.textContent = `保存设置失败：${err?.message || '请检查本地服务状态'}`;
-        });
+        return saveSetting(patch)
+          .then((saved) => {
+            if (!currentState) currentState = { settings: saved, turns: [], conversations: [] };
+            else currentState.settings = saved;
+            hydrateSettingsInputs(saved);
+            return saved;
+          })
+          .catch((err) => {
+            if (currentState?.settings) hydrateSettingsInputs(currentState.settings);
+            testStatus.className = 'test-status err';
+            testStatus.textContent = `保存设置失败：${err?.message || '请检查本地服务状态'}`;
+          });
       }
 
       function applyDisplayLevelSelection(val) {
@@ -3330,8 +3385,9 @@
         try {
           const saved = await saveSetting({ translateApiKey: '' });
           optApiKey.value = '';
-          if (currentState) currentState.settings = saved;
-          syncApiKeyHint(saved);
+          if (!currentState) currentState = { settings: saved, turns: [], conversations: [] };
+          else currentState.settings = saved;
+          hydrateSettingsInputs(saved);
           discoveredModels = null;
           renderModelList();
           testStatus.className = 'test-status ok';
@@ -3376,8 +3432,9 @@
         try {
           const saved = await saveSetting(patch);
           optApiKey.value = '';
-          if (currentState) currentState.settings = saved;
-          syncApiKeyHint(saved);
+          if (!currentState) currentState = { settings: saved, turns: [], conversations: [] };
+          else currentState.settings = saved;
+          hydrateSettingsInputs(saved);
           const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(baseUrl);
           if (!runTest) {
             if (!saved.hasApiKey && !isLocal) {
@@ -3659,7 +3716,18 @@
         }
       }, 250);
 
+      async function bootstrapSettings() {
+        try {
+          const settings = await getJson('/api/settings');
+          if (!settings || typeof settings !== 'object') return;
+          if (!currentState) currentState = { settings, turns: [], conversations: [] };
+          else if (!currentState.settings) currentState.settings = settings;
+          if (!settingsHydrated) hydrateSettingsInputs(settings);
+        } catch {}
+      }
+
       renderModelList();
+      void bootstrapSettings();
       connectStream();
     })();
   </script>
