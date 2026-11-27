@@ -1595,6 +1595,7 @@ function getClientBundle(owner) {
               streamShownMap.delete(item.id);
               rowEl.dataset.bodySig = '';
               pendingActions.push({ type: 'retry', itemId: item.id, rawText: item.thinking || '' });
+              try { globalThis.__agyThinkingNotify?.('action'); } catch {}
               retryBtn.textContent = '重译中…';
               setTimeout(() => { if (retryBtn.isConnected) retryBtn.textContent = '重译'; }, 3500);
             }
@@ -1611,6 +1612,7 @@ function getClientBundle(owner) {
               fullDetailMap.set(key, nextDetail);
               if (nextDetail && !item.fullTranslatedThinking) {
                 pendingActions.push({ type: 'translate-full', itemId: key });
+                try { globalThis.__agyThinkingNotify?.('action'); } catch {}
               }
               streamShownMap.delete(key);
               rowEl.dataset.bodySig = '';
@@ -2485,6 +2487,10 @@ export function startInlineInjector(
     ws.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data);
+        if (msg.method === 'Runtime.bindingCalled' && msg.params?.name === '__agyThinkingNotify') {
+          nudge(20);
+          return;
+        }
         const cb = entry.pending.get(msg.id);
         if (cb) {
           entry.pending.delete(msg.id);
@@ -2495,6 +2501,11 @@ export function startInlineInjector(
     ws.onclose = () => retire(entry, target.id);
     ws.onerror = () => retire(entry, target.id);
     sockets.set(target.id, entry);
+    // 注册极轻量的 CDP Binding，页面点击「重译/看完整」可 20ms 内瞬时唤醒后台，彻底告别空闲态 3.5s 轮询卡顿
+    try {
+      ws.send(JSON.stringify({ id: entry.nextId++, method: 'Runtime.enable' }));
+      ws.send(JSON.stringify({ id: entry.nextId++, method: 'Runtime.addBinding', params: { name: '__agyThinkingNotify' } }));
+    } catch {}
     return entry;
   };
 
@@ -2780,14 +2791,18 @@ export function startInlineInjector(
           if (!state.hasResponses) continue;
           if (!entry.visible && entry.lastSig) continue;
 
-          const data = await inspectByConvId(state.convId || '', settings, { force: responseCountChanged });
+          const freshSettings = getSettings();
+          if (!freshSettings.inlineEnabled) break;
+          const data = await inspectByConvId(state.convId || '', freshSettings, { force: responseCountChanged });
           if (!data || stopped) continue;
+          const latestAfterFetch = getSettings();
+          if (!latestAfterFetch.inlineEnabled) break;
           if (data.isGenerating || data.activeStatus === 'CASCADE_RUN_STATUS_RUNNING') {
             anyGenerating = true;
             lastActiveAt = Date.now();
           }
 
-          await pushDataToEntry(entry, data, publicSettings);
+          await pushDataToEntry(entry, data, getPublicSettings());
         } catch {
           const entry = sockets.get(target.id);
           if (entry) retire(entry, target.id);
@@ -2818,19 +2833,21 @@ export function startInlineInjector(
     }
   };
 
+  const nudge = (delayMs = 120) => {
+    if (stopped) return;
+    if (busy) {
+      pendingNudge = true;
+      return;
+    }
+    clearTimeout(timer);
+    timer = setTimeout(tick, Math.max(10, Number(delayMs) || 120));
+  };
+
   timer = setTimeout(tick, 200);
   return {
     stop,
     status: () => cdpState,
     pushCached,
-    nudge: () => {
-      if (stopped) return;
-      if (busy) {
-        pendingNudge = true;
-        return;
-      }
-      clearTimeout(timer);
-      timer = setTimeout(tick, 120);
-    },
+    nudge,
   };
 }

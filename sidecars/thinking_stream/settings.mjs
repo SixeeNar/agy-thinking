@@ -238,12 +238,28 @@ export function createSettingsStore(filePath = getSettingsPath()) {
       const parsed = JSON.parse(readFileSync(filePath, 'utf-8'));
       const valid = validateSettings(parsed);
       const base = { ...DEFAULT_SETTINGS, ...valid };
+      // 仅当历史旧配置完全不含 providerProfiles 字段时，才从单渠道字段自动迁移，防止已显式移除的 local 渠道重启复活
+      const hasProfilesField =
+        parsed &&
+        typeof parsed === 'object' &&
+        Object.prototype.hasOwnProperty.call(parsed, 'providerProfiles') &&
+        parsed.providerProfiles &&
+        typeof parsed.providerProfiles === 'object' &&
+        !Array.isArray(parsed.providerProfiles);
       base.providerProfiles = mergeProviderProfiles(
         valid.providerProfiles || {},
         {},
-        base.translateBaseUrl,
-        base.translateApiKey
+        hasProfilesField ? '' : base.translateBaseUrl,
+        hasProfilesField ? '' : base.translateApiKey
       );
+      const targetKey = inferProviderKeyFromUrl(base.translateBaseUrl || '');
+      const activeProfile = base.providerProfiles[targetKey];
+      if (activeProfile) {
+        base.translateBaseUrl = activeProfile.baseUrl;
+        base.translateApiKey = activeProfile.apiKey || '';
+      } else if (hasProfilesField) {
+        base.translateApiKey = '';
+      }
       cached = base;
     } catch {
       // 文件不存在或损坏时保留当前默认配置
@@ -282,9 +298,16 @@ export function createSettingsStore(filePath = getSettingsPath()) {
     const next = { ...prev, ...valid };
     const incomingProfiles = { ...(valid.providerProfiles || {}) };
 
-    // 同步通过旧字段 translateBaseUrl + translateApiKey 提交的变更到对应渠道档案
+    const prevKey = inferProviderKeyFromUrl(prev.translateBaseUrl || '');
     const targetUrl = next.translateBaseUrl || '';
     const targetKey = inferProviderKeyFromUrl(targetUrl);
+
+    // 切换服务商地址但未显式提交新 Key 时，严禁把旧服务商的 translateApiKey 串味带给新服务商
+    if (valid.translateBaseUrl !== undefined && targetKey !== prevKey && valid.translateApiKey === undefined) {
+      next.translateApiKey = '';
+    }
+
+    // 同步通过旧字段 translateBaseUrl + translateApiKey 提交的变更到对应渠道档案
     if (valid.translateApiKey !== undefined && targetUrl) {
       if (valid.translateApiKey) {
         incomingProfiles[targetKey] = {
@@ -300,19 +323,26 @@ export function createSettingsStore(filePath = getSettingsPath()) {
       incomingProfiles.local = { baseUrl: targetUrl, apiKey: '', enabled: true };
     }
 
+    // 此处不再触发旧版单渠道自动迁移（已有 prev.providerProfiles 作为真相源），防止刚移除的 local 渠道当场复活
     next.providerProfiles = mergeProviderProfiles(
       prev.providerProfiles || {},
       incomingProfiles,
-      next.translateBaseUrl,
-      next.translateApiKey
+      '',
+      ''
     );
 
-    // 若当前活跃渠道在档案中有保存 Key，保持 legacy 字段与之同步（兼容旧调用方）
-    const activeProfile = next.providerProfiles[targetKey];
+    // 显式移除本地 Ollama 渠道时，清理残留的本地 translateBaseUrl，避免前后端误判仍启用了本机
+    if (incomingProfiles.local === null && inferProviderKeyFromUrl(next.translateBaseUrl || '') === 'local') {
+      const fallbackEntry = Object.values(next.providerProfiles)[0];
+      next.translateBaseUrl = fallbackEntry?.baseUrl || DEFAULT_SETTINGS.translateBaseUrl;
+    }
+
+    const finalTargetKey = inferProviderKeyFromUrl(next.translateBaseUrl || '');
+    const activeProfile = next.providerProfiles[finalTargetKey];
     if (activeProfile) {
       next.translateBaseUrl = activeProfile.baseUrl;
       next.translateApiKey = activeProfile.apiKey || '';
-    } else if (valid.providerProfiles && Object.prototype.hasOwnProperty.call(valid.providerProfiles, targetKey) && valid.providerProfiles[targetKey] === null) {
+    } else {
       next.translateApiKey = '';
     }
 

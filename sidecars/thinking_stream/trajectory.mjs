@@ -172,27 +172,52 @@ function buildToolItem(step, fallbackIdx, activeId, allocId) {
     };
   }
 
+  const FILE_TOOL_NAMES = new Set([
+    'read_file',
+    'view_file',
+    'write_file',
+    'write_to_file',
+    'edit_file',
+    'replace_file_content',
+    'multi_replace_file_content',
+    'apply_patch',
+  ]);
   if (
     type === 'CORTEX_STEP_TYPE_VIEW_FILE' ||
     type === 'CORTEX_STEP_TYPE_CODE_ACTION' ||
-    ['read_file', 'write_file', 'edit_file'].includes(toolName)
+    FILE_TOOL_NAMES.has(toolName)
   ) {
     const fileUri =
       args.Path ||
+      args.TargetFile ||
+      args.AbsolutePath ||
+      args.file_path ||
+      args.path ||
       step?.viewFile?.absolutePathUri ||
       step?.codeAction?.actionSpec?.command?.file?.absoluteUri ||
       '';
     const name = fileBasename(fileUri) || toolName || '文件操作';
+    const isWrite = toolName === 'write_file' || toolName === 'write_to_file';
     const isEdit =
-      toolName === 'write_file' ||
+      isWrite ||
       toolName === 'edit_file' ||
+      toolName === 'replace_file_content' ||
+      toolName === 'multi_replace_file_content' ||
+      toolName === 'apply_patch' ||
       Boolean(step?.codeAction?.actionSpec?.command?.isEdit) ||
       type === 'CORTEX_STEP_TYPE_CODE_ACTION';
-    const label = toolName === 'write_file' ? '写入文件' : isEdit ? '修改文件' : '读取文件';
+    const label = isWrite ? '写入文件' : isEdit ? '修改文件' : '读取文件';
     const resolvedToolName = toolName || (isEdit ? 'edit_file' : 'read_file');
-    const hasRange = args.StartLine != null || args.EndLine != null;
-    const range = hasRange ? ` (${args.StartLine ?? 1}-${args.EndLine ?? ''})` : '';
+    const startLine = args.StartLine ?? args.startLine;
+    const endLine = args.EndLine ?? args.endLine;
+    const hasRange = startLine != null || endLine != null;
+    const range = hasRange ? ` (${startLine ?? 1}-${endLine ?? ''})` : '';
     const decodedPath = decodeFilePath(fileUri);
+    let fallbackDetail = '';
+    if (!decodedPath) {
+      const rawJson = JSON.stringify(args, null, 2);
+      fallbackDetail = rawJson.length > 4000 ? `${rawJson.slice(0, 4000)}\n…(已截断)` : rawJson;
+    }
     return {
       id: allocId(`${activeId}:s${stepIdx}`, fallbackIdx),
       kind: 'file',
@@ -202,7 +227,7 @@ function buildToolItem(step, fallbackIdx, activeId, allocId) {
       label,
       summary: `${name}${range}`,
       liveDetail: extractLiveToolDetail(args, resolvedToolName, `${name}${range}`),
-      detail: decodedPath ? `${decodedPath}${range}` : JSON.stringify(args, null, 2),
+      detail: decodedPath ? `${decodedPath}${range}` : fallbackDetail,
       durationSec,
       startedAtMs,
     };
@@ -236,6 +261,9 @@ function buildToolItem(step, fallbackIdx, activeId, allocId) {
     })
     .join(', ');
 
+  const rawArgsDetail = Object.keys(args).length ? JSON.stringify(args, null, 2) : '{}';
+  const safeArgsDetail = rawArgsDetail.length > 4000 ? `${rawArgsDetail.slice(0, 4000)}\n…(已截断)` : rawArgsDetail;
+
   return {
     id: allocId(`${activeId}:s${stepIdx}`, fallbackIdx),
     kind: 'tool',
@@ -245,7 +273,7 @@ function buildToolItem(step, fallbackIdx, activeId, allocId) {
     label: '工具调用',
     summary: previewKeys ? `${toolName} · ${previewKeys}` : toolName,
     liveDetail: extractLiveToolDetail(args, toolName, previewKeys),
-    detail: Object.keys(args).length ? JSON.stringify(args, null, 2) : '{}',
+    detail: safeArgsDetail,
     durationSec,
     startedAtMs,
   };

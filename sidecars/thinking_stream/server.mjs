@@ -269,26 +269,49 @@ function openOfficialExternalUrl(rawUrl) {
   try {
     parsed = new URL(String(rawUrl || '').trim());
   } catch {
-    throw new Error('无效的网址格式');
+    return Promise.reject(new Error('无效的网址格式'));
   }
   if (parsed.protocol !== 'https:' || !ALLOWED_EXTERNAL_HOSTS.has(parsed.hostname.toLowerCase())) {
-    throw new Error('仅允许打开官方白名单服务商控制台页面');
+    return Promise.reject(new Error('仅允许打开官方白名单服务商控制台页面'));
   }
   const safeUrl = parsed.toString();
-  let child;
-  if (process.platform === 'win32') {
-    child = spawn('rundll32.exe', ['url.dll,FileProtocolHandler', safeUrl], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let child;
+    try {
+      if (process.platform === 'win32') {
+        child = spawn('rundll32.exe', ['url.dll,FileProtocolHandler', safeUrl], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true,
+        });
+      } else if (process.platform === 'darwin') {
+        child = spawn('open', [safeUrl], { detached: true, stdio: 'ignore' });
+      } else {
+        child = spawn('xdg-open', [safeUrl], { detached: true, stdio: 'ignore' });
+      }
+    } catch (err) {
+      return reject(new Error(`无法启动系统浏览器：${err?.message || err}`));
+    }
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve(safeUrl);
+    }, 150);
+    child.once('error', (err) => {
+      clearTimeout(timer);
+      if (settled) return;
+      settled = true;
+      reject(new Error(`无法启动系统浏览器：${err?.message || err}`));
     });
-  } else if (process.platform === 'darwin') {
-    child = spawn('open', [safeUrl], { detached: true, stdio: 'ignore' });
-  } else {
-    child = spawn('xdg-open', [safeUrl], { detached: true, stdio: 'ignore' });
-  }
-  child.unref();
-  return safeUrl;
+    child.once('spawn', () => {
+      clearTimeout(timer);
+      if (settled) return;
+      settled = true;
+      resolve(safeUrl);
+    });
+    child.unref();
+  });
 }
 
 function attachRuntimeMeta(payload) {
@@ -339,7 +362,10 @@ async function fetchSnapshot(requestedId = 'auto', hostConvId = DEFAULT_CONV_ID,
       try {
         effectiveConversations = await listConversationsCached({ force: true });
       } catch {
-        if (cacheAge > 8000) effectiveConversations = [];
+        if (cacheAge > 8000) {
+          effectiveConversations = [];
+          conversationsCache = { list: [], fetchedAt: 0 };
+        }
       }
     }
   }
@@ -668,7 +694,7 @@ function startServer() {
             translator.resetErrors();
           }
           broadcastCachedToClients(true);
-          inlineInjector?.pushCached?.(false);
+          inlineInjector?.pushCached?.(true);
           inlineInjector?.nudge?.();
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify(next));
@@ -800,7 +826,7 @@ function startServer() {
     if (req.method === 'POST' && url.pathname === '/api/open-url') {
       try {
         const body = await readJsonBody(req);
-        const opened = openOfficialExternalUrl(body?.url);
+        const opened = await openOfficialExternalUrl(body?.url);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ ok: true, url: opened }));
       } catch (err) {
@@ -851,16 +877,24 @@ function startServer() {
       res.on('close', () => removeClient(client));
 
       try {
+        const verBefore = settingsVersion;
         const rawSettings = settingsStore.read();
-        const publicSettings = settingsStore.readPublic();
-        const cdpState = inlineInjector?.status?.() ?? 'unknown';
-        const initial = await fetchSnapshot(requestedId, hostConvId, rawSettings, { forceList: true });
+        let initial = await fetchSnapshot(requestedId, hostConvId, rawSettings, { forceList: true });
         if (client.closed) return;
-        initial.cdpState = cdpState;
-        initial.settings = publicSettings;
-        client.lastSig = computeSignature(initial, cdpState, publicSettings);
-        client.lastErr = '';
-        writeClientSafe(client, `event: state\ndata: ${JSON.stringify(initial)}\n\n`);
+        if (settingsVersion !== verBefore) {
+          const refreshed = buildCachedSnapshot(requestedId, hostConvId, settingsStore.read(), false);
+          if (refreshed) initial = refreshed;
+        }
+        const latestPublicSettings = settingsStore.readPublic();
+        const latestCdpState = inlineInjector?.status?.() ?? 'unknown';
+        initial.cdpState = latestCdpState;
+        initial.settings = latestPublicSettings;
+        const sig = computeSignature(initial, latestCdpState, latestPublicSettings);
+        if (client.lastSig !== sig) {
+          client.lastSig = sig;
+          client.lastErr = '';
+          writeClientSafe(client, `event: state\ndata: ${JSON.stringify(initial)}\n\n`);
+        }
       } catch (err) {
         if (client.closed) return;
         client.lastErr = err.message;
@@ -923,6 +957,12 @@ if (WEB_PORT) {
     if (stopping) return;
     stopping = true;
     console.log(`[agy-thinking] stopping (${reason})`);
+    clearTimeout(pollTimer);
+    pollTimer = null;
+    for (const c of [...clients]) {
+      removeClient(c);
+      try { c.res.end(); } catch {}
+    }
     try { translator.flushCache?.(); } catch {}
     try { await inlineInjector?.stop?.(); } catch {}
     server.close(() => process.exit(0));

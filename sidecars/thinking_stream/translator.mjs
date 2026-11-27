@@ -1297,20 +1297,35 @@ export function createTranslator(getSettings, onProgress) {
   }
 
   function hasAnyConfiguredProvider(settings) {
-    if (settings?.translateApiKey || isLocalGatewayUrl(settings?.translateBaseUrl)) return true;
-    const profiles = settings?.providerProfiles || {};
-    for (const [k, v] of Object.entries(profiles)) {
-      if (!v || !v.baseUrl || v.enabled === false) continue;
-      if (k === 'local' || v.apiKey) return true;
+    if (settings?.translateApiKey) return true;
+    const profiles = settings?.providerProfiles;
+    if (profiles && typeof profiles === 'object' && !Array.isArray(profiles)) {
+      for (const [k, v] of Object.entries(profiles)) {
+        if (!v || !v.baseUrl || v.enabled === false) continue;
+        if (k === 'local' || v.apiKey) return true;
+      }
+      return false;
     }
-    return false;
+    return isLocalGatewayUrl(settings?.translateBaseUrl);
   }
 
   const getMaxConcurrency = () => {
     try {
       const s = getSettings();
-      const firstSpec = parseModels(s?.translateModels)[0];
-      const cand = firstSpec ? resolveModelCandidate(firstSpec, s) : null;
+      const specs = parseModels(s?.translateModels);
+      const now = Date.now();
+      let activeCand = null;
+      let firstCand = null;
+      for (const spec of specs) {
+        const c = resolveModelCandidate(spec, s);
+        if (!c || !c.baseUrl || (!c.apiKey && !isLocalGatewayUrl(c.baseUrl))) continue;
+        if (!firstCand) firstCand = c;
+        if ((modelCooldownUntil.get(c.cooldownKey) || 0) <= now) {
+          activeCand = c;
+          break;
+        }
+      }
+      const cand = activeCand || firstCand;
       const provider = cand?.provider || detectProviderKey(s?.translateBaseUrl);
       // 智谱免费 Flash 系列官方并发限制极严（常为 1 并发），自动降为单并发防止 429 限流雪崩
       if (provider === 'zhipu') return 1;
@@ -1321,15 +1336,16 @@ export function createTranslator(getSettings, onProgress) {
   };
   const enqueueJob = (fn) => {
     const runNext = () => {
-      if (runningJobs >= getMaxConcurrency() || pendingJobs.length === 0) return;
-      const next = pendingJobs.shift();
-      runningJobs += 1;
-      void Promise.resolve()
-        .then(next)
-        .finally(() => {
-          runningJobs -= 1;
-          runNext();
-        });
+      while (runningJobs < getMaxConcurrency() && pendingJobs.length > 0) {
+        const next = pendingJobs.shift();
+        runningJobs += 1;
+        void Promise.resolve()
+          .then(next)
+          .finally(() => {
+            runningJobs -= 1;
+            runNext();
+          });
+      }
     };
     pendingJobs.push(fn);
     runNext();
@@ -1436,6 +1452,8 @@ export function createTranslator(getSettings, onProgress) {
     const candidates = activeCandidates.length > 0 ? activeCandidates : orderedCandidates;
 
     let lastErr = null;
+    let sawTransientErr = false;
+    let earliestTransientRetryAt = Infinity;
     for (const cand of candidates) {
       if (externalSignal?.aborted) {
         const abortErr = new Error('翻译已取消');
@@ -1486,6 +1504,12 @@ export function createTranslator(getSettings, onProgress) {
           recordUsage(cand.baseUrl, cand.modelId, res.usage);
           return { result: res.text, model: cand.modelId, provider: cand.provider, providerName: cand.providerName, ttftMs: res.ttftMs, totalMs: res.totalMs, usage: res.usage };
         }
+        // 即使返回空译文，网关可能已计费，照实记录用量并短暂冷却，避免 350ms 高频死打坏模型
+        if (res.usage) recordUsage(cand.baseUrl, cand.modelId, res.usage);
+        const emptyCooldownUntil = Date.now() + 30000;
+        modelCooldownUntil.set(cand.cooldownKey, emptyCooldownUntil);
+        sawTransientErr = true;
+        earliestTransientRetryAt = Math.min(earliestTransientRetryAt, emptyCooldownUntil);
         lastErr = new Error(`模型 ${cand.providerName}/${cand.modelId} 返回空译文`);
       } catch (err) {
         if (externalSignal?.aborted) throw err;
@@ -1494,7 +1518,10 @@ export function createTranslator(getSettings, onProgress) {
           const hits = (rateLimitHits.get(cand.cooldownKey) || 0) + 1;
           rateLimitHits.set(cand.cooldownKey, hits);
           const cooldownMs = Math.min(90000, hits === 1 ? 15000 : hits === 2 ? 30000 : 60000);
-          modelCooldownUntil.set(cand.cooldownKey, Date.now() + cooldownMs);
+          const until = Date.now() + cooldownMs;
+          modelCooldownUntil.set(cand.cooldownKey, until);
+          sawTransientErr = true;
+          earliestTransientRetryAt = Math.min(earliestTransientRetryAt, until);
           continue;
         }
         if ([400, 401, 402, 403, 404, 422].includes(err.status)) {
@@ -1502,11 +1529,23 @@ export function createTranslator(getSettings, onProgress) {
           continue;
         }
         if ([500, 502, 503, 504].includes(err.status) || err?.name === 'TimeoutError' || err?.name === 'AbortError' || !err.status) {
-          modelCooldownUntil.set(cand.cooldownKey, Date.now() + 60 * 1000);
+          const until = Date.now() + 60 * 1000;
+          modelCooldownUntil.set(cand.cooldownKey, until);
+          sawTransientErr = true;
+          earliestTransientRetryAt = Math.min(earliestTransientRetryAt, until);
           continue;
         }
         throw err;
       }
+    }
+    // 队列中若既有临时故障（如 429/超时）又有永久错（如备选 403），切勿把最后一个 403 判成全队列永久失败导致锁死重试
+    if (sawTransientErr && isPermanentError(lastErr)) {
+      const wrapped = new Error(lastErr?.message || '部分备选模型暂不可用，稍后自动重试');
+      if (Number.isFinite(earliestTransientRetryAt)) wrapped.retryAfterAt = earliestTransientRetryAt;
+      throw wrapped;
+    }
+    if (sawTransientErr && lastErr && Number.isFinite(earliestTransientRetryAt) && !lastErr.retryAfterAt) {
+      lastErr.retryAfterAt = earliestTransientRetryAt;
     }
     throw lastErr || new Error('所有备选模型均请求失败');
   }
@@ -1735,6 +1774,11 @@ export function createTranslator(getSettings, onProgress) {
         state.status = 'error';
         state.error = err?.message || '脉络提炼失败';
         Object.assign(state, computeErrorRetryMeta(err, prevErrorCount));
+        // 若已有完整可用的自然直译兜底，不再每隔 20s 后台偷偷重新触发 distilling 导致卡片闪烁，保留用户点「重译」手动重提炼
+        if (fallbackComplete) {
+          state.permanentError = true;
+          state.nextRetryAt = Infinity;
+        }
         liveStates.set(item.id, {
           sourceHash: fullKey,
           sourceLen: rawText.length,
@@ -1763,7 +1807,19 @@ export function createTranslator(getSettings, onProgress) {
     const style = settings.translateStyle || 'natural';
     const fullKey = cacheKeyFor(rawText, style);
 
+    const stopPendingItemTranslate = () => {
+      const fKey = fullTrackKey(item.id);
+      const dsKey = distillTrackKey(item.id);
+      itemEpochs.set(fKey, getItemEpoch(fKey) + 1);
+      itemEpochs.set(dsKey, getItemEpoch(dsKey) + 1);
+      abortItemControllers(fKey);
+      abortItemControllers(dsKey);
+      segmentMap.delete(item.id);
+      latestItemSnapshots.delete(item.id);
+    };
+
     if (containsMostlyChinese(rawText)) {
+      stopPendingItemTranslate();
       liveStates.set(item.id, {
         sourceHash: fullKey,
         sourceLen: rawText.length,
@@ -1780,6 +1836,7 @@ export function createTranslator(getSettings, onProgress) {
 
     const fullCached = diskCache.get(fullKey);
     if (fullCached) {
+      stopPendingItemTranslate();
       const prevSt = liveStates.get(item.id);
       if (!prevSt || prevSt.sourceHash !== fullKey || prevSt.status !== 'done') {
         recordCacheHit();
@@ -1818,6 +1875,7 @@ export function createTranslator(getSettings, onProgress) {
     if (degradedMtFallback) {
       const natCached = diskCache.get(cacheFullKey);
       if (natCached) {
+        stopPendingItemTranslate();
         liveStates.set(item.id, {
           sourceHash: fullKey,
           sourceLen: rawText.length,
@@ -2390,9 +2448,9 @@ export function createTranslator(getSettings, onProgress) {
         // 2) 1~2 句精简中文小总结（仅在开启 summaryEnabled 时生成，关闭则 0 额外请求）
         if (summaryEnabled) {
           const isShortSingleZh = mostlyZh && rawTrim.length <= 120 && !/\n\s*\n/.test(rawTrim);
-          if (triggerNew && (hasKey || isShortSingleZh)) {
+          if (triggerNew && ((hasKey && hasModels) || isShortSingleZh)) {
             triggerNarrativeSummary(item, settings);
-          } else if (!hasKey && mostlyZh) {
+          } else if ((!hasKey || !hasModels) && mostlyZh) {
             const oldNst = narrativeStates.get(item.id);
             if (oldNst && (oldNst.sourceLen !== rawTrim.length || oldNst.status === 'error' || !oldNst.text)) {
               narrativeStates.delete(item.id);
@@ -2545,20 +2603,21 @@ export function createTranslator(getSettings, onProgress) {
   async function discoverAllConfiguredModels(overrideSettings = {}) {
     const saved = getSettings();
     const profileMap = new Map();
+    const hasProfilesObj = saved.providerProfiles && typeof saved.providerProfiles === 'object' && !Array.isArray(saved.providerProfiles);
     for (const [k, prof] of Object.entries(saved.providerProfiles || {})) {
       if (!prof || !prof.baseUrl || prof.enabled === false) continue;
       if (k !== 'local' && !prof.apiKey) continue;
       profileMap.set(k, { provider: k, baseUrl: prof.baseUrl.replace(/\/+$/, ''), apiKey: prof.apiKey || '' });
     }
-    // 兼容旧单渠道已保存 Key
-    if (profileMap.size === 0 && saved.translateBaseUrl && (saved.translateApiKey || isLocalGatewayUrl(saved.translateBaseUrl))) {
+    // 兼容旧单渠道已保存 Key（有 providerProfiles 时不再把已删 local 复活）
+    if (profileMap.size === 0 && saved.translateBaseUrl && (saved.translateApiKey || (!hasProfilesObj && isLocalGatewayUrl(saved.translateBaseUrl)))) {
       const k = detectProviderKey(saved.translateBaseUrl);
       profileMap.set(k, { provider: k, baseUrl: saved.translateBaseUrl.replace(/\/+$/, ''), apiKey: saved.translateApiKey || '' });
     }
-    // 若用户在表单里刚填了尚未保存的新渠道 Key，也实时纳入汇总预览
+    // 若用户在表单里刚填了尚未保存的新渠道 Key（或免 Key 的本地 Ollama 地址），也实时纳入汇总预览
     const ovUrl = String(overrideSettings.translateBaseUrl || '').trim().replace(/\/+$/, '');
     const ovKey = typeof overrideSettings.translateApiKey === 'string' ? overrideSettings.translateApiKey.trim() : '';
-    if (ovUrl && ovKey) {
+    if (ovUrl && (ovKey || isLocalGatewayUrl(ovUrl))) {
       const k = detectProviderKey(ovUrl);
       profileMap.set(k, { provider: k, baseUrl: ovUrl, apiKey: ovKey });
     }
@@ -2812,6 +2871,7 @@ export function createTranslator(getSettings, onProgress) {
 
   function resetErrors() {
     modelCooldownUntil.clear();
+    rateLimitHits.clear();
     for (const [id, st] of liveStates.entries()) {
       if (st.status === 'error' || st.status === 'no-key') {
         const fk = fullTrackKey(id);
@@ -2852,6 +2912,7 @@ export function createTranslator(getSettings, onProgress) {
     globalEpoch += 1;
     abortAllControllers();
     modelCooldownUntil.clear();
+    rateLimitHits.clear();
     for (const [id, st] of liveStates.entries()) {
       if (st.status !== 'done' || st.inFlight) {
         liveStates.delete(id);
@@ -2880,6 +2941,7 @@ export function createTranslator(getSettings, onProgress) {
     globalEpoch += 1;
     abortAllControllers();
     modelCooldownUntil.clear();
+    rateLimitHits.clear();
     liveStates.clear();
     distillStates.clear();
     fullDetailStates.clear();
@@ -2899,12 +2961,14 @@ export function createTranslator(getSettings, onProgress) {
       abortItemControllers(dk);
       fullDetailStates.delete(itemId);
       modelCooldownUntil.clear();
+      rateLimitHits.clear();
     }
     onProgress?.();
   }
 
   function retryItem(itemId, rawText = '') {
     modelCooldownUntil.clear();
+    rateLimitHits.clear();
     const style = getSettings().translateStyle || 'natural';
     if (itemId) {
       const fk = fullTrackKey(itemId);
@@ -2957,6 +3021,7 @@ export function createTranslator(getSettings, onProgress) {
     latestItemSnapshots.clear();
     itemEpochs.clear();
     modelCooldownUntil.clear();
+    rateLimitHits.clear();
     cacheDirty = true;
     flushCacheNow();
     onProgress?.();

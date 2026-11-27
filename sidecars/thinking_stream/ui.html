@@ -2621,7 +2621,7 @@
           billingUrl: 'https://ollama.com/library',
           consoleLabel: '下载 Ollama ↗',
           models: 'qwen2.5:7b, gemma3:4b',
-          hint: '已切换本地网关（默认 Ollama 11434；LM Studio 请改 1234），纯本机永久免费，免 Key 点「识别模型」即可。',
+          hint: '已切换本地网关（默认 Ollama 11434；LM Studio 请改 1234），纯本机永久免费，免 Key 点「启用本机」或「刷新汇总」即可。',
           curated: [
             { id: 'qwen2.5:7b', overall: 96, value: 100, natural: 93, isFree: true, costTag: '本机免费', costTone: 'free', reason: '本机 7B 中文自然度最佳、速度与质量最均衡' },
             { id: 'qwen3:8b', overall: 96, value: 100, natural: 93, isFree: true, costTag: '本机免费', costTone: 'free', reason: '新一代本机通义，自动关思考后响应很快' },
@@ -2717,6 +2717,17 @@
         return null;
       }
 
+      let applyingThemeVars = false;
+      let hostThemeSyncRaf = 0;
+
+      function setRootCssVarIfChanged(root, prop, val) {
+        if (val == null) return;
+        const next = String(val);
+        if (root.style.getPropertyValue(prop) !== next) {
+          root.style.setProperty(prop, next);
+        }
+      }
+
       function applyColorTheme(themeId = activeColorTheme) {
         activeColorTheme = themeId || 'gemini';
         const isLight = document.documentElement.dataset.theme === 'light' ||
@@ -2724,20 +2735,25 @@
         const hostAccent = activeColorTheme === 'host' ? detectHostAccentRgb() : null;
         const pal = resolveColorThemePalette(activeColorTheme, isLight, hostAccent);
         const root = document.documentElement;
-        root.style.setProperty('--c1-rgb', pal.c1);
-        root.style.setProperty('--c2-rgb', pal.c2);
-        root.style.setProperty('--c3-rgb', pal.c3);
-        root.style.setProperty('--think-clr', pal.think);
-        root.style.setProperty('--btn-fg', pal.btnFg || '#ffffff');
-        if (pal.icons) {
-          root.style.setProperty('--file-clr', pal.icons.file);
-          root.style.setProperty('--edit-clr', pal.icons.edit);
-          root.style.setProperty('--cmd-clr', pal.icons.cmd);
-          root.style.setProperty('--code-clr', pal.icons.code);
-          root.style.setProperty('--search-clr', pal.icons.search);
-          root.style.setProperty('--sub-clr', pal.icons.sub);
-          root.style.setProperty('--plan-clr', pal.icons.plan);
-          root.style.setProperty('--tool-clr', pal.icons.tool);
+        applyingThemeVars = true;
+        try {
+          setRootCssVarIfChanged(root, '--c1-rgb', pal.c1);
+          setRootCssVarIfChanged(root, '--c2-rgb', pal.c2);
+          setRootCssVarIfChanged(root, '--c3-rgb', pal.c3);
+          setRootCssVarIfChanged(root, '--think-clr', pal.think);
+          setRootCssVarIfChanged(root, '--btn-fg', pal.btnFg || '#ffffff');
+          if (pal.icons) {
+            setRootCssVarIfChanged(root, '--file-clr', pal.icons.file);
+            setRootCssVarIfChanged(root, '--edit-clr', pal.icons.edit);
+            setRootCssVarIfChanged(root, '--cmd-clr', pal.icons.cmd);
+            setRootCssVarIfChanged(root, '--code-clr', pal.icons.code);
+            setRootCssVarIfChanged(root, '--search-clr', pal.icons.search);
+            setRootCssVarIfChanged(root, '--sub-clr', pal.icons.sub);
+            setRootCssVarIfChanged(root, '--plan-clr', pal.icons.plan);
+            setRootCssVarIfChanged(root, '--tool-clr', pal.icons.tool);
+          }
+        } finally {
+          queueMicrotask(() => { applyingThemeVars = false; });
         }
         const picker = document.getElementById('themePicker');
         if (picker) {
@@ -2765,25 +2781,46 @@
         const docBg = parseRgba(getComputedStyle(document.documentElement).backgroundColor);
         const bg = (bodyBg && bodyBg[3] >= 0.45) ? bodyBg : ((docBg && docBg[3] >= 0.45) ? docBg : null);
         if (bg) {
-          document.documentElement.dataset.theme = lumOf(bg) < 0.52 ? 'dark' : 'light';
+          const nextTheme = lumOf(bg) < 0.52 ? 'dark' : 'light';
+          if (document.documentElement.dataset.theme !== nextTheme) {
+            document.documentElement.dataset.theme = nextTheme;
+          }
           applyColorTheme();
           return;
         }
         const fg = parseRgba(getComputedStyle(document.body).color);
         if (fg && fg[3] >= 0.4) {
           const fgLum = lumOf(fg);
-          if (fgLum > 0.55) { document.documentElement.dataset.theme = 'dark'; applyColorTheme(); return; }
-          if (fgLum < 0.45) { document.documentElement.dataset.theme = 'light'; applyColorTheme(); return; }
+          if (fgLum > 0.55) {
+            if (document.documentElement.dataset.theme !== 'dark') document.documentElement.dataset.theme = 'dark';
+            applyColorTheme();
+            return;
+          }
+          if (fgLum < 0.45) {
+            if (document.documentElement.dataset.theme !== 'light') document.documentElement.dataset.theme = 'light';
+            applyColorTheme();
+            return;
+          }
         }
         applyColorTheme();
       }
+      function scheduleHostThemeSync() {
+        if (applyingThemeVars || hostThemeSyncRaf) return;
+        hostThemeSyncRaf = requestAnimationFrame(() => {
+          hostThemeSyncRaf = 0;
+          if (!applyingThemeVars) syncHostTheme();
+        });
+      }
       syncHostTheme();
       try {
-        const themeObserver = new MutationObserver(() => syncHostTheme());
+        const themeObserver = new MutationObserver(() => {
+          if (applyingThemeVars) return;
+          scheduleHostThemeSync();
+        });
         themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'class'] });
         window.matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => {
           delete document.documentElement.dataset.theme;
-          requestAnimationFrame(syncHostTheme);
+          scheduleHostThemeSync();
         });
       } catch {}
 
@@ -2914,13 +2951,22 @@
 
       function getConfiguredProfiles(settings = currentState?.settings) {
         const out = {};
-        const profiles = settings?.providerProfiles || {};
+        const hasProfilesObj = Boolean(
+          settings?.providerProfiles &&
+          typeof settings.providerProfiles === 'object' &&
+          !Array.isArray(settings.providerProfiles)
+        );
+        const profiles = hasProfilesObj ? settings.providerProfiles : {};
         for (const [k, v] of Object.entries(profiles)) {
           if (!v || !v.baseUrl || v.enabled === false) continue;
           if (k !== 'local' && !v.hasApiKey) continue;
           out[k] = v;
         }
-        if (Object.keys(out).length === 0 && settings?.translateBaseUrl && (settings?.hasApiKey || isLocalGatewayUrl(settings.translateBaseUrl))) {
+        if (
+          Object.keys(out).length === 0 &&
+          settings?.translateBaseUrl &&
+          (settings?.hasApiKey || (!hasProfilesObj && isLocalGatewayUrl(settings.translateBaseUrl)))
+        ) {
           const k = inferPresetByUrl(settings.translateBaseUrl) || 'custom';
           out[k] = {
             baseUrl: settings.translateBaseUrl,
@@ -3126,8 +3172,9 @@
         const baseUrl = sanitizeBaseUrl(optBaseUrl.value);
         if (baseUrl && baseUrl !== optBaseUrl.value.trim()) optBaseUrl.value = baseUrl;
         const rawKey = optApiKey.value.trim();
+        const isLocalInput = Boolean(baseUrl && isLocalGatewayUrl(baseUrl));
         const profiles = getConfiguredProfiles();
-        const hasAny = Object.keys(profiles).length > 0 || Boolean(baseUrl && rawKey);
+        const hasAny = Object.keys(profiles).length > 0 || Boolean(baseUrl && (rawKey || isLocalInput));
 
         if (!hasAny) {
           discoveredModels = null;
@@ -3149,9 +3196,9 @@
         }
         try {
           const body = { scope: 'all' };
-          if (baseUrl && rawKey && isValidHttpUrl(baseUrl)) {
+          if (baseUrl && (rawKey || isLocalInput) && isValidHttpUrl(baseUrl)) {
             body.translateBaseUrl = baseUrl;
-            body.translateApiKey = rawKey;
+            if (rawKey) body.translateApiKey = rawKey;
           }
           const res = await postJson('/api/translate/models', body);
           if (reqSeq !== discoverReqSeq) return;
@@ -3166,8 +3213,15 @@
           if (!silent) {
             const pSummary = discoveredProviders.map((p) => `${p.name}(${p.count})`).join(' + ');
             const freeCount = list.filter((m) => isModelFree(m)).length;
-            testStatus.className = 'test-status ok';
-            testStatus.textContent = `已汇总 ${discoveredProviders.length} 个已配平台：${pSummary || '无'}，共 ${list.length} 个模型（${freeCount} 个核实免费）。`;
+            const failedProvs = discoveredProviders.filter((p) => p.error);
+            if (failedProvs.length > 0) {
+              const errHint = failedProvs.map((p) => `${p.name}: ${p.error}`).join('；');
+              testStatus.className = 'test-status err';
+              testStatus.textContent = `已汇总 ${discoveredProviders.length} 个平台（共 ${list.length} 模型，${freeCount} 免费），但部分平台实时拉取失败（已暂用内置列表兜底，请核对 Key）：${errHint}`;
+            } else {
+              testStatus.className = 'test-status ok';
+              testStatus.textContent = `已汇总 ${discoveredProviders.length} 个已配平台：${pSummary || '无'}，共 ${list.length} 个模型（${freeCount} 个核实免费）。`;
+            }
           }
         } catch (err) {
           if (reqSeq !== discoverReqSeq) return;
@@ -3337,6 +3391,7 @@
         if (!settingsHydrated) {
           settingsHydrated = true;
           optBaseUrl.value = settings.translateBaseUrl || '';
+          optBaseUrl.dataset.lastProv = inferPresetByUrl(optBaseUrl.value) || 'custom';
           optModels.value = settings.translateModels || '';
           optApiKey.value = '';
           syncApiKeyHint(settings);
@@ -3620,7 +3675,11 @@
           }
           lastStreamTickAt = ts;
           let hasMore = false;
-          for (const rec of streamShownMap.values()) {
+          for (const [itemId, rec] of streamShownMap.entries()) {
+            if (rec.cardEl && !rec.cardEl.isConnected) {
+              streamShownMap.delete(itemId);
+              continue;
+            }
             if (rec.shownLen < rec.text.length) {
               const delta = rec.text.length - rec.shownLen;
               const step = Math.max(2, Math.min(12, Math.ceil(delta / 5)));
@@ -4392,6 +4451,7 @@
           const p = PRESETS[presetBtn.dataset.preset];
           if (!p) return;
           optBaseUrl.value = p.baseUrl;
+          optBaseUrl.dataset.lastProv = presetBtn.dataset.preset;
           optApiKey.value = '';
           balanceReadout.className = 'cost-balance';
           balanceReadout.textContent = '';
@@ -4519,7 +4579,12 @@
       optBaseUrl.addEventListener('change', () => {
         const cleaned = sanitizeBaseUrl(optBaseUrl.value);
         if (cleaned) optBaseUrl.value = cleaned;
-        optApiKey.value = '';
+        const nextProv = inferPresetByUrl(optBaseUrl.value) || 'custom';
+        const prevProv = optBaseUrl.dataset.lastProv || '';
+        if (prevProv && prevProv !== nextProv) {
+          optApiKey.value = '';
+        }
+        optBaseUrl.dataset.lastProv = nextProv;
         syncApiKeyHint();
       });
       optBaseUrl.addEventListener('input', () => syncApiKeyHint());
@@ -4579,8 +4644,27 @@
         testStatus.className = 'test-status';
         testStatus.textContent = `正在移除「${PROVIDER_SHORT_NAMES[provKey] || provKey}」渠道…`;
         try {
-          const saved = await saveSetting({ providerProfiles: { [provKey]: null } });
+          const legacyProv = inferPresetByUrl(currentState?.settings?.translateBaseUrl || baseUrl) || 'custom';
+          const currentQueue = parseModelInput();
+          const filteredQueue = currentQueue.filter((entry) => {
+            const sp = splitSpecClient(entry);
+            if (sp.qualified) return sp.provider !== provKey;
+            return legacyProv !== provKey;
+          });
+          const removePatch = { providerProfiles: { [provKey]: null } };
+          const removedModelCount = currentQueue.length - filteredQueue.length;
+          if (removedModelCount > 0) {
+            removePatch.translateModels = filteredQueue.join(', ');
+          }
+          const saved = await saveSetting(removePatch);
           optApiKey.value = '';
+          if (removedModelCount > 0) {
+            optModels.value = saved.translateModels || '';
+          }
+          if (provKey === 'local' && saved.translateBaseUrl) {
+            optBaseUrl.value = saved.translateBaseUrl;
+            optBaseUrl.dataset.lastProv = inferPresetByUrl(saved.translateBaseUrl) || 'custom';
+          }
           if (!currentState) currentState = { settings: saved, turns: [], conversations: [] };
           else currentState.settings = saved;
           discoveredModels = null;
@@ -4589,8 +4673,9 @@
           if (Object.keys(getConfiguredProfiles(saved)).length > 0) {
             await runDiscoverModels(true);
           }
+          const modelNote = removedModelCount > 0 ? `，已自动从队列清理 ${removedModelCount} 个该平台模型` : '';
           testStatus.className = 'test-status ok';
-          testStatus.textContent = `已移除「${PROVIDER_SHORT_NAMES[provKey] || provKey}」渠道，其它已配置平台保持不变。`;
+          testStatus.textContent = `已移除「${PROVIDER_SHORT_NAMES[provKey] || provKey}」渠道${modelNote}，其它已配置平台保持不变。`;
         } catch (err) {
           testStatus.className = 'test-status err';
           testStatus.textContent = `移除失败：${err.message}`;
