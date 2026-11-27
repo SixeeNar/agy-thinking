@@ -650,17 +650,6 @@ function startServer() {
           }
           const prev = settingsStore.read();
           const cleanedPatch = validateSettings(patch);
-          // 更换了服务商 Base URL 时，未显式传入新 Key/模型则自动清空旧服务商的 Key/模型，避免跨渠道串台
-          const providerChanged = Boolean(
-            cleanedPatch.translateBaseUrl &&
-            cleanedPatch.translateBaseUrl.toLowerCase() !== (prev.translateBaseUrl || '').toLowerCase()
-          );
-          if (providerChanged && cleanedPatch.translateApiKey === undefined) {
-            cleanedPatch.translateApiKey = '';
-          }
-          if (providerChanged && cleanedPatch.translateModels === undefined) {
-            cleanedPatch.translateModels = '';
-          }
           const next = settingsStore.update(cleanedPatch);
           settingsVersion += 1;
           const styleChanged = Boolean(cleanedPatch.translateStyle && cleanedPatch.translateStyle !== prev.translateStyle);
@@ -668,6 +657,7 @@ function startServer() {
             (cleanedPatch.translateBaseUrl !== undefined && cleanedPatch.translateBaseUrl !== prev.translateBaseUrl) ||
             (cleanedPatch.translateApiKey !== undefined && cleanedPatch.translateApiKey !== prev.translateApiKey) ||
             (cleanedPatch.translateModels !== undefined && cleanedPatch.translateModels !== prev.translateModels) ||
+            (cleanedPatch.providerProfiles !== undefined) ||
             (cleanedPatch.translateEnabled !== undefined && cleanedPatch.translateEnabled !== prev.translateEnabled) ||
             (cleanedPatch.disableTranslatorThinking !== undefined && cleanedPatch.disableTranslatorThinking !== prev.disableTranslatorThinking);
           if (styleChanged) {
@@ -698,7 +688,9 @@ function startServer() {
         if (typeof body?.translateBaseUrl === 'string' && body.translateBaseUrl.trim() && !override.translateBaseUrl) {
           throw new Error('API Base URL 格式无效，请以 http:// 或 https:// 开头');
         }
-        const result = await translator.discoverModels(override);
+        const result = body?.scope === 'all'
+          ? await translator.discoverAllConfiguredModels(override)
+          : await translator.discoverModels(override);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(result));
       } catch (err) {

@@ -1062,8 +1062,36 @@
     .cost-tag.slow { color: var(--err-clr); background: rgba(251, 113, 133, 0.11); border-color: rgba(251, 113, 133, 0.26); }
     .cost-tag.neutral { color: var(--fg-muted); background: var(--surface-2); border-color: var(--hairline); }
 
+    .provider-tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 0 5px;
+      height: 16px;
+      border-radius: 4px;
+      font-size: 9.9px;
+      font-weight: 580;
+      color: var(--fg-base);
+      background: rgba(var(--c2-rgb), 0.14);
+      border: 1px solid rgba(var(--c2-rgb), 0.3);
+      white-space: nowrap;
+    }
+
+    .preset-row .pill-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .preset-row .pill-btn.is-configured::before {
+      content: "";
+      width: 5.5px;
+      height: 5.5px;
+      border-radius: 50%;
+      background: var(--ok-clr);
+      box-shadow: 0 0 6px rgba(52, 211, 153, 0.7);
+      flex: 0 0 auto;
+    }
     .preset-row .pill-btn.is-current {
-      border-color: rgba(var(--c2-rgb), 0.52);
+      border-color: rgba(var(--c2-rgb), 0.56);
       background: var(--gem-grad-soft);
       color: var(--fg-base);
       font-weight: 580;
@@ -2230,7 +2258,7 @@
 
             <div class="fold-body">
               <div class="field-group" style="margin-top:2px;">
-                <span class="field-label">快捷预设</span>
+                <span class="field-label">已接入渠道（可同时配置多个平台，绿点 = 已配置）</span>
                 <div class="preset-row">
                   <button type="button" class="pill-btn recommend" data-preset="siliconflow">硅基流动</button>
                   <button type="button" class="pill-btn recommend" data-preset="modelscope">魔搭社区</button>
@@ -2251,10 +2279,10 @@
               <div class="field-group">
                 <div class="field-label-row">
                   <label class="field-label" for="optApiKey">API Key</label>
-                  <div style="display:inline-flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;">
-                    <button type="button" id="openKeyConsoleBtn" class="pill-btn recommend" style="padding:2px 8px;font-size:10.4px;" title="打开当前服务商官网创建 API Key">获取 Key ↗</button>
-                    <button type="button" id="clearKeyBtn" class="pill-btn danger" style="padding:2px 7px;font-size:10.4px;display:none;">清空</button>
-                    <button type="button" id="detectModelsBtn" class="pill-btn" style="padding:2px 8px;font-size:10.4px;">识别模型</button>
+                  <div style="display:inline-flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
+                    <button type="button" id="openKeyConsoleBtn" class="pill-btn recommend" style="padding:2px 7px;font-size:10.3px;" title="打开当前服务商官网创建 API Key">获取 Key ↗</button>
+                    <button type="button" id="saveProviderBtn" class="pill-btn" style="padding:2px 7px;font-size:10.3px;" title="仅保存当前选中的渠道凭证并纳入汇总排行">保存渠道</button>
+                    <button type="button" id="clearKeyBtn" class="pill-btn danger" style="padding:2px 7px;font-size:10.3px;display:none;" title="从已配置平台中移除当前渠道">移除</button>
                   </div>
                 </div>
                 <div class="input-wrap">
@@ -2263,17 +2291,18 @@
                 </div>
               </div>
 
-              <!-- 三维推荐度模型选择列表 -->
+              <!-- 汇总所有已配置平台的三维推荐度模型排行 -->
               <div class="model-picker-box">
                 <div class="model-picker-bar">
                   <span class="model-picker-title">
-                    模型列表
-                    <span id="modelListMeta" class="model-picker-meta">精选参考</span>
+                    已配平台排行
+                    <span id="modelListMeta" class="model-picker-meta">待配置平台</span>
                   </span>
                   <div style="display:inline-flex;gap:4px;flex-wrap:wrap;">
-                    <button type="button" id="filterFreeBtn" class="pill-btn" style="padding:2px 7px;font-size:10.4px;" title="只显示经核实的免费模型">只看免费</button>
-                    <button type="button" id="filterRecBtn" class="pill-btn active" style="padding:2px 7px;font-size:10.4px;">只看高分</button>
-                    <button type="button" id="pickTop3Btn" class="pill-btn" style="padding:2px 7px;font-size:10.4px;">选 Top 3</button>
+                    <button type="button" id="detectModelsBtn" class="pill-btn" style="padding:2px 7px;font-size:10.3px;" title="拉取并刷新所有已配置平台的模型汇总">刷新汇总</button>
+                    <button type="button" id="filterFreeBtn" class="pill-btn" style="padding:2px 7px;font-size:10.3px;" title="只显示经核实的免费模型">只看免费</button>
+                    <button type="button" id="filterRecBtn" class="pill-btn active" style="padding:2px 7px;font-size:10.3px;">只看高分</button>
+                    <button type="button" id="pickTop3Btn" class="pill-btn" style="padding:2px 7px;font-size:10.3px;">选 Top 3</button>
                   </div>
                 </div>
 
@@ -2286,14 +2315,14 @@
                 </div>
 
                 <div class="model-filter-row">
-                  <input id="modelSearchInput" class="field-input" type="search" placeholder="筛选模型名或特点…" />
+                  <input id="modelSearchInput" class="field-input" type="search" placeholder="筛选平台（如 魔搭/智谱）、模型名或特点…" />
                 </div>
                 <div id="modelList" class="model-list"></div>
               </div>
 
               <div class="field-group">
-                <label class="field-label" for="optModels">启用队列（限流自动顺延）</label>
-                <input id="optModels" class="field-input" type="text" placeholder="Qwen/Qwen2.5-7B-Instruct, THUDM/glm-4-9b-chat" />
+                <label class="field-label" for="optModels">启用队列（支持跨平台顺延，限流自动切下一平台）</label>
+                <input id="optModels" class="field-input" type="text" placeholder="modelscope::deepseek-ai/DeepSeek-V3, zhipu::glm-4.7-flash" />
               </div>
 
               <div class="setting-row" style="margin-top:6px;">
@@ -2449,6 +2478,7 @@
       const optApiKey = document.getElementById('optApiKey');
       const toggleKeyEye = document.getElementById('toggleKeyEye');
       const openKeyConsoleBtn = document.getElementById('openKeyConsoleBtn');
+      const saveProviderBtn = document.getElementById('saveProviderBtn');
       const quickOpenConsoleBtn = document.getElementById('quickOpenConsoleBtn');
       const clearKeyBtn = document.getElementById('clearKeyBtn');
       const detectModelsBtn = document.getElementById('detectModelsBtn');
@@ -2621,8 +2651,9 @@
       let streamRaf = 0;
       let lastStreamTickAt = 0;
 
-      // 三维模型选择器状态
+      // 三维模型选择器状态（汇总所有已配置平台）
       let discoveredModels = null;
+      let discoveredProviders = [];
       let recDim = 'overall'; // 'overall' | 'value' | 'natural'
       let onlyHighRec = true;
       let onlyFreeOnly = false;
@@ -2869,6 +2900,65 @@
         return { grade: 'B', cls: 'b-tier' };
       }
 
+      const PROVIDER_SHORT_NAMES = {
+        siliconflow: '硅基流动',
+        modelscope: '魔搭',
+        zhipu: '智谱',
+        hunyuan: '混元',
+        deepseek: 'DeepSeek',
+        qwen: '百炼',
+        openrouter: 'OpenRouter',
+        local: '本地',
+        custom: '自定义',
+      };
+
+      function getConfiguredProfiles(settings = currentState?.settings) {
+        const out = {};
+        const profiles = settings?.providerProfiles || {};
+        for (const [k, v] of Object.entries(profiles)) {
+          if (!v || !v.baseUrl || v.enabled === false) continue;
+          if (k !== 'local' && !v.hasApiKey) continue;
+          out[k] = v;
+        }
+        if (Object.keys(out).length === 0 && settings?.translateBaseUrl && (settings?.hasApiKey || isLocalGatewayUrl(settings.translateBaseUrl))) {
+          const k = inferPresetByUrl(settings.translateBaseUrl) || 'custom';
+          out[k] = {
+            baseUrl: settings.translateBaseUrl,
+            hasApiKey: Boolean(settings.hasApiKey),
+            apiKey: settings.translateApiKey || '',
+            enabled: true,
+          };
+        }
+        return out;
+      }
+
+      function splitSpecClient(raw) {
+        const s = String(raw || '').trim();
+        const m = s.match(/^(siliconflow|modelscope|zhipu|hunyuan|deepseek|qwen|openrouter|local|custom)::(.+)$/i);
+        if (m) return { provider: m[1].toLowerCase(), modelId: m[2].trim(), qualified: true };
+        return { provider: '', modelId: s, qualified: false };
+      }
+
+      function getModelQualifiedId(m) {
+        if (m?.qualifiedId) return m.qualifiedId;
+        const prov = m?.provider || inferPresetByUrl(optBaseUrl.value) || 'custom';
+        return `${prov}::${m?.id || ''}`;
+      }
+
+      function findSelectedRank(selectedList, m) {
+        const qId = getModelQualifiedId(m);
+        const legacyProv = inferPresetByUrl(currentState?.settings?.translateBaseUrl || optBaseUrl.value) || 'custom';
+        for (let i = 0; i < selectedList.length; i++) {
+          const sp = splitSpecClient(selectedList[i]);
+          if (sp.qualified) {
+            if (`${sp.provider}::${sp.modelId}` === qId) return i + 1;
+          } else if (sp.modelId === m.id && (m.provider === legacyProv || !m.provider)) {
+            return i + 1;
+          }
+        }
+        return 0;
+      }
+
       function isModelFree(m) {
         return Boolean(m?.isFree || m?.costTone === 'free');
       }
@@ -2877,12 +2967,30 @@
         return Boolean(m?.isPro || /^Pro\//i.test(m?.id || ''));
       }
 
+      function buildCuratedFallbackForConfigured(profiles) {
+        const items = [];
+        for (const [provKey, prof] of Object.entries(profiles)) {
+          const curated = PRESETS[provKey]?.curated || [];
+          for (const c of curated) {
+            items.push({
+              ...c,
+              provider: provKey,
+              providerName: PROVIDER_SHORT_NAMES[provKey] || provKey,
+              baseUrl: prof.baseUrl,
+              qualifiedId: `${provKey}::${c.id}`,
+            });
+          }
+        }
+        return items;
+      }
+
       function getSortedCatalog() {
-        const presetKey = inferPresetByUrl(optBaseUrl.value);
+        const profiles = getConfiguredProfiles();
+        const hasConfigured = Object.keys(profiles).length > 0;
         const hasDiscovered = Array.isArray(discoveredModels) && discoveredModels.length > 0;
         const base = hasDiscovered
           ? discoveredModels
-          : ((presetKey && PRESETS[presetKey]?.curated) || []);
+          : (hasConfigured ? buildCuratedFallbackForConfigured(profiles) : []);
         return [...base].sort((a, b) =>
           Number(isModelPro(a)) - Number(isModelPro(b)) ||
           scoreOf(b, recDim) - scoreOf(a, recDim) ||
@@ -2906,14 +3014,20 @@
           const canon = String(m.id || '').replace(/^Pro\//i, '').toLowerCase();
           if (seenCanon.has(canon)) continue;
           seenCanon.add(canon);
-          picked.push(m.id);
+          picked.push(getModelQualifiedId(m));
           if (picked.length >= 3) break;
         }
         return picked;
       }
 
       function isTop3Selected(selectedList, top3Ids) {
-        return top3Ids.length > 0 && top3Ids.every((id) => selectedList.includes(id));
+        if (top3Ids.length === 0) return false;
+        const legacyProv = inferPresetByUrl(currentState?.settings?.translateBaseUrl || optBaseUrl.value) || 'custom';
+        const normSelected = new Set(selectedList.map((raw) => {
+          const sp = splitSpecClient(raw);
+          return sp.qualified ? `${sp.provider}::${sp.modelId}` : `${legacyProv}::${sp.modelId}`;
+        }));
+        return top3Ids.every((qid) => normSelected.has(qid));
       }
 
       function syncTop3Button(selectedList) {
@@ -2924,67 +3038,76 @@
         pickTop3Btn.textContent = active ? `✓ 已选 Top ${top3Ids.length}` : (top3Ids.length > 0 ? `选${tag} Top ${top3Ids.length}` : '选 Top 3');
         pickTop3Btn.disabled = top3Ids.length === 0;
         pickTop3Btn.title = active
-          ? '再次点击取消选中这组推荐模型'
-          : `按当前「${DIM_LABELS[recDim]}」${onlyFreeOnly ? '免费' : ''}筛选一键选中前 ${top3Ids.length || 3} 名（自动排除 Pro 重复项）`;
+          ? '再次点击取消选中这组跨平台推荐模型'
+          : `按当前「${DIM_LABELS[recDim]}」${onlyFreeOnly ? '免费' : ''}排行，跨所有已配置平台一键选中前 ${top3Ids.length || 3} 名`;
       }
 
       function renderModelList() {
         const selected = parseModelInput();
-        const selectedIndexMap = new Map(selected.map((id, idx) => [id, idx + 1]));
+        const profiles = getConfiguredProfiles();
+        const configuredKeys = Object.keys(profiles);
         const catalog = getSortedCatalog();
         const q = modelSearch.trim().toLowerCase();
 
         syncTop3Button(selected);
 
         const filtered = catalog.filter((m) => {
+          const rank = findSelectedRank(selected, m);
           const dimScore = scoreOf(m, recDim);
-          if (onlyFreeOnly && !selectedIndexMap.has(m.id) && !isModelFree(m)) return false;
-          if (onlyHighRec && !selectedIndexMap.has(m.id) && dimScore < 84) return false;
+          if (onlyFreeOnly && !rank && !isModelFree(m)) return false;
+          if (onlyHighRec && !rank && dimScore < 84) return false;
           if (!q) return true;
-          return m.id.toLowerCase().includes(q) || (m.reason || '').toLowerCase().includes(q) || (m.costTag || '').toLowerCase().includes(q);
+          const pName = (m.providerName || PROVIDER_SHORT_NAMES[m.provider] || '').toLowerCase();
+          return (
+            m.id.toLowerCase().includes(q) ||
+            pName.includes(q) ||
+            (m.provider || '').toLowerCase().includes(q) ||
+            (m.reason || '').toLowerCase().includes(q) ||
+            (m.costTag || '').toLowerCase().includes(q)
+          );
         });
 
-        const hasDiscovered = Array.isArray(discoveredModels) && discoveredModels.length > 0;
-        if (hasDiscovered) {
-          const highCount = discoveredModels.filter((m) => scoreOf(m, recDim) >= 84).length;
-          const freeCount = discoveredModels.filter((m) => isModelFree(m)).length;
-          modelListMeta.textContent = `已识别 ${discoveredModels.length} 个 · ${freeCount} 免费 · ${highCount} 高分`;
-        } else if (inferPresetByUrl(optBaseUrl.value)) {
+        const provCount = discoveredProviders.length > 0 ? discoveredProviders.length : configuredKeys.length;
+        if (provCount > 0) {
+          const highCount = catalog.filter((m) => scoreOf(m, recDim) >= 84).length;
           const freeCount = catalog.filter((m) => isModelFree(m)).length;
-          modelListMeta.textContent = freeCount > 0 ? `核实参考 · ${freeCount} 免费` : '核实参考 · 全系收费';
+          modelListMeta.textContent = `已配 ${provCount} 平台 · ${catalog.length} 模型 · ${freeCount} 免费 · ${highCount} 高分`;
         } else {
-          modelListMeta.textContent = '自定义网关 · 填 Key 后识别模型';
+          modelListMeta.textContent = '尚未配置任何平台';
         }
 
         if (filtered.length === 0) {
-          const emptyMsg = !hasDiscovered && !inferPresetByUrl(optBaseUrl.value)
-            ? '自定义网关请填完 API Key 点「识别模型」，或直接在下方输入模型名'
+          const emptyMsg = provCount === 0
+            ? '暂未配置任何平台凭证 — 点上方任意渠道，点「获取 Key ↗」粘贴后点「保存渠道」（或选 Ollama 点「启用本机」），即可自动汇总所有已配平台模型进行三维度排行。'
             : onlyFreeOnly
-              ? '当前渠道下暂无核实免费模型，点上方取消「只看免费」查看低价收费档'
-              : (onlyHighRec ? '当前维度下暂无 ≥84 分模型，点上方取消「只看高分」查看全部' : '没有匹配的模型');
+              ? '已配置平台下暂无核实免费模型，点上方取消「只看免费」或再接入一个免费渠道（如 魔搭 / 智谱 / 硅基 / 混元）'
+              : (onlyHighRec ? '当前维度下暂无 ≥84 分模型，点上方取消「只看高分」查看全部' : '没有匹配的模型或平台');
           modelListEl.innerHTML = `<div class="model-empty">${emptyMsg}</div>`;
           return;
         }
 
         const dimLabel = DIM_LABELS[recDim];
-        const html = filtered.slice(0, 120).map((m) => {
-          const rank = selectedIndexMap.get(m.id);
-          const isSel = Boolean(rank);
+        const html = filtered.slice(0, 150).map((m) => {
+          const rank = findSelectedRank(selected, m);
+          const isSel = rank > 0;
+          const qId = getModelQualifiedId(m);
           const curScore = scoreOf(m, recDim);
           const ov = scoreOf(m, 'overall');
           const val = scoreOf(m, 'value');
           const nat = scoreOf(m, 'natural');
           const { grade, cls } = gradeAndTier(curScore);
           const tone = m.costTone || 'neutral';
+          const pName = m.providerName || PROVIDER_SHORT_NAMES[m.provider] || '自定义';
           return (
-            `<div class="model-item${isSel ? ' selected' : ''}" data-model-id="${escapeHtml(m.id)}">` +
-              `<span class="model-rank-badge" title="${isSel ? '顺延优先级 #' + rank + '（点击取消）' : '点击勾选'}">${isSel ? '#' + rank : '+'}</span>` +
+            `<div class="model-item${isSel ? ' selected' : ''}" data-model-id="${escapeHtml(m.id)}" data-qualified-id="${escapeHtml(qId)}">` +
+              `<span class="model-rank-badge" title="${isSel ? '顺延优先级 #' + rank + '（点击取消）' : '点击加入跨平台队列'}">${isSel ? '#' + rank : '+'}</span>` +
               `<div class="model-info">` +
                 `<div class="model-top">` +
-                  `<span class="model-id" title="${escapeHtml(m.id)}">${escapeHtml(m.id)}</span>` +
+                  `<span class="model-id" title="${escapeHtml(qId)}">${escapeHtml(m.id)}</span>` +
                   `<span class="score-pill ${cls}" title="${dimLabel}推荐分 ${curScore}/100">${grade} · ${curScore}</span>` +
                 `</div>` +
                 `<div class="model-metrics">` +
+                  `<span class="provider-tag" title="来自已配置平台：${escapeHtml(pName)}">${escapeHtml(pName)}</span>` +
                   `<span class="cost-tag ${escapeHtml(tone)}">${escapeHtml(m.costTag || '可用')}</span>` +
                   `<span class="metric-chip${recDim === 'overall' ? ' focus' : ''}">综合 ${ov}</span>` +
                   `<span class="metric-chip${recDim === 'value' ? ' focus' : ''}">性价比 ${val}</span>` +
@@ -3003,77 +3126,72 @@
         const baseUrl = sanitizeBaseUrl(optBaseUrl.value);
         if (baseUrl && baseUrl !== optBaseUrl.value.trim()) optBaseUrl.value = baseUrl;
         const rawKey = optApiKey.value.trim();
-        const isLocal = isLocalGatewayUrl(baseUrl);
-        const sameProvider = normalizeUrl(baseUrl) === normalizeUrl(currentState?.settings?.translateBaseUrl);
-        const hasSavedKey = Boolean(currentState?.settings?.hasApiKey) && sameProvider;
-        if (!baseUrl) return;
-        if (!isValidHttpUrl(baseUrl)) {
+        const profiles = getConfiguredProfiles();
+        const hasAny = Object.keys(profiles).length > 0 || Boolean(baseUrl && rawKey);
+
+        if (!hasAny) {
+          discoveredModels = null;
+          discoveredProviders = [];
+          renderModelList();
           if (!silent) {
             testStatus.className = 'test-status err';
-            testStatus.textContent = 'API Base URL 格式无效，请填写以 http:// 或 https:// 开头的地址。';
-          }
-          return;
-        }
-        if (!rawKey && !hasSavedKey && !isLocal) {
-          if (!silent) {
-            testStatus.className = 'test-status err';
-            testStatus.textContent = sameProvider
-              ? '请先粘贴 API Key，再点「识别模型」（或点右侧「获取 Key ↗」前往官网创建）。'
-              : '已切换服务商地址，请先粘贴该服务商的 API Key 再识别模型。';
+            testStatus.textContent = '尚未配置任何平台凭证，请先在上方选一个渠道填 Key 并点「保存渠道」。';
           }
           return;
         }
 
         const reqSeq = ++discoverReqSeq;
         detectModelsBtn.disabled = true;
-        detectModelsBtn.textContent = '识别中…';
+        detectModelsBtn.textContent = '汇总中…';
         if (!silent) {
           testStatus.className = 'test-status';
-          testStatus.textContent = '正在拉取可用文本模型并按渠道核实收费/免费标签与三维评分…';
+          testStatus.textContent = '正在并行拉取所有已配置平台的模型并按「综合 / 性价比 / 自然感」三维度汇总排行…';
         }
         try {
-          const body = { translateBaseUrl: baseUrl };
-          if (rawKey) body.translateApiKey = rawKey;
+          const body = { scope: 'all' };
+          if (baseUrl && rawKey && isValidHttpUrl(baseUrl)) {
+            body.translateBaseUrl = baseUrl;
+            body.translateApiKey = rawKey;
+          }
           const res = await postJson('/api/translate/models', body);
           if (reqSeq !== discoverReqSeq) return;
           const list = Array.isArray(res.models) ? res.models : [];
-          // 若网关未开放 /models 或返回空数组，保留内置核实精选列表不覆盖成白板
-          discoveredModels = list.length > 0 ? list : null;
+          discoveredModels = list;
+          discoveredProviders = Array.isArray(res.providers) ? res.providers : [];
           if (list.length > 0 && !list.some((m) => scoreOf(m, recDim) >= 84)) {
             onlyHighRec = false;
             filterRecBtn.classList.remove('active');
           }
           renderModelList();
           if (!silent) {
-            if (res.fallbackCurated || list.length === 0) {
-              testStatus.className = 'test-status ok';
-              testStatus.textContent = res.notice || '该网关未返回可用模型列表，已保留下方核实精选参考（可直接勾选或手动填写）。';
-            } else {
-              const highCount = list.filter((m) => scoreOf(m, 'overall') >= 84).length;
-              const freeCount = list.filter((m) => isModelFree(m)).length;
-              testStatus.className = 'test-status ok';
-              testStatus.textContent = `识别完成！共 ${list.length} 个纯文本模型（${freeCount} 个核实免费 · ${highCount} 个高推荐），可点「只看免费」筛选零成本模型。`;
-            }
+            const pSummary = discoveredProviders.map((p) => `${p.name}(${p.count})`).join(' + ');
+            const freeCount = list.filter((m) => isModelFree(m)).length;
+            testStatus.className = 'test-status ok';
+            testStatus.textContent = `已汇总 ${discoveredProviders.length} 个已配平台：${pSummary || '无'}，共 ${list.length} 个模型（${freeCount} 个核实免费）。`;
           }
         } catch (err) {
           if (reqSeq !== discoverReqSeq) return;
           if (!silent) {
             testStatus.className = 'test-status err';
-            testStatus.textContent = `${err.message}（部分渠道未开放 /models，可直接勾选下方参考模型或手动输入）`;
+            testStatus.textContent = `汇总刷新失败：${err.message}`;
           }
         } finally {
           if (reqSeq === discoverReqSeq) {
             detectModelsBtn.disabled = false;
-            detectModelsBtn.textContent = '识别模型';
+            detectModelsBtn.textContent = '刷新汇总';
           }
         }
       }
 
-      function syncProviderButtons() {
-        const key = inferPresetByUrl(optBaseUrl.value || currentState?.settings?.translateBaseUrl || '');
+      function syncProviderButtons(settings = currentState?.settings) {
+        const curUrl = optBaseUrl.value || settings?.translateBaseUrl || '';
+        const key = inferPresetByUrl(curUrl);
         const p = key ? PRESETS[key] : null;
+        const profiles = getConfiguredProfiles(settings);
         for (const btn of document.querySelectorAll('[data-preset]')) {
-          btn.classList.toggle('is-current', Boolean(key) && btn.dataset.preset === key);
+          const pk = btn.dataset.preset;
+          btn.classList.toggle('is-current', Boolean(key) && pk === key);
+          btn.classList.toggle('is-configured', Boolean(profiles[pk]));
         }
         if (openKeyConsoleBtn) {
           openKeyConsoleBtn.style.display = p ? '' : 'none';
@@ -3096,6 +3214,10 @@
             openBillingBtn.title = `打开 ${p.name} 官方控制台：${p.billingUrl}`;
           }
         }
+        if (saveProviderBtn) {
+          const isLocal = key === 'local' || isLocalGatewayUrl(curUrl);
+          saveProviderBtn.textContent = isLocal ? (profiles.local ? '更新本机' : '启用本机') : '保存渠道';
+        }
       }
 
       async function openOfficialUrl(targetUrl) {
@@ -3114,21 +3236,20 @@
 
       function syncApiKeyHint(settings = currentState?.settings) {
         const curUrl = sanitizeBaseUrl(optBaseUrl.value);
-        const isLocal = isLocalGatewayUrl(curUrl);
-        const savedUrl = settings?.translateBaseUrl || '';
-        const sameProvider = !savedUrl || normalizeUrl(curUrl) === normalizeUrl(savedUrl);
-        const hasSavedKey = Boolean(settings?.hasApiKey);
-        clearKeyBtn.style.display = hasSavedKey && sameProvider ? '' : 'none';
-        if (hasSavedKey && sameProvider) {
-          optApiKey.placeholder = `已配置 (${settings.translateApiKey})，留空则保持不变`;
+        const curKey = inferPresetByUrl(curUrl) || 'custom';
+        const isLocal = curKey === 'local' || isLocalGatewayUrl(curUrl);
+        const profiles = getConfiguredProfiles(settings);
+        const curProf = profiles[curKey];
+        const hasSavedForCur = Boolean(curProf && (curProf.hasApiKey || isLocal));
+        clearKeyBtn.style.display = hasSavedForCur ? '' : 'none';
+        if (curProf?.hasApiKey) {
+          optApiKey.placeholder = `该渠道已接入 (${curProf.apiKey})，留空则保持不变`;
         } else if (isLocal) {
-          optApiKey.placeholder = '本地免鉴权网关可留空';
-        } else if (hasSavedKey && !sameProvider) {
-          optApiKey.placeholder = '已切换服务商，请粘贴该服务商的 API Key（保存将清空旧 Key）';
+          optApiKey.placeholder = curProf ? '本地网关已纳入汇总（免 Key）' : '本地免鉴权网关，点上方「启用本机」加入排行';
         } else {
-          optApiKey.placeholder = '粘贴你的 sk-... 密钥（本地免鉴权可留空）';
+          optApiKey.placeholder = '粘贴该渠道的 API Key，点「保存渠道」即可加入汇总排行';
         }
-        syncProviderButtons();
+        syncProviderButtons(settings);
       }
 
       const DISPLAY_LEVEL_HINTS = {
@@ -3171,31 +3292,25 @@
 
         const apiSummaryEl = document.getElementById('apiProviderSummary');
         const apiDetailsEl = document.getElementById('apiConfigDetails');
-        const isLocalUrl = isLocalGatewayUrl(settings.translateBaseUrl || '');
-        const providerNames = {
-          siliconflow: '硅基流动',
-          modelscope: '魔搭社区',
-          zhipu: '智谱 GLM',
-          hunyuan: '腾讯混元',
-          deepseek: 'DeepSeek',
-          qwen: '阿里云百炼',
-          openrouter: 'OpenRouter',
-          local: '本地网关',
-        };
-        const pName = providerNames[inferPresetByUrl(settings.translateBaseUrl || '')] || '自定义网关';
-        const firstModel = String(settings.translateModels || '').split(/[,，\n]+/).map((s) => s.trim()).filter(Boolean)[0] || '';
-        const hasKeyOrLocal = Boolean(settings.hasApiKey || isLocalUrl);
-        const isConfigReady = hasKeyOrLocal && Boolean(firstModel);
+        const configuredProfiles = getConfiguredProfiles(settings);
+        const configuredCount = Object.keys(configuredProfiles).length;
+        const firstSpecRaw = String(settings.translateModels || '').split(/[,，\n]+/).map((s) => s.trim()).filter(Boolean)[0] || '';
+        const firstSp = splitSpecClient(firstSpecRaw);
+        const firstProvName = firstSp.provider
+          ? (PROVIDER_SHORT_NAMES[firstSp.provider] || firstSp.provider)
+          : (PROVIDER_SHORT_NAMES[inferPresetByUrl(settings.translateBaseUrl || '')] || '自定义');
+        const firstModelShort = firstSp.modelId ? shortModelName(firstSp.modelId) : '';
+        const isConfigReady = configuredCount > 0 && Boolean(firstModelShort);
         if (apiSummaryEl) {
           if (isConfigReady) {
             apiSummaryEl.className = 'fold-sub ok';
-            apiSummaryEl.textContent = `${pName} · ${shortModelName(firstModel)}${isLocalUrl ? '（本地免 Key）' : ' · 已配 Key'}`;
-          } else if (!hasKeyOrLocal) {
+            apiSummaryEl.textContent = `已配 ${configuredCount} 平台 · 主用 ${firstProvName}/${firstModelShort}`;
+          } else if (configuredCount === 0) {
             apiSummaryEl.className = 'fold-sub warn';
-            apiSummaryEl.textContent = `${pName} · 待填写 API Key`;
+            apiSummaryEl.textContent = '待配置至少 1 个平台 API Key';
           } else {
             apiSummaryEl.className = 'fold-sub warn';
-            apiSummaryEl.textContent = `${pName} · 待选择模型${isLocalUrl ? '（本地免 Key）' : ' · 已配 Key'}`;
+            apiSummaryEl.textContent = `已配 ${configuredCount} 平台 · 待从排行选择模型`;
           }
         }
         if (apiDetailsEl && !settingsHydrated) {
@@ -3226,12 +3341,12 @@
           optApiKey.value = '';
           syncApiKeyHint(settings);
           renderModelList();
-          const isLocal = isLocalGatewayUrl(settings.translateBaseUrl || '');
-          if (settings.hasApiKey || isLocal) {
+          if (configuredCount > 0) {
             void runDiscoverModels(true);
           }
         } else {
           syncApiKeyHint(settings);
+          renderModelList();
         }
       }
 
@@ -4268,7 +4383,7 @@
         clearTimeout(autoDetectTimer);
         discoverReqSeq += 1;
         detectModelsBtn.disabled = false;
-        detectModelsBtn.textContent = '识别模型';
+        detectModelsBtn.textContent = '刷新汇总';
       }
 
       paneSettings.addEventListener('click', (ev) => {
@@ -4276,35 +4391,30 @@
         if (presetBtn) {
           const p = PRESETS[presetBtn.dataset.preset];
           if (!p) return;
-          cancelPendingDiscover();
-          const urlChanged = normalizeUrl(optBaseUrl.value) !== normalizeUrl(p.baseUrl);
           optBaseUrl.value = p.baseUrl;
-          if (urlChanged) {
-            optApiKey.value = '';
-            optModels.value = '';
-            balanceReadout.className = 'cost-balance';
-            balanceReadout.textContent = '';
-          }
-          modelSearch = '';
-          modelSearchInput.value = '';
-          discoveredModels = null;
+          optApiKey.value = '';
+          balanceReadout.className = 'cost-balance';
+          balanceReadout.textContent = '';
           syncApiKeyHint();
-          renderModelList();
           testStatus.className = 'test-status';
           testStatus.textContent = p.hint;
-          if (isLocalGatewayUrl(p.baseUrl)) {
-            void runDiscoverModels(true);
-          }
           return;
         }
 
-        const modelCard = ev.target.closest('.model-item[data-model-id]');
+        const modelCard = ev.target.closest('.model-item[data-qualified-id]');
         if (modelCard) {
-          const id = modelCard.dataset.modelId;
+          const qId = modelCard.dataset.qualifiedId;
+          const rawId = modelCard.dataset.modelId;
+          const spTarget = splitSpecClient(qId);
+          const legacyProv = inferPresetByUrl(currentState?.settings?.translateBaseUrl || optBaseUrl.value) || 'custom';
           const list = parseModelInput();
-          const idx = list.indexOf(id);
-          if (idx >= 0) list.splice(idx, 1);
-          else list.push(id);
+          const matchIdx = list.findIndex((entry) => {
+            const sp = splitSpecClient(entry);
+            if (sp.qualified) return `${sp.provider}::${sp.modelId}` === qId;
+            return sp.modelId === rawId && spTarget.provider === legacyProv;
+          });
+          if (matchIdx >= 0) list.splice(matchIdx, 1);
+          else list.push(qId);
           optModels.value = list.join(', ');
           renderModelList();
         }
@@ -4373,23 +4483,29 @@
         }
       });
 
-      // 支持再次点击取消选中推荐 Top 3！
+      // 支持再次点击取消选中跨平台推荐 Top 3！
       pickTop3Btn.addEventListener('click', () => {
         const current = parseModelInput();
         const top3Ids = getCurrentTop3Ids();
         if (top3Ids.length === 0) return;
 
         if (isTop3Selected(current, top3Ids)) {
-          const remaining = current.filter((id) => !top3Ids.includes(id));
+          const legacyProv = inferPresetByUrl(currentState?.settings?.translateBaseUrl || optBaseUrl.value) || 'custom';
+          const topSet = new Set(top3Ids);
+          const remaining = current.filter((raw) => {
+            const sp = splitSpecClient(raw);
+            const norm = sp.qualified ? `${sp.provider}::${sp.modelId}` : `${legacyProv}::${sp.modelId}`;
+            return !topSet.has(norm);
+          });
           optModels.value = remaining.join(', ');
           renderModelList();
           testStatus.className = 'test-status';
-          testStatus.textContent = `已取消选中「${DIM_LABELS[recDim]}」推荐 Top ${top3Ids.length}。`;
+          testStatus.textContent = `已取消选中「${DIM_LABELS[recDim]}」跨平台推荐 Top ${top3Ids.length}。`;
         } else {
           optModels.value = top3Ids.join(', ');
           renderModelList();
           testStatus.className = 'test-status ok';
-          testStatus.textContent = `已按「${DIM_LABELS[recDim]}」维度选中 Top ${top3Ids.length} 顺延队列（再点可取消），记得点「保存配置」生效。`;
+          testStatus.textContent = `已按「${DIM_LABELS[recDim]}」维度跨已配平台选中 Top ${top3Ids.length} 顺延队列（再点可取消），记得点「保存配置」生效。`;
         }
       });
 
@@ -4401,18 +4517,10 @@
       optModels.addEventListener('input', () => renderModelList());
 
       optBaseUrl.addEventListener('change', () => {
-        cancelPendingDiscover();
         const cleaned = sanitizeBaseUrl(optBaseUrl.value);
         if (cleaned) optBaseUrl.value = cleaned;
-        const switchedAwayFromSaved = normalizeUrl(optBaseUrl.value) !== normalizeUrl(currentState?.settings?.translateBaseUrl);
-        if (switchedAwayFromSaved) {
-          optApiKey.value = '';
-        }
-        modelSearch = '';
-        modelSearchInput.value = '';
-        discoveredModels = null;
+        optApiKey.value = '';
         syncApiKeyHint();
-        renderModelList();
       });
       optBaseUrl.addEventListener('input', () => syncApiKeyHint());
 
@@ -4425,23 +4533,67 @@
       });
       detectModelsBtn.addEventListener('click', () => void runDiscoverModels(false));
 
-      clearKeyBtn.addEventListener('click', async () => {
-        cancelPendingDiscover();
+      saveProviderBtn?.addEventListener('click', async () => {
+        const baseUrl = sanitizeBaseUrl(optBaseUrl.value);
+        if (!baseUrl || !isValidHttpUrl(baseUrl)) {
+          testStatus.className = 'test-status err';
+          testStatus.textContent = '请先填写有效的 API Base URL。';
+          return;
+        }
+        const provKey = inferPresetByUrl(baseUrl) || 'custom';
+        const isLocal = provKey === 'local' || isLocalGatewayUrl(baseUrl);
+        const rawKey = optApiKey.value.trim();
+        const existingProf = getConfiguredProfiles()[provKey];
+        if (!isLocal && !rawKey && !existingProf?.hasApiKey) {
+          testStatus.className = 'test-status err';
+          testStatus.textContent = '请先粘贴该渠道的 API Key（可点左侧「获取 Key ↗」前往官网创建）。';
+          return;
+        }
+        saveProviderBtn.disabled = true;
         testStatus.className = 'test-status';
-        testStatus.textContent = '正在清空已保存的 API Key…';
+        testStatus.textContent = `正在保存「${PROVIDER_SHORT_NAMES[provKey] || provKey}」渠道并刷新全平台排行…`;
         try {
-          const saved = await saveSetting({ translateApiKey: '' });
+          const profEntry = { baseUrl, enabled: true };
+          if (rawKey) profEntry.apiKey = rawKey;
+          const saved = await saveSetting({
+            translateBaseUrl: baseUrl,
+            providerProfiles: { [provKey]: profEntry },
+          });
           optApiKey.value = '';
           if (!currentState) currentState = { settings: saved, turns: [], conversations: [] };
           else currentState.settings = saved;
           hydrateSettingsInputs(saved);
-          discoveredModels = null;
-          renderModelList();
-          testStatus.className = 'test-status ok';
-          testStatus.textContent = '已清空本机保存的 API Key。';
+          await runDiscoverModels(false);
         } catch (err) {
           testStatus.className = 'test-status err';
-          testStatus.textContent = `清空失败：${err.message}`;
+          testStatus.textContent = `保存渠道失败：${err.message}`;
+        } finally {
+          saveProviderBtn.disabled = false;
+        }
+      });
+
+      clearKeyBtn.addEventListener('click', async () => {
+        cancelPendingDiscover();
+        const baseUrl = sanitizeBaseUrl(optBaseUrl.value);
+        const provKey = inferPresetByUrl(baseUrl) || 'custom';
+        testStatus.className = 'test-status';
+        testStatus.textContent = `正在移除「${PROVIDER_SHORT_NAMES[provKey] || provKey}」渠道…`;
+        try {
+          const saved = await saveSetting({ providerProfiles: { [provKey]: null } });
+          optApiKey.value = '';
+          if (!currentState) currentState = { settings: saved, turns: [], conversations: [] };
+          else currentState.settings = saved;
+          discoveredModels = null;
+          discoveredProviders = [];
+          hydrateSettingsInputs(saved);
+          if (Object.keys(getConfiguredProfiles(saved)).length > 0) {
+            await runDiscoverModels(true);
+          }
+          testStatus.className = 'test-status ok';
+          testStatus.textContent = `已移除「${PROVIDER_SHORT_NAMES[provKey] || provKey}」渠道，其它已配置平台保持不变。`;
+        } catch (err) {
+          testStatus.className = 'test-status err';
+          testStatus.textContent = `移除失败：${err.message}`;
         }
       });
 
@@ -4454,17 +4606,12 @@
       async function persistTranslationConfig(runTest) {
         cancelPendingDiscover();
         const baseUrl = sanitizeBaseUrl(optBaseUrl.value);
-        if (!baseUrl) {
-          testStatus.className = 'test-status err';
-          testStatus.textContent = '请先填写 API Base URL。';
-          return;
-        }
-        if (!isValidHttpUrl(baseUrl)) {
+        if (baseUrl && !isValidHttpUrl(baseUrl)) {
           testStatus.className = 'test-status err';
           testStatus.textContent = 'API Base URL 格式无效，请以 http:// 或 https:// 开头。';
           return;
         }
-        optBaseUrl.value = baseUrl;
+        if (baseUrl) optBaseUrl.value = baseUrl;
         const activeModeBtn = document.querySelector('#segDisplayMode .seg-btn.active');
         const activeStyleBtn = document.querySelector('#segTranslateStyle .seg-btn.active');
         const patch = {
@@ -4472,11 +4619,15 @@
           disableTranslatorThinking: optDisableThink.checked,
           displayMode: activeModeBtn?.dataset.val || 'zh',
           translateStyle: activeStyleBtn?.dataset.val || 'natural',
-          translateBaseUrl: baseUrl,
           translateModels: optModels.value.trim(),
         };
-        if (optApiKey.value.trim()) {
-          patch.translateApiKey = optApiKey.value.trim();
+        if (baseUrl) patch.translateBaseUrl = baseUrl;
+        const rawKey = optApiKey.value.trim();
+        if (baseUrl && (rawKey || isLocalGatewayUrl(baseUrl))) {
+          const provKey = inferPresetByUrl(baseUrl) || 'custom';
+          const profEntry = { baseUrl, enabled: true };
+          if (rawKey) profEntry.apiKey = rawKey;
+          patch.providerProfiles = { [provKey]: profEntry };
         }
         saveTransBtn.disabled = true;
         testTransBtn.disabled = true;
@@ -4488,18 +4639,21 @@
           if (!currentState) currentState = { settings: saved, turns: [], conversations: [] };
           else currentState.settings = saved;
           hydrateSettingsInputs(saved);
-          const isLocal = isLocalGatewayUrl(baseUrl);
+          const configuredCount = Object.keys(getConfiguredProfiles(saved)).length;
+          if (rawKey || (baseUrl && isLocalGatewayUrl(baseUrl))) {
+            void runDiscoverModels(true);
+          }
           const hasModels = Boolean(String(saved.translateModels || '').trim());
           if (!runTest) {
-            if (!saved.hasApiKey && !isLocal) {
+            if (configuredCount === 0) {
               testStatus.className = 'test-status err';
-              testStatus.textContent = '配置已保存，但当前服务商尚未设置 API Key（切换服务商时已自动清空旧 Key），请填入 Key 后生效。';
+              testStatus.textContent = '配置已保存，但尚未接入任何平台 Key，请点上方渠道填入 Key 并点「保存渠道」。';
             } else if (!hasModels) {
               testStatus.className = 'test-status err';
-              testStatus.textContent = '配置已保存，但尚未选择翻译模型，请在上方列表勾选模型或手动输入后再保存。';
+              testStatus.textContent = '配置已保存，但尚未选择翻译模型，请在上方「已配平台排行」中勾选模型后再保存。';
             } else {
               testStatus.className = 'test-status ok';
-              testStatus.textContent = '配置已保存！新思考将立即按新模型与风格翻译。';
+              testStatus.textContent = `配置已保存！已接入 ${configuredCount} 个平台，新思考将按跨平台队列自动翻译与顺延。`;
             }
             return;
           }

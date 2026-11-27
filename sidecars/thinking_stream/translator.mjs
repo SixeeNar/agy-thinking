@@ -96,6 +96,51 @@ const SILICONFLOW_FREE_RE =
  */
 const ZHIPU_FREE_RE = /^(glm-4\.7-flash|glm-4\.5-flash|glm-4-flash)(-\d{4})?$/i;
 
+export const PROVIDER_NAMES = Object.freeze({
+  siliconflow: '硅基流动',
+  modelscope: '魔搭',
+  zhipu: '智谱',
+  hunyuan: '混元',
+  deepseek: 'DeepSeek',
+  qwen: '百炼',
+  openrouter: 'OpenRouter',
+  local: '本地',
+  custom: '自定义',
+});
+
+const PROVIDER_CURATED_IDS = Object.freeze({
+  siliconflow: [
+    'Qwen/Qwen2.5-7B-Instruct',
+    'THUDM/glm-4-9b-chat',
+    'Qwen/Qwen3-8B',
+    'deepseek-ai/DeepSeek-V3',
+    'tencent/Hunyuan-MT-7B',
+  ],
+  modelscope: [
+    'deepseek-ai/DeepSeek-V3',
+    'Qwen/Qwen2.5-72B-Instruct',
+    'Qwen/Qwen3-32B',
+    'Qwen/Qwen3-8B',
+  ],
+  zhipu: ['glm-4.7-flash', 'glm-4.5-flash', 'glm-4-flash', 'glm-4.5-air'],
+  hunyuan: ['hunyuan-lite', 'hunyuan-turbos-latest', 'hunyuan-turbo'],
+  deepseek: ['deepseek-chat'],
+  qwen: ['qwen-flash', 'qwen-turbo', 'qwen-mt-plus', 'qwen-mt-flash'],
+  openrouter: ['deepseek/deepseek-chat', 'google/gemini-2.5-flash-lite', 'qwen/qwen-2.5-7b-instruct', 'anthropic/claude-3.5-haiku'],
+  local: ['qwen2.5:7b', 'qwen3:8b', 'gemma3:4b'],
+});
+
+const QUALIFIED_MODEL_RE = /^(siliconflow|modelscope|zhipu|hunyuan|deepseek|qwen|openrouter|local|custom)::(.+)$/i;
+
+export function splitModelSpec(rawSpec) {
+  const clean = String(rawSpec || '').trim();
+  const m = clean.match(QUALIFIED_MODEL_RE);
+  if (m) {
+    return { provider: m[1].toLowerCase(), modelId: m[2].trim(), qualified: true };
+  }
+  return { provider: '', modelId: clean, qualified: false };
+}
+
 export function detectProviderKey(baseUrl) {
   const clean = String(baseUrl || '').trim();
   if (!clean) return 'custom';
@@ -700,11 +745,13 @@ function normalizeBaseUrl(url) {
 }
 
 function isHunyuanMtModel(model) {
-  return /(^|\/)(hunyuan-mt|hy-mt)/i.test(String(model || '').trim());
+  const { modelId } = splitModelSpec(model);
+  return /(^|\/)(hunyuan-mt|hy-mt)/i.test(modelId);
 }
 
 function isQwenMtModel(model) {
-  return /(^|\/)qwen-mt/i.test(String(model || '').trim());
+  const { modelId } = splitModelSpec(model);
+  return /(^|\/)qwen-mt/i.test(modelId);
 }
 
 function supportsEnableThinkingFlag(baseUrl, model) {
@@ -1212,10 +1259,59 @@ export function createTranslator(getSettings, onProgress) {
 
   let runningJobs = 0;
   const pendingJobs = [];
+  function resolveModelCandidate(rawSpec, settings) {
+    const { provider: explicitProv, modelId } = splitModelSpec(rawSpec);
+    if (!modelId) return null;
+    const profiles = settings?.providerProfiles || {};
+    const legacyUrl = String(settings?.translateBaseUrl || '').trim();
+    const legacyKey = String(settings?.translateApiKey || '').trim();
+    const legacyProv = detectProviderKey(legacyUrl);
+
+    if (explicitProv) {
+      const prof = profiles[explicitProv];
+      const baseUrl = (prof?.baseUrl || (explicitProv === legacyProv ? legacyUrl : '') || '').trim();
+      const apiKey = (prof?.apiKey || (explicitProv === legacyProv ? legacyKey : '') || '').trim();
+      return {
+        rawSpec,
+        provider: explicitProv,
+        providerName: PROVIDER_NAMES[explicitProv] || explicitProv,
+        modelId,
+        baseUrl,
+        apiKey,
+        cooldownKey: `${explicitProv}::${modelId}`,
+      };
+    }
+
+    const prof = profiles[legacyProv];
+    const baseUrl = (legacyUrl || prof?.baseUrl || '').trim();
+    const apiKey = (legacyKey || prof?.apiKey || '').trim();
+    return {
+      rawSpec,
+      provider: legacyProv,
+      providerName: PROVIDER_NAMES[legacyProv] || legacyProv,
+      modelId,
+      baseUrl,
+      apiKey,
+      cooldownKey: `${legacyProv}::${modelId}`,
+    };
+  }
+
+  function hasAnyConfiguredProvider(settings) {
+    if (settings?.translateApiKey || isLocalGatewayUrl(settings?.translateBaseUrl)) return true;
+    const profiles = settings?.providerProfiles || {};
+    for (const [k, v] of Object.entries(profiles)) {
+      if (!v || !v.baseUrl || v.enabled === false) continue;
+      if (k === 'local' || v.apiKey) return true;
+    }
+    return false;
+  }
+
   const getMaxConcurrency = () => {
     try {
       const s = getSettings();
-      const provider = detectProviderKey(s?.translateBaseUrl);
+      const firstSpec = parseModels(s?.translateModels)[0];
+      const cand = firstSpec ? resolveModelCandidate(firstSpec, s) : null;
+      const provider = cand?.provider || detectProviderKey(s?.translateBaseUrl);
       // 智谱免费 Flash 系列官方并发限制极严（常为 1 并发），自动降为单并发防止 429 限流雪崩
       if (provider === 'zhipu') return 1;
       // 魔搭每日免费推理与腾讯混元免费档降为 2 并发，兼顾速度与防 429
@@ -1310,30 +1406,37 @@ export function createTranslator(getSettings, onProgress) {
   };
 
   async function translateWithFallback(text, settings, onChunk, externalSignal, promptMode = 'full', timeoutMs = 22000, options = {}) {
-    const models = parseModels(settings.translateModels);
-    if (models.length === 0) throw new Error('未配置翻译模型名称');
+    const rawSpecs = parseModels(settings.translateModels);
+    if (rawSpecs.length === 0) throw new Error('未配置翻译模型名称');
 
-    const orderedModels = (promptMode === 'distill' || promptMode === 'narrative')
+    const resolvedAll = rawSpecs
+      .map((spec) => resolveModelCandidate(spec, settings))
+      .filter((c) => c && c.baseUrl && (c.apiKey || isLocalGatewayUrl(c.baseUrl)));
+    if (resolvedAll.length === 0) {
+      throw new Error('所选翻译模型对应的平台尚未配置 API Key');
+    }
+
+    const orderedCandidates = (promptMode === 'distill' || promptMode === 'narrative')
       ? [
-          ...models.filter((m) => !isQwenMtModel(m) && !isHunyuanMtModel(m)),
-          ...models.filter((m) => isHunyuanMtModel(m)),
-          ...models.filter((m) => isQwenMtModel(m)),
+          ...resolvedAll.filter((c) => !isQwenMtModel(c.modelId) && !isHunyuanMtModel(c.modelId)),
+          ...resolvedAll.filter((c) => isHunyuanMtModel(c.modelId)),
+          ...resolvedAll.filter((c) => isQwenMtModel(c.modelId)),
         ]
-      : models;
+      : resolvedAll;
 
     const now = Date.now();
-    const activeModels = orderedModels.filter((m) => (modelCooldownUntil.get(m) || 0) <= now);
-    if (activeModels.length === 0 && !options.bypassCooldown) {
-      const earliestReady = Math.min(...orderedModels.map((m) => modelCooldownUntil.get(m) || now));
+    const activeCandidates = orderedCandidates.filter((c) => (modelCooldownUntil.get(c.cooldownKey) || 0) <= now);
+    if (activeCandidates.length === 0 && !options.bypassCooldown) {
+      const earliestReady = Math.min(...orderedCandidates.map((c) => modelCooldownUntil.get(c.cooldownKey) || now));
       const waitSec = Math.max(1, Math.ceil((earliestReady - now) / 1000));
       const err = new Error(`翻译模型冷却中（约 ${waitSec}s 后恢复，或点「重试失败」立即重试）`);
       err.retryAfterAt = earliestReady;
       throw err;
     }
-    const candidates = activeModels.length > 0 ? activeModels : orderedModels;
+    const candidates = activeCandidates.length > 0 ? activeCandidates : orderedCandidates;
 
     let lastErr = null;
-    for (const model of candidates) {
+    for (const cand of candidates) {
       if (externalSignal?.aborted) {
         const abortErr = new Error('翻译已取消');
         abortErr.name = 'AbortError';
@@ -1343,9 +1446,9 @@ export function createTranslator(getSettings, onProgress) {
         const timeoutSig = AbortSignal.timeout(timeoutMs);
         const signal = externalSignal ? AbortSignal.any([externalSignal, timeoutSig]) : timeoutSig;
         return streamChatCompletion({
-          baseUrl: settings.translateBaseUrl,
-          apiKey: settings.translateApiKey,
-          model,
+          baseUrl: cand.baseUrl,
+          apiKey: cand.apiKey,
+          model: cand.modelId,
           text,
           disableTranslatorThinking: disableThink,
           translateStyle: settings.translateStyle || 'natural',
@@ -1377,29 +1480,29 @@ export function createTranslator(getSettings, onProgress) {
           }
         }
         if (res.text) {
-          modelCooldownUntil.delete(model);
-          rateLimitHits.delete(model);
-          lastActiveModel = model;
-          recordUsage(settings.translateBaseUrl, model, res.usage);
-          return { result: res.text, model, ttftMs: res.ttftMs, totalMs: res.totalMs, usage: res.usage };
+          modelCooldownUntil.delete(cand.cooldownKey);
+          rateLimitHits.delete(cand.cooldownKey);
+          lastActiveModel = `${cand.providerName}/${cand.modelId}`;
+          recordUsage(cand.baseUrl, cand.modelId, res.usage);
+          return { result: res.text, model: cand.modelId, provider: cand.provider, providerName: cand.providerName, ttftMs: res.ttftMs, totalMs: res.totalMs, usage: res.usage };
         }
-        lastErr = new Error(`模型 ${model} 返回空译文`);
+        lastErr = new Error(`模型 ${cand.providerName}/${cand.modelId} 返回空译文`);
       } catch (err) {
         if (externalSignal?.aborted) throw err;
         lastErr = err;
         if (err.status === 429) {
-          const hits = (rateLimitHits.get(model) || 0) + 1;
-          rateLimitHits.set(model, hits);
+          const hits = (rateLimitHits.get(cand.cooldownKey) || 0) + 1;
+          rateLimitHits.set(cand.cooldownKey, hits);
           const cooldownMs = Math.min(90000, hits === 1 ? 15000 : hits === 2 ? 30000 : 60000);
-          modelCooldownUntil.set(model, Date.now() + cooldownMs);
+          modelCooldownUntil.set(cand.cooldownKey, Date.now() + cooldownMs);
           continue;
         }
         if ([400, 401, 402, 403, 404, 422].includes(err.status)) {
-          modelCooldownUntil.set(model, Date.now() + 5 * 60 * 1000);
+          modelCooldownUntil.set(cand.cooldownKey, Date.now() + 5 * 60 * 1000);
           continue;
         }
         if ([500, 502, 503, 504].includes(err.status) || err?.name === 'TimeoutError' || err?.name === 'AbortError' || !err.status) {
-          modelCooldownUntil.set(model, Date.now() + 60 * 1000);
+          modelCooldownUntil.set(cand.cooldownKey, Date.now() + 60 * 1000);
           continue;
         }
         throw err;
@@ -2222,7 +2325,7 @@ export function createTranslator(getSettings, onProgress) {
     const enabled = settings.translateEnabled !== false;
     const style = settings.translateStyle || 'natural';
     const summaryEnabled = settings.summaryEnabled === true && style !== 'steps';
-    const hasKey = Boolean(settings.translateApiKey) || isLocalGatewayUrl(settings.translateBaseUrl);
+    const hasKey = hasAnyConfiguredProvider(settings);
     const hasModels = parseModels(settings.translateModels).length > 0;
     const triggerNew = options.triggerNew !== false;
 
@@ -2314,26 +2417,8 @@ export function createTranslator(getSettings, onProgress) {
     return turns;
   }
 
-  /**
-   * 调用当前网关的 /models 接口（Ollama 兼容 /api/tags 回退），自动识别可用对话模型并按平台精确核定收费/免费与三维评分。
-   */
-  async function discoverModels(overrideSettings = {}) {
-    const saved = getSettings();
-    const baseUrl = (overrideSettings.translateBaseUrl || saved.translateBaseUrl || '').trim().replace(/\/+$/, '');
-    const provider = detectProviderKey(baseUrl);
-    const sameProvider = normalizeBaseUrl(baseUrl) === normalizeBaseUrl(saved.translateBaseUrl);
-    const hasExplicitKey = typeof overrideSettings.translateApiKey === 'string' && overrideSettings.translateApiKey.trim() !== '';
-    const apiKey = hasExplicitKey
-      ? overrideSettings.translateApiKey.trim()
-      : (sameProvider ? (saved.translateApiKey || '').trim() : '');
-
-    if (!baseUrl) {
-      throw new Error('请先填写 API Base URL');
-    }
-    if (!apiKey && !isLocalGatewayUrl(baseUrl)) {
-      throw new Error(sameProvider ? '请先填写 API Key 再识别可用模型' : '已切换服务商地址，请先填写该服务商的 API Key');
-    }
-
+  async function fetchModelsForSingleProvider(baseUrl, apiKey, provider) {
+    const providerName = PROVIDER_NAMES[provider] || provider;
     const headers = { Accept: 'application/json' };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
@@ -2358,7 +2443,7 @@ export function createTranslator(getSettings, onProgress) {
         const res = await fetch(targetUrl, {
           method: 'GET',
           headers,
-          signal: AbortSignal.timeout(12000),
+          signal: AbortSignal.timeout(10000),
         });
         if (!res.ok) {
           lastStatus = res.status;
@@ -2372,27 +2457,37 @@ export function createTranslator(getSettings, onProgress) {
       }
     }
 
+    const decorate = (ev) => ({
+      ...ev,
+      provider,
+      providerName,
+      baseUrl,
+      qualifiedId: `${provider}::${ev.id}`,
+    });
+
     if (!payload) {
-      if ((provider === 'zhipu' || provider === 'modelscope' || provider === 'hunyuan') && (lastStatus === 404 || lastStatus === 405)) {
-        const noticeMap = {
-          zhipu: '智谱官方未开放 /models 枚举接口，已保留下方官方核实精选列表（免费 Flash 与付费档可直接勾选）。',
-          modelscope: '魔搭 API-Inference 未开放全量 /models 列表，已保留下方热门免费主力模型（也可直接填入魔搭模型广场任意 ID）。',
-          hunyuan: '腾讯混元未开放 /models 枚举接口，已保留下方官方核实模型（hunyuan-lite 免费，可直接勾选）。',
-        };
+      const curatedIds = PROVIDER_CURATED_IDS[provider] || [];
+      if (curatedIds.length > 0 && (provider === 'zhipu' || provider === 'modelscope' || provider === 'hunyuan' || lastStatus === 404 || lastStatus === 405)) {
+        const fallbackModels = curatedIds.map((id) => decorate(evaluateModelForTranslation(id, baseUrl)));
         return {
           ok: true,
-          baseUrl,
+          source: 'curated',
           provider,
-          fallbackCurated: true,
-          notice: noticeMap[provider],
-          totalRaw: 0,
-          count: 0,
-          freeCount: 0,
-          models: [],
+          providerName,
+          baseUrl,
+          totalRaw: fallbackModels.length,
+          models: fallbackModels,
+          notice: provider === 'zhipu'
+            ? '智谱官方未开放 /models 枚举接口，已自动载入核实精选模型。'
+            : provider === 'modelscope'
+              ? '魔搭 API-Inference 未开放全量 /models，已自动载入热门免费主力模型。'
+              : provider === 'hunyuan'
+                ? '腾讯混元未开放 /models 枚举接口，已自动载入官方核实模型。'
+                : '该渠道未开放 /models，已自动载入核实参考模型。',
         };
       }
       const statusLabel = lastStatus ? ` (HTTP ${lastStatus})` : '';
-      throw new Error(`拉取模型列表失败${statusLabel}: ${lastErrText.slice(0, 120)}`);
+      throw new Error(`拉取 ${providerName} 模型列表失败${statusLabel}: ${lastErrText.slice(0, 120)}`);
     }
 
     const rawList = Array.isArray(payload?.data)
@@ -2408,7 +2503,7 @@ export function createTranslator(getSettings, onProgress) {
       if (!id || seen.has(id)) continue;
       seen.add(id);
       if (!isUsableTranslationModel(id)) continue;
-      const evaluated = evaluateModelForTranslation(id, baseUrl, item);
+      const evaluated = decorate(evaluateModelForTranslation(id, baseUrl, item));
       livePricingMap.set(`${provider}:${id}`, {
         priceIn: evaluated.priceIn,
         priceOut: evaluated.priceOut,
@@ -2419,17 +2514,162 @@ export function createTranslator(getSettings, onProgress) {
       rated.push(evaluated);
     }
 
+    if (rated.length === 0 && (PROVIDER_CURATED_IDS[provider] || []).length > 0) {
+      const fallbackModels = PROVIDER_CURATED_IDS[provider].map((id) => decorate(evaluateModelForTranslation(id, baseUrl)));
+      return {
+        ok: true,
+        source: 'curated',
+        provider,
+        providerName,
+        baseUrl,
+        totalRaw: fallbackModels.length,
+        models: fallbackModels,
+      };
+    }
+
     rated.sort((a, b) => Number(a.isPro) - Number(b.isPro) || b.overall - a.overall || a.id.localeCompare(b.id));
-    const freeCount = rated.filter((m) => m.isFree).length;
     return {
       ok: true,
+      source: 'live',
+      provider,
+      providerName,
+      baseUrl,
+      totalRaw: rawList.length,
+      models: rated,
+    };
+  }
+
+  /**
+   * 汇总所有「用户已配置」平台的可用模型，统一打标与三维度评分。
+   */
+  async function discoverAllConfiguredModels(overrideSettings = {}) {
+    const saved = getSettings();
+    const profileMap = new Map();
+    for (const [k, prof] of Object.entries(saved.providerProfiles || {})) {
+      if (!prof || !prof.baseUrl || prof.enabled === false) continue;
+      if (k !== 'local' && !prof.apiKey) continue;
+      profileMap.set(k, { provider: k, baseUrl: prof.baseUrl.replace(/\/+$/, ''), apiKey: prof.apiKey || '' });
+    }
+    // 兼容旧单渠道已保存 Key
+    if (profileMap.size === 0 && saved.translateBaseUrl && (saved.translateApiKey || isLocalGatewayUrl(saved.translateBaseUrl))) {
+      const k = detectProviderKey(saved.translateBaseUrl);
+      profileMap.set(k, { provider: k, baseUrl: saved.translateBaseUrl.replace(/\/+$/, ''), apiKey: saved.translateApiKey || '' });
+    }
+    // 若用户在表单里刚填了尚未保存的新渠道 Key，也实时纳入汇总预览
+    const ovUrl = String(overrideSettings.translateBaseUrl || '').trim().replace(/\/+$/, '');
+    const ovKey = typeof overrideSettings.translateApiKey === 'string' ? overrideSettings.translateApiKey.trim() : '';
+    if (ovUrl && ovKey) {
+      const k = detectProviderKey(ovUrl);
+      profileMap.set(k, { provider: k, baseUrl: ovUrl, apiKey: ovKey });
+    }
+
+    const targets = Array.from(profileMap.values());
+    if (targets.length === 0) {
+      return {
+        ok: true,
+        scope: 'all',
+        configuredCount: 0,
+        providers: [],
+        count: 0,
+        freeCount: 0,
+        models: [],
+      };
+    }
+
+    const settled = await Promise.all(
+      targets.map(async (t) => {
+        try {
+          const res = await fetchModelsForSingleProvider(t.baseUrl, t.apiKey, t.provider);
+          return {
+            ok: true,
+            key: t.provider,
+            name: PROVIDER_NAMES[t.provider] || t.provider,
+            baseUrl: t.baseUrl,
+            source: res.source,
+            count: res.models.length,
+            freeCount: res.models.filter((m) => m.isFree).length,
+            models: res.models,
+          };
+        } catch (err) {
+          // 单家拉取失败不拖垮其它已配平台：若该渠道有内置核实参考则兜底
+          const fallbackIds = PROVIDER_CURATED_IDS[t.provider] || [];
+          const fallbackModels = fallbackIds.map((id) => ({
+            ...evaluateModelForTranslation(id, t.baseUrl),
+            provider: t.provider,
+            providerName: PROVIDER_NAMES[t.provider] || t.provider,
+            baseUrl: t.baseUrl,
+            qualifiedId: `${t.provider}::${id}`,
+          }));
+          return {
+            ok: fallbackModels.length > 0,
+            key: t.provider,
+            name: PROVIDER_NAMES[t.provider] || t.provider,
+            baseUrl: t.baseUrl,
+            source: fallbackModels.length > 0 ? 'curated' : 'error',
+            error: err?.message || String(err),
+            count: fallbackModels.length,
+            freeCount: fallbackModels.filter((m) => m.isFree).length,
+            models: fallbackModels,
+          };
+        }
+      })
+    );
+
+    const allModels = [];
+    const seenQualified = new Set();
+    for (const p of settled) {
+      for (const m of p.models || []) {
+        if (seenQualified.has(m.qualifiedId)) continue;
+        seenQualified.add(m.qualifiedId);
+        allModels.push(m);
+      }
+    }
+    allModels.sort((a, b) => Number(a.isPro) - Number(b.isPro) || b.overall - a.overall || a.id.localeCompare(b.id));
+    return {
+      ok: true,
+      scope: 'all',
+      configuredCount: targets.length,
+      providers: settled.map(({ models: _m, ...meta }) => meta),
+      count: allModels.length,
+      freeCount: allModels.filter((m) => m.isFree).length,
+      models: allModels,
+    };
+  }
+
+  /**
+   * 调用单个网关的 /models 接口（Ollama 兼容 /api/tags 回退），自动识别可用对话模型并按平台精确核定收费/免费与三维评分。
+   */
+  async function discoverModels(overrideSettings = {}) {
+    const saved = getSettings();
+    const baseUrl = (overrideSettings.translateBaseUrl || saved.translateBaseUrl || '').trim().replace(/\/+$/, '');
+    const provider = detectProviderKey(baseUrl);
+    const savedProf = saved.providerProfiles?.[provider];
+    const sameProvider = normalizeBaseUrl(baseUrl) === normalizeBaseUrl(saved.translateBaseUrl);
+    const hasExplicitKey = typeof overrideSettings.translateApiKey === 'string' && overrideSettings.translateApiKey.trim() !== '';
+    const apiKey = hasExplicitKey
+      ? overrideSettings.translateApiKey.trim()
+      : (savedProf?.apiKey || (sameProvider ? (saved.translateApiKey || '').trim() : ''));
+
+    if (!baseUrl) {
+      throw new Error('请先填写 API Base URL');
+    }
+    if (!apiKey && !isLocalGatewayUrl(baseUrl)) {
+      throw new Error(sameProvider ? '请先填写 API Key 再识别可用模型' : '已切换服务商地址，请先填写该服务商的 API Key');
+    }
+
+    const res = await fetchModelsForSingleProvider(baseUrl, apiKey, provider);
+    const freeCount = res.models.filter((m) => m.isFree).length;
+    return {
+      ok: true,
+      scope: 'single',
       baseUrl,
       provider,
-      fallbackCurated: rated.length === 0,
-      totalRaw: rawList.length,
-      count: rated.length,
+      fallbackCurated: res.source === 'curated',
+      notice: res.notice || '',
+      totalRaw: res.totalRaw,
+      count: res.models.length,
       freeCount,
-      models: rated,
+      models: res.models,
     };
   }
 
@@ -2440,11 +2680,12 @@ export function createTranslator(getSettings, onProgress) {
     const saved = getSettings();
     const baseUrl = (overrideSettings.translateBaseUrl || saved.translateBaseUrl || '').trim().replace(/\/+$/, '');
     const provider = detectProviderKey(baseUrl);
+    const savedProf = saved.providerProfiles?.[provider];
     const sameProvider = normalizeBaseUrl(baseUrl) === normalizeBaseUrl(saved.translateBaseUrl);
     const hasExplicitKey = typeof overrideSettings.translateApiKey === 'string' && overrideSettings.translateApiKey.trim() !== '';
     const apiKey = hasExplicitKey
       ? overrideSettings.translateApiKey.trim()
-      : (sameProvider ? (saved.translateApiKey || '').trim() : '');
+      : (savedProf?.apiKey || (sameProvider ? (saved.translateApiKey || '').trim() : ''));
 
     if (provider === 'local') {
       return { ok: true, provider, supported: true, summary: '本地模型运行 · 零 API 费用' };
@@ -2536,19 +2777,28 @@ export function createTranslator(getSettings, onProgress) {
   async function testConnection(overrideSettings = {}) {
     const saved = getSettings();
     const settings = { ...saved, ...overrideSettings };
-    const sameProvider = normalizeBaseUrl(settings.translateBaseUrl) === normalizeBaseUrl(saved.translateBaseUrl);
+    const baseUrl = (settings.translateBaseUrl || '').trim();
+    const provider = detectProviderKey(baseUrl);
+    const savedProf = saved.providerProfiles?.[provider];
+    const sameProvider = normalizeBaseUrl(baseUrl) === normalizeBaseUrl(saved.translateBaseUrl);
     const hasExplicitKey = typeof overrideSettings.translateApiKey === 'string' && overrideSettings.translateApiKey.trim() !== '';
     if (hasExplicitKey) {
       settings.translateApiKey = overrideSettings.translateApiKey.trim();
+      settings.providerProfiles = {
+        ...(saved.providerProfiles || {}),
+        [provider]: { baseUrl, apiKey: settings.translateApiKey, enabled: true },
+      };
+    } else if (savedProf?.apiKey) {
+      settings.translateApiKey = savedProf.apiKey;
     } else if (sameProvider) {
       settings.translateApiKey = (saved.translateApiKey || '').trim();
     } else {
       settings.translateApiKey = '';
     }
-    if (!settings.translateApiKey && !isLocalGatewayUrl(settings.translateBaseUrl)) {
-      throw new Error(sameProvider ? '请先填写 API Key' : '已切换服务商地址，请先填写该服务商的 API Key');
+    if (!hasAnyConfiguredProvider(settings)) {
+      throw new Error('请先至少配置一个平台的 API Key（或启用本地 Ollama）');
     }
-    const { result, model, ttftMs, totalMs } = await translateWithFallback(
+    const { result, model, providerName, ttftMs, totalMs } = await translateWithFallback(
       'I should check the config files first and make sure the layout looks clean without repeating the first line.',
       settings,
       undefined,
@@ -2557,7 +2807,7 @@ export function createTranslator(getSettings, onProgress) {
       22000,
       { bypassCooldown: true }
     );
-    return { ok: true, model, sample: result, ttftMs, totalMs };
+    return { ok: true, model: providerName ? `${providerName}/${model}` : model, sample: result, ttftMs, totalMs };
   }
 
   function resetErrors() {
@@ -2726,6 +2976,7 @@ export function createTranslator(getSettings, onProgress) {
   return {
     enrichTurns,
     discoverModels,
+    discoverAllConfiguredModels,
     fetchAccountBalance,
     testConnection,
     resetErrors,

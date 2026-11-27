@@ -20,7 +20,63 @@ export const DEFAULT_SETTINGS = Object.freeze({
   translateBaseUrl: 'https://api.siliconflow.cn/v1',
   translateApiKey: '',
   translateModels: '',
+  providerProfiles: Object.freeze({}), // { [providerKey]: { baseUrl, apiKey, enabled } }
 });
+
+export function inferProviderKeyFromUrl(rawUrl) {
+  const clean = normalizeApiBaseUrl(rawUrl);
+  if (!clean) return 'custom';
+  if (/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$)/i.test(clean)) return 'local';
+  try {
+    const host = new URL(clean).hostname.toLowerCase();
+    if (/(^|\.)siliconflow\.(cn|com)$/i.test(host)) return 'siliconflow';
+    if (/(^|\.)deepseek\.com$/i.test(host)) return 'deepseek';
+    if (/(^|\.)bigmodel\.cn$/i.test(host)) return 'zhipu';
+    if (/(^|\.)modelscope\.(cn|ai)$/i.test(host)) return 'modelscope';
+    if (/(^|\.)(hunyuan\.cloud\.tencent\.com|tencentmaas\.com)$/i.test(host)) return 'hunyuan';
+    if (/(^|\.)dashscope\.aliyuncs\.com$/i.test(host)) return 'qwen';
+    if (/(^|\.)openrouter\.ai$/i.test(host)) return 'openrouter';
+  } catch {}
+  return 'custom';
+}
+
+const VALID_PROFILE_KEYS = new Set([
+  'siliconflow',
+  'modelscope',
+  'zhipu',
+  'hunyuan',
+  'deepseek',
+  'qwen',
+  'openrouter',
+  'local',
+  'custom',
+]);
+
+function normalizeProviderProfiles(rawProfiles) {
+  const out = {};
+  if (!rawProfiles || typeof rawProfiles !== 'object' || Array.isArray(rawProfiles)) return out;
+  for (const [k, v] of Object.entries(rawProfiles)) {
+    const key = String(k || '').trim().toLowerCase();
+    if (!VALID_PROFILE_KEYS.has(key)) continue;
+    if (v === null) {
+      out[key] = null; // 显式删除标记
+      continue;
+    }
+    if (!v || typeof v !== 'object') continue;
+    const entry = {};
+    if (typeof v.baseUrl === 'string' && v.baseUrl.trim()) {
+      const normalized = normalizeApiBaseUrl(v.baseUrl);
+      if (normalized) entry.baseUrl = normalized;
+    }
+    if (typeof v.apiKey === 'string') {
+      const trimmed = v.apiKey.trim();
+      if (!trimmed.includes('****')) entry.apiKey = trimmed;
+    }
+    if (typeof v.enabled === 'boolean') entry.enabled = v.enabled;
+    if (Object.keys(entry).length > 0) out[key] = entry;
+  }
+  return out;
+}
 
 export function normalizeApiBaseUrl(raw) {
   if (typeof raw !== 'string') return '';
@@ -104,17 +160,91 @@ export function validateSettings(raw) {
       clean.translateApiKey = k;
     }
   }
+  if (raw.providerProfiles && typeof raw.providerProfiles === 'object' && !Array.isArray(raw.providerProfiles)) {
+    const normalizedProfiles = normalizeProviderProfiles(raw.providerProfiles);
+    if (Object.keys(normalizedProfiles).length > 0) {
+      clean.providerProfiles = normalizedProfiles;
+    }
+  }
   return clean;
 }
 
+function mergeProviderProfiles(existing = {}, incoming = {}, legacyUrl = '', legacyKey = '') {
+  const merged = {};
+  for (const [k, v] of Object.entries(existing || {})) {
+    if (v && typeof v === 'object' && v.baseUrl) {
+      merged[k] = {
+        baseUrl: v.baseUrl,
+        apiKey: typeof v.apiKey === 'string' ? v.apiKey : '',
+        enabled: v.enabled !== false,
+      };
+    }
+  }
+  // 首次迁移：若历史仅有单渠道配置且尚未写入 providerProfiles，自动同步进档案
+  if (Object.keys(merged).length === 0 && legacyUrl) {
+    const key = inferProviderKeyFromUrl(legacyUrl);
+    if (legacyKey || key === 'local') {
+      merged[key] = {
+        baseUrl: normalizeApiBaseUrl(legacyUrl) || legacyUrl,
+        apiKey: legacyKey || '',
+        enabled: true,
+      };
+    }
+  }
+  for (const [k, patch] of Object.entries(incoming || {})) {
+    if (patch === null) {
+      delete merged[k];
+      continue;
+    }
+    const prev = merged[k] || { baseUrl: '', apiKey: '', enabled: true };
+    const nextEntry = {
+      baseUrl: patch.baseUrl ?? prev.baseUrl,
+      apiKey: patch.apiKey !== undefined ? patch.apiKey : prev.apiKey,
+      enabled: patch.enabled !== undefined ? patch.enabled : prev.enabled,
+    };
+    const isLocal = k === 'local';
+    if (!nextEntry.baseUrl || (!isLocal && !nextEntry.apiKey) || (isLocal && nextEntry.enabled === false)) {
+      delete merged[k];
+    } else {
+      merged[k] = nextEntry;
+    }
+  }
+  return merged;
+}
+
+function maskProviderProfiles(profiles = {}) {
+  const out = {};
+  for (const [k, v] of Object.entries(profiles || {})) {
+    if (!v || typeof v !== 'object' || !v.baseUrl) continue;
+    const isLocal = k === 'local';
+    const hasApiKey = Boolean(v.apiKey);
+    if (!isLocal && !hasApiKey) continue;
+    out[k] = {
+      baseUrl: v.baseUrl,
+      hasApiKey,
+      apiKey: maskApiKey(v.apiKey || ''),
+      enabled: v.enabled !== false,
+    };
+  }
+  return out;
+}
+
 export function createSettingsStore(filePath = getSettingsPath()) {
-  let cached = { ...DEFAULT_SETTINGS };
+  let cached = { ...DEFAULT_SETTINGS, providerProfiles: {} };
   let loaded = false;
 
   const readFromDisk = () => {
     try {
       const parsed = JSON.parse(readFileSync(filePath, 'utf-8'));
-      cached = { ...DEFAULT_SETTINGS, ...validateSettings(parsed) };
+      const valid = validateSettings(parsed);
+      const base = { ...DEFAULT_SETTINGS, ...valid };
+      base.providerProfiles = mergeProviderProfiles(
+        valid.providerProfiles || {},
+        {},
+        base.translateBaseUrl,
+        base.translateApiKey
+      );
+      cached = base;
     } catch {
       // 文件不存在或损坏时保留当前默认配置
     }
@@ -123,12 +253,17 @@ export function createSettingsStore(filePath = getSettingsPath()) {
 
   const read = () => {
     if (!loaded) readFromDisk();
-    return { ...cached };
+    return {
+      ...cached,
+      providerProfiles: Object.fromEntries(
+        Object.entries(cached.providerProfiles || {}).map(([k, v]) => [k, { ...v }])
+      ),
+    };
   };
 
   const reload = () => {
     readFromDisk();
-    return { ...cached };
+    return read();
   };
 
   const readPublic = () => {
@@ -137,11 +272,50 @@ export function createSettingsStore(filePath = getSettingsPath()) {
       ...s,
       hasApiKey: Boolean(s.translateApiKey),
       translateApiKey: maskApiKey(s.translateApiKey),
+      providerProfiles: maskProviderProfiles(s.providerProfiles),
     };
   };
 
   const update = (patch) => {
-    const next = { ...read(), ...validateSettings(patch) };
+    const prev = read();
+    const valid = validateSettings(patch);
+    const next = { ...prev, ...valid };
+    const incomingProfiles = { ...(valid.providerProfiles || {}) };
+
+    // 同步通过旧字段 translateBaseUrl + translateApiKey 提交的变更到对应渠道档案
+    const targetUrl = next.translateBaseUrl || '';
+    const targetKey = inferProviderKeyFromUrl(targetUrl);
+    if (valid.translateApiKey !== undefined && targetUrl) {
+      if (valid.translateApiKey) {
+        incomingProfiles[targetKey] = {
+          ...(incomingProfiles[targetKey] || {}),
+          baseUrl: targetUrl,
+          apiKey: valid.translateApiKey,
+          enabled: true,
+        };
+      } else if (incomingProfiles[targetKey] === undefined) {
+        incomingProfiles[targetKey] = null;
+      }
+    } else if (targetKey === 'local' && valid.translateBaseUrl !== undefined && incomingProfiles.local === undefined) {
+      incomingProfiles.local = { baseUrl: targetUrl, apiKey: '', enabled: true };
+    }
+
+    next.providerProfiles = mergeProviderProfiles(
+      prev.providerProfiles || {},
+      incomingProfiles,
+      next.translateBaseUrl,
+      next.translateApiKey
+    );
+
+    // 若当前活跃渠道在档案中有保存 Key，保持 legacy 字段与之同步（兼容旧调用方）
+    const activeProfile = next.providerProfiles[targetKey];
+    if (activeProfile) {
+      next.translateBaseUrl = activeProfile.baseUrl;
+      next.translateApiKey = activeProfile.apiKey || '';
+    } else if (valid.providerProfiles && Object.prototype.hasOwnProperty.call(valid.providerProfiles, targetKey) && valid.providerProfiles[targetKey] === null) {
+      next.translateApiKey = '';
+    }
+
     mkdirSync(dirname(filePath), { recursive: true });
     const content = `${JSON.stringify(next, null, 2)}\n`;
     const tmp = `${filePath}.${process.pid}.${Date.now()}.tmp`;
