@@ -686,15 +686,17 @@ function startServer() {
             (cleanedPatch.providerProfiles !== undefined) ||
             (cleanedPatch.translateEnabled !== undefined && cleanedPatch.translateEnabled !== prev.translateEnabled) ||
             (cleanedPatch.disableTranslatorThinking !== undefined && cleanedPatch.disableTranslatorThinking !== prev.disableTranslatorThinking);
+          const displayNeedsTranslate =
+            (cleanedPatch.displayMode !== undefined && cleanedPatch.displayMode !== prev.displayMode && cleanedPatch.displayMode !== 'raw') ||
+            (cleanedPatch.summaryEnabled === true && prev.summaryEnabled !== true);
           if (styleChanged) {
             translator.resetForStyleChange();
           } else if (translateConfigChanged) {
             translator.resetForConfigChange();
-          } else {
-            translator.resetErrors();
           }
-          broadcastCachedToClients(true);
-          inlineInjector?.pushCached?.(true);
+          const shouldTriggerNew = styleChanged || translateConfigChanged || displayNeedsTranslate;
+          broadcastCachedToClients(shouldTriggerNew);
+          inlineInjector?.pushCached?.(shouldTriggerNew);
           inlineInjector?.nudge?.();
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify(next));

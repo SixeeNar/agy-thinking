@@ -4188,12 +4188,22 @@
                   } else {
                     const pre = stepBodyEl.querySelector('.detail-pre');
                     const txt = raw || item.summary || '{}';
+                    const isErr = item.status === 'error';
+                    const chipHtml = isErr
+                      ? '<span class="chip err">执行异常</span>'
+                      : `<span class="chip">${escapeHtml(item.toolName || item.label)}</span>`;
                     if (!pre) {
                       stepBodyEl.innerHTML =
                         `<pre class="detail-pre">${escapeHtml(txt)}</pre>` +
-                        `<div class="step-foot"><span class="foot-meta"><span class="chip">${escapeHtml(item.toolName || item.label)}</span></span><span class="foot-actions"><button class="copy-btn" type="button" data-action="copy" data-key="${escapeHtml(item.id)}">复制</button></span></div>`;
-                    } else if (pre.textContent !== txt) {
-                      pre.textContent = txt;
+                        `<div class="step-foot"><span class="foot-meta">${chipHtml}</span><span class="foot-actions"><button class="copy-btn" type="button" data-action="copy" data-key="${escapeHtml(item.id)}">复制</button></span></div>`;
+                      stepBodyEl.querySelector('.foot-meta')._lastHtml = chipHtml;
+                    } else {
+                      if (pre.textContent !== txt) pre.textContent = txt;
+                      const metaEl = stepBodyEl.querySelector('.foot-meta');
+                      if (metaEl && metaEl._lastHtml !== chipHtml) {
+                        metaEl._lastHtml = chipHtml;
+                        metaEl.innerHTML = chipHtml;
+                      }
                     }
                   }
                 };
@@ -4706,10 +4716,16 @@
           translateStyle: activeStyleBtn?.dataset.val || 'natural',
           translateModels: optModels.value.trim(),
         };
-        if (baseUrl) patch.translateBaseUrl = baseUrl;
         const rawKey = optApiKey.value.trim();
-        if (baseUrl && (rawKey || isLocalGatewayUrl(baseUrl))) {
-          const provKey = inferPresetByUrl(baseUrl) || 'custom';
+        const provKey = baseUrl ? (inferPresetByUrl(baseUrl) || 'custom') : '';
+        const configuredProfiles = getConfiguredProfiles();
+        const hasOtherConfigured = Object.keys(configuredProfiles).length > 0;
+        const isCurConfigured = Boolean(provKey && configuredProfiles[provKey]);
+        const shouldBindProvider = Boolean(baseUrl && (rawKey || isLocalGatewayUrl(baseUrl)));
+        if (baseUrl && (shouldBindProvider || isCurConfigured || !hasOtherConfigured)) {
+          patch.translateBaseUrl = baseUrl;
+        }
+        if (shouldBindProvider) {
           const profEntry = { baseUrl, enabled: true };
           if (rawKey) profEntry.apiKey = rawKey;
           patch.providerProfiles = { [provKey]: profEntry };

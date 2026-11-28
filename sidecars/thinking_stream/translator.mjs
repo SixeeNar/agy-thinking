@@ -485,9 +485,11 @@ export function evaluateModelForTranslation(modelId, baseUrl = '', rawItem = nul
     currency = 'USD';
     const rawPrompt = rawItem?.pricing?.prompt;
     const rawComp = rawItem?.pricing?.completion;
-    const hasLivePricing = rawPrompt !== undefined && rawPrompt !== null && rawComp !== undefined && rawComp !== null;
-    const pIn = hasLivePricing ? Number(rawPrompt) * 1e6 : (priceIn / 7.2);
-    const pOut = hasLivePricing ? Number(rawComp) * 1e6 : (priceOut / 7.2);
+    const promptNum = (rawPrompt !== undefined && rawPrompt !== null && String(rawPrompt).trim() !== '') ? Number(rawPrompt) : NaN;
+    const compNum = (rawComp !== undefined && rawComp !== null && String(rawComp).trim() !== '') ? Number(rawComp) : NaN;
+    const hasLivePricing = Number.isFinite(promptNum) && Number.isFinite(compNum) && promptNum >= 0 && compNum >= 0;
+    const pIn = hasLivePricing ? promptNum * 1e6 : (priceIn / 7.2);
+    const pOut = hasLivePricing ? compNum * 1e6 : (priceOut / 7.2);
     const liveFree = /:free$/i.test(id) || (hasLivePricing && pIn === 0 && pOut === 0);
     if (liveFree) {
       isFree = true;
@@ -758,7 +760,7 @@ function supportsEnableThinkingFlag(baseUrl, model) {
   const m = String(model || '').toLowerCase();
   if (isHunyuanMtModel(m) || isQwenMtModel(m)) return false;
   const host = getHostnameSafe(baseUrl);
-  if (isSiliconFlowUrl(baseUrl) || /(^|\.)(dashscope\.aliyuncs\.com|modelscope\.cn)$/i.test(host)) {
+  if (isSiliconFlowUrl(baseUrl) || /(^|\.)(dashscope\.aliyuncs\.com|modelscope\.(cn|ai))$/i.test(host)) {
     // 仅对明确支持 enable_thinking 的推理/混合思考模型下发，避免普通模型返回 400
     return /(qwen3(?!-coder)|qwq|deepseek-r1|glm-4\.5|glm-4\.7|glm-z1|seed-thinking|hunyuan-a13b|intern-s1)/i.test(m);
   }
@@ -931,6 +933,7 @@ async function streamChatCompletion({
   let lastClean = '';
   let ttftMs = null;
   let sawSseData = false;
+  let sawDelta = false;
   let usageInfo = null;
 
   const extractUsage = (parsed) => {
@@ -967,9 +970,19 @@ async function streamChatCompletion({
         throw new Error(msg);
       }
       extractUsage(parsed);
-      const delta = parsed?.choices?.[0]?.delta?.content ?? parsed?.choices?.[0]?.message?.content;
-      if (typeof delta === 'string' && delta) {
-        rawFull += delta;
+      const deltaContent = parsed?.choices?.[0]?.delta?.content;
+      const msgContent = parsed?.choices?.[0]?.message?.content;
+      let updated = false;
+      if (typeof deltaContent === 'string' && deltaContent) {
+        sawDelta = true;
+        rawFull += deltaContent;
+        updated = true;
+      } else if (!sawDelta && typeof msgContent === 'string' && msgContent) {
+        // 仅在尚未收到增量 delta 时接受完整 message.content，防止部分中转网关在尾包同时附带 message.content 导致译文翻倍重复
+        rawFull = msgContent;
+        updated = true;
+      }
+      if (updated) {
         const clean = stripThinkTags(rawFull, false);
         if (clean && clean !== lastClean) {
           if (ttftMs === null) ttftMs = Date.now() - startedAt;
@@ -1487,8 +1500,9 @@ export function createTranslator(getSettings, onProgress) {
           // 兼容部分网关不支持 reasoning_effort / enable_thinking / thinking / stream_options 返回 400/422：自动剥离重试一次
           const errStr = err?.responseText || err?.message || '';
           const isBadParam = (err?.status === 400 || err?.status === 422) && !externalSignal?.aborted;
-          const badUsage = isBadParam && /(stream_options|include_usage)/i.test(errStr);
-          const badThink = isBadParam && wantDisableThink && /(reasoning_effort|enable_thinking|thinking|unknown|unrecognized|unsupported|extra_forbidden|不支持|无效参数|未知参数|非法参数)/i.test(errStr);
+          const genericBadParam = isBadParam && /(unknown|unrecognized|unsupported|extra_forbidden|不支持|无效参数|未知参数|非法参数)/i.test(errStr);
+          const badUsage = isBadParam && wantUsage && (/(stream_options|include_usage)/i.test(errStr) || genericBadParam);
+          const badThink = isBadParam && wantDisableThink && (/(reasoning_effort|enable_thinking|thinking)/i.test(errStr) || genericBadParam);
           if (badUsage || badThink) {
             if (badUsage) wantUsage = false;
             if (badThink) wantDisableThink = false;
@@ -1590,7 +1604,7 @@ export function createTranslator(getSettings, onProgress) {
       const fallbackSlot = segStates.get(sKey);
       const txt = st?.translated || fallbackSlot?.translated || '';
       if (txt) parts.push(txt);
-      if (st?.status === 'translating') anyTranslating = true;
+      if (st?.status === 'translating' || (!st && fallbackSlot?.inFlight)) anyTranslating = true;
       if (st?.status !== 'done' || !st?.translated) allDone = false;
       if (st?.status === 'error') {
         anyError = true;
@@ -1757,7 +1771,8 @@ export function createTranslator(getSettings, onProgress) {
         state.errorCount = 0;
         state.permanentError = false;
         state.nextRetryAt = 0;
-        putDiskCache(fullKey, result);
+        // 若 distill 队列降级命中了专用直译模型 qwen-mt（忽略分步指令），落盘到 natural 键避免永久污染 steps 缓存
+        putDiskCache(isQwenMtModel(model) ? cacheKeyFor(rawText, 'natural') : fullKey, result);
         liveStates.set(item.id, {
           sourceHash: fullKey,
           sourceLen: rawText.length,
@@ -1861,7 +1876,11 @@ export function createTranslator(getSettings, onProgress) {
 
     // 中长思考结束后，在「分步脉络」模式下整篇去重提炼成 1~6 步；极短思考（<220字且<3段）保持轻量自然直译不硬拆编号
     const configuredModels = parseModels(settings.translateModels);
-    const onlyPureQwenMt = configuredModels.length > 0 && configuredModels.every((m) => isQwenMtModel(m));
+    const usableModels = configuredModels
+      .map((spec) => resolveModelCandidate(spec, settings))
+      .filter((c) => c && c.baseUrl && (c.apiKey || isLocalGatewayUrl(c.baseUrl)));
+    const effectiveModelIds = usableModels.length > 0 ? usableModels.map((c) => c.modelId) : configuredModels;
+    const onlyPureQwenMt = effectiveModelIds.length > 0 && effectiveModelIds.every((m) => isQwenMtModel(m));
     const isLongForSteps = paragraphs.length >= 3 || rawText.length >= BRIEF_THINK_CHAR_LIMIT;
     const shouldDistill = !isGenerating && style === 'steps' && !onlyPureQwenMt && isLongForSteps;
     if (shouldDistill) {
@@ -2381,11 +2400,12 @@ export function createTranslator(getSettings, onProgress) {
   function enrichTurns(turns, options = {}) {
     const settings = getSettings();
     const enabled = settings.translateEnabled !== false;
+    const isRawDisplay = settings.displayMode === 'raw';
     const style = settings.translateStyle || 'natural';
     const summaryEnabled = settings.summaryEnabled === true && style !== 'steps';
     const hasKey = hasAnyConfiguredProvider(settings);
     const hasModels = parseModels(settings.translateModels).length > 0;
-    const triggerNew = options.triggerNew !== false;
+    const triggerNew = options.triggerNew !== false && !isRawDisplay;
 
     for (const turn of turns || []) {
       for (const item of turn.items || []) {
@@ -2846,6 +2866,12 @@ export function createTranslator(getSettings, onProgress) {
       settings.providerProfiles = {
         ...(saved.providerProfiles || {}),
         [provider]: { baseUrl, apiKey: settings.translateApiKey, enabled: true },
+      };
+    } else if (provider === 'local' && baseUrl) {
+      settings.translateApiKey = '';
+      settings.providerProfiles = {
+        ...(saved.providerProfiles || {}),
+        local: { baseUrl, apiKey: '', enabled: true },
       };
     } else if (savedProf?.apiKey) {
       settings.translateApiKey = savedProf.apiKey;
