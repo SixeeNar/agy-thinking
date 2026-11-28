@@ -1673,6 +1673,18 @@
       animation: blink 0.85s steps(2, start) infinite;
     }
     @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.15; } }
+    .wait-zh {
+      display: inline-block;
+      margin: 0 !important;
+      font-size: 12.1px;
+      font-weight: 500;
+      background: linear-gradient(90deg, rgb(var(--c1-rgb)) 0%, rgb(var(--c2-rgb)) 36%, rgb(var(--c3-rgb)) 68%, rgb(var(--c1-rgb)) 100%);
+      background-size: 220% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: shimmer 2.1s linear infinite;
+    }
 
     .step-foot {
       position: relative;
@@ -2445,7 +2457,7 @@
     (function () {
       const {
         escapeHtml, renderMarkdown, renderThinkingSteps, countThinkingSteps, thinkSummary, shortModelName, formatDurationParts,
-        getPresentationPolicy, classifyToolActivity, activityIconKey, buildProcessGroups, formatProcessGroupTitle, isTurnTranslating, formatTurnBarLabel, COLOR_THEMES, resolveColorThemePalette, ICONS,
+        getPresentationPolicy, classifyToolActivity, activityIconKey, buildProcessGroups, formatProcessGroupTitle, isAwaitingFirstZh, isTurnTranslating, formatTurnBarLabel, COLOR_THEMES, resolveColorThemePalette, ICONS,
       } = window.__agyThinkingShared;
       const params = new URLSearchParams(window.location.search);
       const token = params.get('token') || '';
@@ -2665,8 +2677,10 @@
       const userPinnedMap = new Map();
       const turnSettledSet = new Set();
       const seenActiveTurns = new Set();
+      const hoveredTurnKeys = new Set();
       const pendingFoldTimers = new Map();
       const AUTO_FOLD_GRACE_MS = 2000;
+      const HOVER_LEAVE_FOLD_MS = 1200;
       const clearFoldTimer = (turnKey) => {
         const tid = pendingFoldTimers.get(turnKey);
         if (tid) clearTimeout(tid);
@@ -2675,6 +2689,36 @@
       const clearAllFoldTimers = () => {
         for (const tid of pendingFoldTimers.values()) clearTimeout(tid);
         pendingFoldTimers.clear();
+      };
+      const hasUnfinishedStreamForTurn = (turn) => {
+        if (!turn || !Array.isArray(turn.items)) return false;
+        for (const it of turn.items) {
+          if (!it || it.kind !== 'think') continue;
+          const rec = streamShownMap.get(it.id);
+          if (rec && rec.shownLen < rec.text.length) return true;
+        }
+        return false;
+      };
+      const scheduleAutoFold = (turnKey, delayMs = AUTO_FOLD_GRACE_MS) => {
+        if (pendingFoldTimers.has(turnKey)) return;
+        const tid = setTimeout(() => {
+          pendingFoldTimers.delete(turnKey);
+          if (userPinnedMap.get(turnKey) || turnSettledSet.has(turnKey)) return;
+          const policyNow = getPresentationPolicy(currentState?.settings);
+          if (!policyNow.foldCompletedTurns) return;
+          const latestTurn = (currentState?.turns || []).find((t) => `${currentState?.activeId}:turn:${t.turnIndex}` === turnKey);
+          if (latestTurn && (latestTurn.hasError || latestTurn.isRunning || isTurnTranslating(latestTurn, currentState?.settings))) return;
+          if (hoveredTurnKeys.has(turnKey)) return;
+          if (hasUnfinishedStreamForTurn(latestTurn)) {
+            scheduleAutoFold(turnKey, 800);
+            return;
+          }
+          turnSettledSet.add(turnKey);
+          openMap.set(turnKey, false);
+          resetTurnInnerDisclosures(turnKey);
+          if (activeTab === 'feed') renderFeed();
+        }, delayMs);
+        pendingFoldTimers.set(turnKey, tid);
       };
       const rawOverrideMap = new Map();
       const fullDetailMap = new Map();
@@ -3589,10 +3633,11 @@
         return formatTurnBarLabel(turn, settings, 'turn-num');
       }
 
-      function computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail) {
+      function computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail, awaitingFirstZh) {
         if (effectiveMode !== 'raw' && summaryEnabled && item.narrativeSummary) {
           return item.narrativeSummary.replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
         }
+        if (awaitingFirstZh) return '正在同步中文思路…';
         const fallbackText = effectiveMode === 'raw'
           ? (item.thinking || '')
           : ((wantFullDetail ? (item.fullTranslatedThinking || item.translatedThinking) : item.translatedThinking) || item.thinking || '');
@@ -3625,9 +3670,9 @@
         if (btn) btn.textContent = isFull ? '收起高度' : '展开全文';
       }
 
-      function updateThinkDom(cardEl, displayText, item, effectiveMode, isStreamingThink, summaryEnabled, policy, useStepRender, wantFullDetail) {
+      function updateThinkDom(cardEl, displayText, item, effectiveMode, isStreamingThink, summaryEnabled, policy, useStepRender, wantFullDetail, awaitingFirstZh) {
         const sumEl = cardEl.querySelector('.step-sum');
-        const nextSum = computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail);
+        const nextSum = computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail, awaitingFirstZh);
         const showPreview = Boolean(nextSum) && (isStreamingThink || policy.settledReasoningPreview);
         cardEl.dataset.preview = String(showPreview);
         if (sumEl && sumEl.textContent !== nextSum) sumEl.textContent = nextSum;
@@ -3639,11 +3684,12 @@
         const raw = item.thinking || '';
         const zh = wantFullDetail ? (item.fullTranslatedThinking || item.translatedThinking || '') : (item.translatedThinking || '');
         const cursor = isStreamingThink ? '<span class="cursor"></span>' : '';
-        const extra = effectiveMode === 'bilingual' && zh && zh !== raw
+        const extra = effectiveMode === 'bilingual' && raw && (awaitingFirstZh || (zh && zh !== raw))
           ? `<div class="bilingual-raw">${renderMarkdown(raw)}</div>`
           : '';
-        const rendered = renderThinkingSteps(displayText, useStepRender !== false && effectiveMode !== 'raw');
-        const mdHtml = `${rendered || '<p>正在酝酿思路…</p>'}${cursor}${extra}`;
+        const rendered = awaitingFirstZh ? '' : renderThinkingSteps(displayText, useStepRender !== false && effectiveMode !== 'raw');
+        const placeholder = awaitingFirstZh ? '<p class="wait-zh">正在同步中文思路…</p>' : '<p>正在酝酿思路…</p>';
+        const mdHtml = `${rendered || placeholder}${cursor}${extra}`;
         if (mdEl._lastHtml !== mdHtml) {
           const nearBottom = mdEl.scrollHeight - mdEl.scrollTop - mdEl.clientHeight < 48;
           mdEl._lastHtml = mdHtml;
@@ -3682,11 +3728,13 @@
             }
             if (rec.shownLen < rec.text.length) {
               const delta = rec.text.length - rec.shownLen;
-              const step = Math.max(2, Math.min(12, Math.ceil(delta / 5)));
+              const step = rec.isStreamingThink
+                ? Math.max(2, Math.min(24, Math.ceil(delta / 4)))
+                : Math.max(6, Math.min(48, Math.ceil(delta / 3)));
               rec.shownLen = Math.min(rec.text.length, rec.shownLen + step);
               if (rec.cardEl && rec.cardEl.isConnected) {
                 const shown = rec.text.slice(0, rec.shownLen);
-                updateThinkDom(rec.cardEl, shown, rec.item, rec.effectiveMode, rec.isStreamingThink || rec.shownLen < rec.text.length, rec.summaryEnabled, rec.policy, rec.useStepRender, rec.wantFullDetail);
+                updateThinkDom(rec.cardEl, shown, rec.item, rec.effectiveMode, rec.isStreamingThink || rec.shownLen < rec.text.length, rec.summaryEnabled, rec.policy, rec.useStepRender, rec.wantFullDetail, rec.awaitingFirstZh);
               }
               if (rec.shownLen < rec.text.length) hasMore = true;
             }
@@ -3720,18 +3768,8 @@
           if (!turnSettledSet.has(turnKey)) {
             if (seenActiveTurns.has(turnKey)) {
               openMap.set(turnKey, true);
-              if (!pendingFoldTimers.has(turnKey)) {
-                const tid = setTimeout(() => {
-                  pendingFoldTimers.delete(turnKey);
-                  if (userPinnedMap.get(turnKey) || turnSettledSet.has(turnKey)) return;
-                  const latestTurn = (currentState?.turns || []).find((t) => `${currentState?.activeId}:turn:${t.turnIndex}` === turnKey);
-                  if (latestTurn && (latestTurn.isRunning || isTurnTranslating(latestTurn, currentState?.settings))) return;
-                  turnSettledSet.add(turnKey);
-                  openMap.set(turnKey, false);
-                  resetTurnInnerDisclosures(turnKey);
-                  if (activeTab === 'feed') renderFeed();
-                }, AUTO_FOLD_GRACE_MS);
-                pendingFoldTimers.set(turnKey, tid);
+              if (!hoveredTurnKeys.has(turnKey)) {
+                scheduleAutoFold(turnKey, AUTO_FOLD_GRACE_MS);
               }
             } else {
               turnSettledSet.add(turnKey);
@@ -3778,6 +3816,7 @@
           userPinnedMap.clear();
           turnSettledSet.clear();
           seenActiveTurns.clear();
+          hoveredTurnKeys.clear();
           clearAllFoldTimers();
           groupFollowMap.clear();
           clearLiveTitleTimers();
@@ -3889,6 +3928,27 @@
                 `<span class="turn-chev">${ICONS.chevDown}</span>` +
               '</button>' +
               '<div class="turn-steps-shell"><div class="turn-steps-inner"><div class="turn-groups"></div></div></div>';
+            turnEl.addEventListener('mouseenter', () => {
+              const key = turnEl.dataset.turnKey;
+              if (key) hoveredTurnKeys.add(key);
+            });
+            turnEl.addEventListener('mouseleave', () => {
+              const key = turnEl.dataset.turnKey;
+              if (!key) return;
+              hoveredTurnKeys.delete(key);
+              if (
+                seenActiveTurns.has(key) &&
+                !turnSettledSet.has(key) &&
+                !userPinnedMap.get(key) &&
+                getPresentationPolicy(currentState?.settings).foldCompletedTurns
+              ) {
+                const latestTurn = (currentState?.turns || []).find((t) => `${currentState?.activeId}:turn:${t.turnIndex}` === key);
+                if (latestTurn && !latestTurn.hasError && !latestTurn.isRunning && !isTurnTranslating(latestTurn, currentState?.settings)) {
+                  clearFoldTimer(key);
+                  scheduleAutoFold(key, HOVER_LEAVE_FOLD_MS);
+                }
+              }
+            });
           }
 
           turnEl._turnData = turn;
@@ -4016,7 +4076,8 @@
                 const activeZh = wantFullDetail ? (item.fullTranslatedThinking || zh) : zh;
                 const showRawOverride = rawOverrideMap.get(item.id) === true;
                 const effectiveMode = showRawOverride ? (mode === 'raw' ? 'zh' : 'raw') : mode;
-                const targetText = item.kind === 'think' && effectiveMode !== 'raw' && activeZh ? activeZh : raw;
+                const awaitingFirstZh = item.kind === 'think' && isAwaitingFirstZh(item, effectiveMode, settings, activeZh);
+                const targetText = awaitingFirstZh ? '' : (item.kind === 'think' && effectiveMode !== 'raw' && activeZh ? activeZh : raw);
                 const running = item.status === 'generating' || item.status === 'running';
                 const isStreamingThink = item.kind === 'think' && (running || (effectiveMode !== 'raw' && (item.translateStatus === 'translating' || (wantFullDetail && item.fullTranslateStatus === 'translating'))));
                 const isBriefThink = item.kind === 'think' && !isStreamingThink && !wantFullDetail && raw.length < 220 && targetText.length < 180 && !raw.includes('```');
@@ -4033,7 +4094,7 @@
 
                 let displayText = targetText;
                 if (item.kind === 'think') {
-                  const modeKey = `${effectiveMode}:${wantFullDetail ? 'full' : (useStepRender ? 'steps' : 'live')}:${activeZh && effectiveMode !== 'raw' ? 'zh' : 'raw'}`;
+                  const modeKey = `${effectiveMode}:${wantFullDetail ? 'full' : (useStepRender ? 'steps' : 'live')}:${awaitingFirstZh ? 'wait' : (activeZh && effectiveMode !== 'raw' ? 'zh' : 'raw')}`;
                   let rec = streamShownMap.get(item.id);
                   if (!useSmooth) {
                     streamShownMap.delete(item.id);
@@ -4041,7 +4102,7 @@
                   } else {
                     if (!rec || rec.modeKey !== modeKey) {
                       const startLen = isStreamingThink ? 0 : targetText.length;
-                      rec = { text: targetText, shownLen: startLen, modeKey, cardEl, item, effectiveMode, running, isStreamingThink, summaryEnabled, policy, useStepRender, wantFullDetail };
+                      rec = { text: targetText, shownLen: startLen, modeKey, cardEl, item, effectiveMode, running, isStreamingThink, summaryEnabled, policy, useStepRender, wantFullDetail, awaitingFirstZh };
                       streamShownMap.set(item.id, rec);
                     } else {
                       rec.cardEl = cardEl;
@@ -4053,6 +4114,7 @@
                       rec.policy = policy;
                       rec.useStepRender = useStepRender;
                       rec.wantFullDetail = wantFullDetail;
+                      rec.awaitingFirstZh = awaitingFirstZh;
                       rec.text = targetText;
                       if (rec.shownLen > targetText.length) {
                         rec.shownLen = targetText.length;
@@ -4070,7 +4132,7 @@
                 }
 
                 const sum = item.kind === 'think'
-                  ? computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail)
+                  ? computeThinkRowSummary(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail, awaitingFirstZh)
                   : (item.summary || item.liveDetail || item.toolName || '');
                 const showPreview = item.kind === 'think'
                   ? (Boolean(sum) && (isStreamingThink || policy.settledReasoningPreview))
@@ -4118,23 +4180,24 @@
                     : targetText;
                   const curStreaming = isStreamingThink || Boolean(liveRec && liveRec.shownLen < liveRec.text.length);
                   const sigPart = (s) => (s ? `${s.length}:${s.slice(0, 12)}:${s.slice(-24)}` : '0');
-                  const bodySig = `${sigPart(curDisplayText)}|${sigPart(raw)}|${effectiveMode}|${wantFullDetail}|${useStepRender}|${isBriefThink}|${settings.thinkHeightMode || 'full'}|${item.translateStatus || ''}|${item.translatePhase || ''}|${item.fullTranslateStatus || ''}|${item.fullTranslateError || ''}|${item.translateModel || ''}|${item.translateError || ''}|${running}|${curStreaming}|${item.thinkingTokens || 0}`;
+                  const bodySig = `${sigPart(curDisplayText)}|${sigPart(raw)}|${effectiveMode}|${awaitingFirstZh}|${wantFullDetail}|${useStepRender}|${isBriefThink}|${settings.thinkHeightMode || 'full'}|${item.translateStatus || ''}|${item.translatePhase || ''}|${item.fullTranslateStatus || ''}|${item.fullTranslateError || ''}|${item.translateModel || ''}|${item.translateError || ''}|${running}|${curStreaming}|${item.thinkingTokens || 0}`;
                   if (cardEl.dataset.bodySig === bodySig) return;
                   cardEl.dataset.bodySig = bodySig;
                   const stepBodyEl = cardEl.querySelector('.step-body');
 
                   if (item.kind === 'think') {
                     const cursor = curStreaming ? '<span class="cursor"></span>' : '';
-                    const extra = effectiveMode === 'bilingual' && activeZh && activeZh !== raw
+                    const extra = effectiveMode === 'bilingual' && raw && (awaitingFirstZh || (activeZh && activeZh !== raw))
                       ? `<div class="bilingual-raw">${renderMarkdown(raw)}</div>`
                       : '';
-                    const rendered = renderThinkingSteps(curDisplayText, useStepRender);
-                    const mdHtml = `${rendered || '<p>正在酝酿思路…</p>'}${cursor}${extra}`;
+                    const rendered = awaitingFirstZh ? '' : renderThinkingSteps(curDisplayText, useStepRender);
+                    const placeholder = awaitingFirstZh ? '<p class="wait-zh">正在同步中文思路…</p>' : '<p>正在酝酿思路…</p>';
+                    const mdHtml = `${rendered || placeholder}${cursor}${extra}`;
                     const chipsHtml = buildChipsHtml(item, running, wantFullDetail);
                     const detailBtn = (wantFullDetail || !isStreamingThink) && isStepsStyle && !isBriefThink && effectiveMode !== 'raw' && zh && item.translateModel !== 'native-zh'
                       ? `<button class="copy-btn" type="button" data-action="toggle-detail" data-key="${escapeHtml(item.id)}">${wantFullDetail ? '看脉络' : '看完整'}</button>`
                       : '';
-                    const langBtn = zh && zh !== raw
+                    const langBtn = (zh && zh !== raw) || (awaitingFirstZh && raw)
                       ? `<button class="copy-btn" type="button" data-action="toggle-lang" data-key="${escapeHtml(item.id)}">${effectiveMode === 'raw' ? '看中文' : '看原文'}</button>`
                       : '';
                     const retryBtn = settings.translateEnabled !== false && item.translateStatus !== 'off' && item.translateStatus !== 'no-key' && item.translateStatus !== 'no-model' && item.translateModel !== 'native-zh'

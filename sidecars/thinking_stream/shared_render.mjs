@@ -592,6 +592,15 @@ function clipBarText(raw, maxLen) {
   return clean.length > maxLen ? (clean.slice(0, maxLen - 1).trimEnd() + '…') : clean;
 }
 
+function isAwaitingFirstZh(item, effectiveMode, settings, activeZh) {
+  if (!item || item.kind !== 'think') return false;
+  if (effectiveMode === 'raw' || settings?.translateEnabled === false) return false;
+  if (activeZh) return false;
+  const st = item.translateStatus || '';
+  if (st === 'off' || st === 'no-key' || st === 'no-model' || st === 'error') return false;
+  return item.status === 'generating' || st === 'translating';
+}
+
 function isTurnTranslating(turn, settings) {
   if (!turn || settings?.translateEnabled === false || settings?.displayMode === 'raw') return false;
   const items = Array.isArray(turn.items) ? turn.items : [];
@@ -624,8 +633,10 @@ function formatTurnBarLabel(turn, settings, numClass) {
   function pickThinkSnippet(it, running) {
     const raw = it.thinking || '';
     const zh = it.translatedThinking || '';
+    const summaryText = summaryEnabled ? (it.narrativeSummary || '') : '';
+    if (isAwaitingFirstZh(it, mode, settings, summaryText || zh)) return '';
     const text = mode !== 'raw'
-      ? ((summaryEnabled && it.narrativeSummary) || zh || raw)
+      ? (summaryText || zh || raw)
       : raw;
     if (!text) return '';
     const steps = parseThinkingSteps(text);
@@ -924,5 +935,5 @@ const ICONS = {
 `;
 
 export function buildSharedBrowserScript() {
-  return `(() => {\n${SHARED_RENDER_SOURCE}\nwindow.__agyThinkingShared = { escapeHtml, formatInline, renderMarkdown, parseThinkingSteps, countThinkingSteps, renderThinkingSteps, firstLine, latestCompletedParagraphFirstLine, latestParagraphFirstLine, thinkSummary, shortModelName, formatDurationHuman, formatDurationParts, getPresentationPolicy, classifyToolActivity, activityIconKey, buildProcessGroups, formatProcessGroupTitle, isTurnTranslating, formatTurnBarLabel, COLOR_THEMES, resolveColorThemePalette, ICONS };\n})();\n`;
+  return `(() => {\n${SHARED_RENDER_SOURCE}\nwindow.__agyThinkingShared = { escapeHtml, formatInline, renderMarkdown, parseThinkingSteps, countThinkingSteps, renderThinkingSteps, firstLine, latestCompletedParagraphFirstLine, latestParagraphFirstLine, thinkSummary, shortModelName, formatDurationHuman, formatDurationParts, getPresentationPolicy, classifyToolActivity, activityIconKey, buildProcessGroups, formatProcessGroupTitle, isAwaitingFirstZh, isTurnTranslating, formatTurnBarLabel, COLOR_THEMES, resolveColorThemePalette, ICONS };\n})();\n`;
 }

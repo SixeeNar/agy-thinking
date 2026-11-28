@@ -1986,6 +1986,8 @@ export function createTranslator(getSettings, onProgress) {
         ) {
           continue;
         }
+        // 首段刚冒出极短半截词时暂等一帧攒成短语再首译，避免占住 slot:0 阻塞整句中文到达
+        if (paragraphs.length === 1 && !lastSlot?.lastSourceLen && para.length < 18 && !/[.!?。！？\n]/.test(para)) continue;
         if (para.length < 28 && paragraphs.length > 1) continue;
       }
 

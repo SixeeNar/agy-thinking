@@ -53,8 +53,10 @@ function getClientBundle(owner) {
     const userPinnedSet = new Set();   // 用户手动点击过的 key
     const turnAutoFoldedSet = new Set(); // 已触发过自动折叠的 turnKey
     const seenActiveTurns = new Set(); // 曾经处于运行/翻译态的 turnKey（用于防误收起冷却确认）
+    const hoveredTurnKeys = new Set(); // 鼠标悬停阅读中的 turnKey（阅读期间暂缓自动收起）
     const pendingFoldTimers = new Map(); // turnKey -> timeoutId（完成态稳定 2s 后再自动收起）
     const AUTO_FOLD_GRACE_MS = 2000;
+    const HOVER_LEAVE_FOLD_MS = 1200;
     const clearFoldTimer = (turnKey) => {
       const tid = pendingFoldTimers.get(turnKey);
       if (tid) clearTimeout(tid);
@@ -63,6 +65,38 @@ function getClientBundle(owner) {
     const clearAllFoldTimers = () => {
       for (const tid of pendingFoldTimers.values()) clearTimeout(tid);
       pendingFoldTimers.clear();
+    };
+    const hasUnfinishedStreamForTurn = (turn) => {
+      if (!turn || !Array.isArray(turn.items)) return false;
+      for (const it of turn.items) {
+        if (!it || it.kind !== 'think') continue;
+        const rec = streamShownMap.get(it.id);
+        if (rec && rec.shownLen < rec.text.length) return true;
+      }
+      return false;
+    };
+    const scheduleAutoFold = (turnKey, delayMs = AUTO_FOLD_GRACE_MS) => {
+      if (pendingFoldTimers.has(turnKey)) return;
+      const tid = setTimeout(() => {
+        pendingFoldTimers.delete(turnKey);
+        if (userPinnedSet.has(turnKey) || turnAutoFoldedSet.has(turnKey)) return;
+        const policyNow = getPresentationPolicy(lastSettings);
+        if (!policyNow.foldCompletedTurns) return;
+        const latestTurn = (lastData?.turns || []).find((t) => ((lastData?.activeId || 'conv') + ':turn:' + t.turnIndex) === turnKey);
+        if (latestTurn && (latestTurn.hasError || latestTurn.isRunning || isTurnTranslating(latestTurn, lastSettings))) return;
+        // 鼠标正停在卡片上阅读时暂缓收起，等移开鼠标后再温柔合上
+        if (hoveredTurnKeys.has(turnKey)) return;
+        // 前端平滑吐字还在追尾时，等吐完再给阅读缓冲
+        if (hasUnfinishedStreamForTurn(latestTurn)) {
+          scheduleAutoFold(turnKey, 800);
+          return;
+        }
+        turnAutoFoldedSet.add(turnKey);
+        openState.set(turnKey, false);
+        resetTurnInnerDisclosures(turnKey);
+        renderAll();
+      }, delayMs);
+      pendingFoldTimers.set(turnKey, tid);
     };
     const groupFollowMap = new Map();  // groupOpenKey -> boolean (运行中组独立跟底开关)
     const liveTitleCache = new Map();  // groupOpenKey -> { title, iconKey, activity, committedAt, pending, timer }
@@ -969,6 +1003,18 @@ function getClientBundle(owner) {
         animation: xx-blink 0.85s steps(2, start) infinite;
       }
       @keyframes xx-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.15; } }
+      .xx-wait-zh {
+        display: inline-block;
+        margin: 0 !important;
+        font-size: 12.1px;
+        font-weight: 500;
+        background: var(--xx-grad-flow);
+        background-size: 220% auto;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: xx-shimmer 2.1s linear infinite;
+      }
 
       .xx-bilingual-raw {
         margin-top: 8px;
@@ -1354,18 +1400,19 @@ function getClientBundle(owner) {
       }
     }
 
-    function computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail) {
+    function computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail, awaitingFirstZh) {
       if (effectiveMode !== 'raw' && summaryEnabled && item.narrativeSummary) {
         return item.narrativeSummary.replace(/\\*\\*/g, '').replace(/\\s+/g, ' ').trim();
       }
+      if (awaitingFirstZh) return '正在同步中文思路…';
       const fallbackText = effectiveMode === 'raw'
         ? (item.thinking || '')
         : ((wantFullDetail ? (item.fullTranslatedThinking || item.translatedThinking) : item.translatedThinking) || item.thinking || '');
       return thinkSummary(displayText || fallbackText, isStreamingThink);
     }
 
-    function updateThinkRowStreamDom(rowEl, displayText, item, effectiveMode, running, isStreamingThink, summaryEnabled, policy, useStepRender, wantFullDetail) {
-      const sumText = computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail);
+    function updateThinkRowStreamDom(rowEl, displayText, item, effectiveMode, running, isStreamingThink, summaryEnabled, policy, useStepRender, wantFullDetail, awaitingFirstZh) {
+      const sumText = computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail, awaitingFirstZh);
       const showPreview = Boolean(sumText) && (isStreamingThink || policy.settledReasoningPreview);
       rowEl.dataset.preview = String(showPreview);
       const sumEl = rowEl.querySelector('.xx-row-sum');
@@ -1379,11 +1426,12 @@ function getClientBundle(owner) {
       const zhText = wantFullDetail ? (item.fullTranslatedThinking || item.translatedThinking || '') : (item.translatedThinking || '');
       const cursor = isStreamingThink ? '<span class="xx-cursor"></span>' : '';
       const bilingualExtra =
-        effectiveMode === 'bilingual' && zhText && zhText !== rawText
+        effectiveMode === 'bilingual' && rawText && (awaitingFirstZh || (zhText && zhText !== rawText))
           ? '<div class="xx-bilingual-raw">' + renderMarkdown(rawText) + '</div>'
           : '';
-      const rendered = renderThinkingSteps(displayText, useStepRender !== false && effectiveMode !== 'raw');
-      const mdHtml = (rendered || '<p>正在酝酿思路…</p>') + cursor + bilingualExtra;
+      const rendered = awaitingFirstZh ? '' : renderThinkingSteps(displayText, useStepRender !== false && effectiveMode !== 'raw');
+      const placeholder = awaitingFirstZh ? '<p class="xx-wait-zh">正在同步中文思路…</p>' : '<p>正在酝酿思路…</p>';
+      const mdHtml = (rendered || placeholder) + cursor + bilingualExtra;
       if (mdEl._lastHtml !== mdHtml) {
         const nearBottom = mdEl.scrollHeight - mdEl.scrollTop - mdEl.clientHeight < 48;
         mdEl._lastHtml = mdHtml;
@@ -1473,6 +1521,28 @@ function getClientBundle(owner) {
         const wrap = shadow.querySelector('.xx-wrap');
         const bar = shadow.querySelector('.xx-turn-bar');
         const groupsBox = shadow.querySelector('.xx-groups');
+
+        wrap.addEventListener('mouseenter', () => {
+          const key = host.dataset.turnKey;
+          if (key) hoveredTurnKeys.add(key);
+        });
+        wrap.addEventListener('mouseleave', () => {
+          const key = host.dataset.turnKey;
+          if (!key) return;
+          hoveredTurnKeys.delete(key);
+          if (
+            seenActiveTurns.has(key) &&
+            !turnAutoFoldedSet.has(key) &&
+            !userPinnedSet.has(key) &&
+            getPresentationPolicy(lastSettings).foldCompletedTurns
+          ) {
+            const latestTurn = (lastData?.turns || []).find((t) => ((lastData?.activeId || 'conv') + ':turn:' + t.turnIndex) === key);
+            if (latestTurn && !latestTurn.hasError && !latestTurn.isRunning && !isTurnTranslating(latestTurn, lastSettings)) {
+              clearFoldTimer(key);
+              scheduleAutoFold(key, HOVER_LEAVE_FOLD_MS);
+            }
+          }
+        });
 
         bar.addEventListener('click', () => {
           if (bar.disabled) return;
@@ -1739,18 +1809,8 @@ function getClientBundle(owner) {
         if (!turnAutoFoldedSet.has(turnKey)) {
           if (seenActiveTurns.has(turnKey)) {
             openState.set(turnKey, true);
-            if (!pendingFoldTimers.has(turnKey)) {
-              const tid = setTimeout(() => {
-                pendingFoldTimers.delete(turnKey);
-                if (userPinnedSet.has(turnKey) || turnAutoFoldedSet.has(turnKey)) return;
-                const latestTurn = (lastData?.turns || []).find((t) => ((lastData?.activeId || 'conv') + ':turn:' + t.turnIndex) === turnKey);
-                if (latestTurn && (latestTurn.isRunning || isTurnTranslating(latestTurn, lastSettings))) return;
-                turnAutoFoldedSet.add(turnKey);
-                openState.set(turnKey, false);
-                resetTurnInnerDisclosures(turnKey);
-                renderAll();
-              }, AUTO_FOLD_GRACE_MS);
-              pendingFoldTimers.set(turnKey, tid);
+            if (!hoveredTurnKeys.has(turnKey)) {
+              scheduleAutoFold(turnKey, AUTO_FOLD_GRACE_MS);
             }
           } else {
             turnAutoFoldedSet.add(turnKey);
@@ -1906,12 +1966,13 @@ function getClientBundle(owner) {
               }
 
               const activeZh = wantFullDetail ? (item.fullTranslatedThinking || zhFull) : zhFull;
-              const targetText = effectiveMode !== 'raw' && activeZh ? activeZh : rawText;
+              const awaitingFirstZh = isAwaitingFirstZh(item, effectiveMode, settings, activeZh);
+              const targetText = awaitingFirstZh ? '' : (effectiveMode !== 'raw' && activeZh ? activeZh : rawText);
               const isBriefThink = !isStreamingThink && !wantFullDetail && rawText.length < 220 && targetText.length < 180 && !rawText.includes('\`\`\`');
               const useStepRender = isStepsStyle && !wantFullDetail && !isStreamingThink && !isBriefThink && effectiveMode !== 'raw' && Boolean(activeZh);
 
               let displayText = targetText;
-              const modeKey = effectiveMode + ':' + (wantFullDetail ? 'full' : (useStepRender ? 'steps' : 'live')) + ':' + (activeZh && effectiveMode !== 'raw' ? 'zh' : 'raw');
+              const modeKey = effectiveMode + ':' + (wantFullDetail ? 'full' : (useStepRender ? 'steps' : 'live')) + ':' + (awaitingFirstZh ? 'wait' : (activeZh && effectiveMode !== 'raw' ? 'zh' : 'raw'));
               let rec = streamShownMap.get(item.id);
               if (!useSmooth) {
                 streamShownMap.delete(item.id);
@@ -1919,7 +1980,7 @@ function getClientBundle(owner) {
               } else {
                 if (!rec || rec.modeKey !== modeKey) {
                   const startLen = isStreamingThink ? 0 : targetText.length;
-                  rec = { text: targetText, shownLen: startLen, modeKey, rowEl, item, effectiveMode, running, isStreamingThink, summaryEnabled, policy, useStepRender, wantFullDetail };
+                  rec = { text: targetText, shownLen: startLen, modeKey, rowEl, item, effectiveMode, running, isStreamingThink, summaryEnabled, policy, useStepRender, wantFullDetail, awaitingFirstZh };
                   streamShownMap.set(item.id, rec);
                 } else {
                   rec.rowEl = rowEl;
@@ -1931,6 +1992,7 @@ function getClientBundle(owner) {
                   rec.policy = policy;
                   rec.useStepRender = useStepRender;
                   rec.wantFullDetail = wantFullDetail;
+                  rec.awaitingFirstZh = awaitingFirstZh;
                   rec.text = targetText;
                   if (rec.shownLen > targetText.length) {
                     rec.shownLen = targetText.length;
@@ -1946,7 +2008,7 @@ function getClientBundle(owner) {
                 displayText = rec.text.slice(0, Math.min(rec.shownLen, rec.text.length));
               }
 
-              const sumText = computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail);
+              const sumText = computeRowSummaryText(item, displayText, effectiveMode, isStreamingThink, summaryEnabled, wantFullDetail, awaitingFirstZh);
               const showPreview = Boolean(sumText) && (isStreamingThink || policy.settledReasoningPreview);
 
               rowEl.dataset.open = String(rowOpen);
@@ -1957,7 +2019,7 @@ function getClientBundle(owner) {
               rowEl.dataset.hideSum = String(hideSum);
               rowEl.dataset.full = String(expandedFullMap.get(item.id) === true);
               rowEl._thinkItem = item;
-              rowEl._copyText = targetText;
+              rowEl._copyText = targetText || rawText;
 
               const chevEl = rowEl.querySelector('.xx-think-head .xx-act-chev');
               const wantChev = rowOpen ? ICONS.chevUp : ICONS.chevDown;
@@ -1989,16 +2051,17 @@ function getClientBundle(owner) {
                   ? liveRec.text.slice(0, Math.min(liveRec.shownLen, liveRec.text.length))
                   : targetText;
                 const curStreaming = isStreamingThink || Boolean(liveRec && liveRec.shownLen < liveRec.text.length);
-                const bodySig = curDisplayText.length + ':' + curDisplayText.slice(-24) + '|' + rawText.length + '|' + effectiveMode + '|' + wantFullDetail + '|' + useStepRender + '|' + isBriefThink + '|' + (item.translateStatus || '') + '|' + (item.translatePhase || '') + '|' + (item.fullTranslateStatus || '') + '|' + (item.fullTranslateError || '') + '|' + (item.translateModel || '') + '|' + (item.translateError || '') + '|' + running + '|' + curStreaming + '|' + (settings.thinkHeightMode || 'full') + '|' + (item.thinkingTokens || 0) + '|' + (expandedFullMap.get(item.id) === true);
+                const bodySig = curDisplayText.length + ':' + curDisplayText.slice(-24) + '|' + rawText.length + '|' + effectiveMode + '|' + awaitingFirstZh + '|' + wantFullDetail + '|' + useStepRender + '|' + isBriefThink + '|' + (item.translateStatus || '') + '|' + (item.translatePhase || '') + '|' + (item.fullTranslateStatus || '') + '|' + (item.fullTranslateError || '') + '|' + (item.translateModel || '') + '|' + (item.translateError || '') + '|' + running + '|' + curStreaming + '|' + (settings.thinkHeightMode || 'full') + '|' + (item.thinkingTokens || 0) + '|' + (expandedFullMap.get(item.id) === true);
                 if (rowEl.dataset.bodySig === bodySig) return;
                 rowEl.dataset.bodySig = bodySig;
 
                 const cursor = curStreaming ? '<span class="xx-cursor"></span>' : '';
-                const bilingualExtra = effectiveMode === 'bilingual' && activeZh && activeZh !== rawText
+                const bilingualExtra = effectiveMode === 'bilingual' && rawText && (awaitingFirstZh || (activeZh && activeZh !== rawText))
                   ? '<div class="xx-bilingual-raw">' + renderMarkdown(rawText) + '</div>'
                   : '';
-                const rendered = renderThinkingSteps(curDisplayText, useStepRender);
-                const mdHtml = (rendered || '<p>正在酝酿思路…</p>') + cursor + bilingualExtra;
+                const rendered = awaitingFirstZh ? '' : renderThinkingSteps(curDisplayText, useStepRender);
+                const placeholder = awaitingFirstZh ? '<p class="xx-wait-zh">正在同步中文思路…</p>' : '<p>正在酝酿思路…</p>';
+                const mdHtml = (rendered || placeholder) + cursor + bilingualExtra;
                 const mdEl = rowEl.querySelector('.xx-think-md');
                 if (mdEl && mdEl._lastHtml !== mdHtml) {
                   const nearBottom = mdEl.scrollHeight - mdEl.scrollTop - mdEl.clientHeight < 48;
@@ -2025,7 +2088,7 @@ function getClientBundle(owner) {
                 const detailBtn = (wantFullDetail || !isStreamingThink) && isStepsStyle && !isBriefThink && effectiveMode !== 'raw' && zhFull && item.translateModel !== 'native-zh'
                   ? '<button class="xx-btn xx-toggle-detail" type="button">' + (wantFullDetail ? '看脉络' : '看完整') + '</button>'
                   : '';
-                const langBtn = zhFull && zhFull !== rawText
+                const langBtn = (zhFull && zhFull !== rawText) || (awaitingFirstZh && rawText)
                   ? '<button class="xx-btn xx-toggle-lang" type="button">' + (effectiveMode === 'raw' ? '看中文' : '看原文') + '</button>'
                   : '';
                 const retryBtn = canRetry
@@ -2197,7 +2260,7 @@ function getClientBundle(owner) {
           for (const rec of streamShownMap.values()) {
             rec.shownLen = rec.text.length;
             if (rec.rowEl && rec.rowEl.isConnected) {
-              updateThinkRowStreamDom(rec.rowEl, rec.text, rec.item, rec.effectiveMode, rec.running, rec.isStreamingThink, rec.summaryEnabled, rec.policy, rec.useStepRender, rec.wantFullDetail);
+              updateThinkRowStreamDom(rec.rowEl, rec.text, rec.item, rec.effectiveMode, rec.running, rec.isStreamingThink, rec.summaryEnabled, rec.policy, rec.useStepRender, rec.wantFullDetail, rec.awaitingFirstZh);
             }
           }
           return;
@@ -2215,11 +2278,14 @@ function getClientBundle(owner) {
           }
           if (rec.shownLen < rec.text.length) {
             const delta = rec.text.length - rec.shownLen;
-            const step = Math.max(2, Math.min(12, Math.ceil(delta / 5)));
+            // 流式中顺滑跟手；源思考与翻译都已结束时动态加速收尾，避免长尾巴拖慢观感
+            const step = rec.isStreamingThink
+              ? Math.max(2, Math.min(24, Math.ceil(delta / 4)))
+              : Math.max(6, Math.min(48, Math.ceil(delta / 3)));
             rec.shownLen = Math.min(rec.text.length, rec.shownLen + step);
             if (rec.rowEl && rec.rowEl.isConnected) {
               const shown = rec.text.slice(0, rec.shownLen);
-              updateThinkRowStreamDom(rec.rowEl, shown, rec.item, rec.effectiveMode, rec.running, rec.isStreamingThink || rec.shownLen < rec.text.length, rec.summaryEnabled, rec.policy, rec.useStepRender, rec.wantFullDetail);
+              updateThinkRowStreamDom(rec.rowEl, shown, rec.item, rec.effectiveMode, rec.running, rec.isStreamingThink || rec.shownLen < rec.text.length, rec.summaryEnabled, rec.policy, rec.useStepRender, rec.wantFullDetail, rec.awaitingFirstZh);
             }
             if (rec.shownLen < rec.text.length) hasMore = true;
           }
@@ -2249,6 +2315,7 @@ function getClientBundle(owner) {
         userPinnedSet.clear();
         turnAutoFoldedSet.clear();
         seenActiveTurns.clear();
+        hoveredTurnKeys.clear();
         clearAllFoldTimers();
         groupFollowMap.clear();
         clearLiveTitleTimers();
@@ -2339,7 +2406,7 @@ function getClientBundle(owner) {
       for (const rec of streamShownMap.values()) {
         if (rec.rowEl && rec.rowEl.isConnected) {
           const shown = rec.text.slice(0, Math.min(rec.shownLen, rec.text.length));
-          updateThinkRowStreamDom(rec.rowEl, shown, rec.item, rec.effectiveMode, rec.running, rec.isStreamingThink || rec.shownLen < rec.text.length, rec.summaryEnabled, rec.policy, rec.useStepRender, rec.wantFullDetail);
+          updateThinkRowStreamDom(rec.rowEl, shown, rec.item, rec.effectiveMode, rec.running, rec.isStreamingThink || rec.shownLen < rec.text.length, rec.summaryEnabled, rec.policy, rec.useStepRender, rec.wantFullDetail, rec.awaitingFirstZh);
         }
       }
       renderAll();
@@ -2378,6 +2445,7 @@ function getClientBundle(owner) {
       userPinnedSet.clear();
       turnAutoFoldedSet.clear();
       seenActiveTurns.clear();
+      hoveredTurnKeys.clear();
       clearAllFoldTimers();
       groupFollowMap.clear();
       rawOverrideMap.clear();
